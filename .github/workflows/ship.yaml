@@ -63,5 +63,11 @@ jobs:
         env:
           # Must be SHIP_TOKEN: a pull request authored by GITHUB_TOKEN does
           # not trigger workflows, so the Release PR would show no CI checks.
+          #
+          # The token needs Actions: read and write (to dispatch the prepare
+          # workflow and download its artifact), Contents: read and write,
+          # Pull requests: read and write, Issues: read and write, and
+          # Metadata: read. Actions: write is the one usually missing.
+          # https://noirbizarre.github.io/gh-ship/workflows/#what-the-token-must-be-allowed-to-do
           GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
         run: ./target/release/gh-ship prepare

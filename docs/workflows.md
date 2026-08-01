@@ -276,19 +276,76 @@ Options, best first:
 
 1. **A GitHub App token.** Scoped, rotatable, attributable. Mint it in the workflow
    with [`actions/create-github-app-token`](https://github.com/actions/create-github-app-token).
-2. **A fine-grained PAT** with `contents: write` and `pull_requests: write`, stored
-   as the `SHIP_TOKEN` secret.
+2. **A fine-grained PAT**, stored as the `SHIP_TOKEN` secret.
 3. **Nothing.** Accept that the Release PR shows no CI results.
 
 The generated template prefers `SHIP_TOKEN` when present:
 
 ```yaml
-- uses: actions/checkout@v6
+- uses: actions/checkout@v7
   with:
     token: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
 ```
 
 gh-ship never sees, stores, or manages this secret. It is between you and GitHub.
+
+### What the token must be allowed to do
+
+=== "Fine-grained PAT"
+
+    Repository permissions:
+
+    | Permission | Access | Why |
+    |---|---|---|
+    | **Metadata** | Read-only | Resolve the repository |
+    | **Contents** | Read and write | Create the release branch, read refs, merge the Release PR, create and edit the release |
+    | **Actions** | Read and write | **Dispatch your workflow** and download its artifact |
+    | **Pull requests** | Read and write | List, create and update the Release PR |
+    | **Issues** | Read and write | Create missing labels |
+
+=== "Classic PAT"
+
+    | Scope | Why |
+    |---|---|
+    | `repo` | Branch, PR, release and label access |
+    | `workflow` | Dispatch workflows, and push commits that touch `.github/workflows/` |
+
+=== "GitHub App"
+
+    | Permission | Access |
+    |---|---|
+    | `metadata` | read |
+    | `contents` | write |
+    | `actions` | write |
+    | `pull_requests` | write |
+    | `issues` | write |
+
+!!! danger "Actions: write is the one people miss"
+
+    Without it, `gh ship prepare` fails at the very first step:
+
+    ```
+    × `gh workflow run prepare-release.yaml --ref release/next` failed:
+      HTTP 403: Resource not accessible by personal access token
+    ```
+
+    Dispatching a workflow is an Actions write, not a Contents write. A token
+    with full repository content access will still fail here.
+
+Three of these are counter-intuitive enough to be worth stating outright:
+
+- **Merging the Release PR needs `Contents`, not `Pull requests`.** GitHub lists
+  `PUT /repos/{owner}/{repo}/pulls/{number}/merge` under Contents.
+- **Label creation may already be covered.** `POST /repos/{owner}/{repo}/labels`
+  is listed under both Issues and Pull requests, so `Pull requests: write` may
+  suffice. Grant `Issues: write` if labels still fail — gh-ship degrades
+  gracefully and opens the PR without them either way.
+- **`Workflows: write` may be needed too.** GitHub lists the ref-creating and
+  release endpoints under a separate `Workflows` permission. Grant it if a
+  release commit could ever modify a file under `.github/workflows/`.
+
+The authoritative mapping is GitHub's
+[permissions required for fine-grained personal access tokens](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens).
 
 ## Permissions
 

@@ -166,8 +166,18 @@ fn classify(display: &str, stderr: &str) -> GhError {
                 .to_string(),
         )
     } else if lower.contains("403") || lower.contains("resource not accessible") {
+        // Name both token models. Saying only "repo and workflow scopes" is
+        // classic-PAT vocabulary and is useless to anyone holding a
+        // fine-grained token, which is the default GitHub now offers.
         Some(
-            "the token lacks the required permissions. gh-ship needs `repo` and `workflow` scopes."
+            "the token lacks the required permissions.\n\
+             Fine-grained PAT — repository permissions: Actions: read and write, \
+             Contents: read and write, Pull requests: read and write, \
+             Issues: read and write, Metadata: read.\n\
+             Classic PAT — scopes: `repo` and `workflow`.\n\
+             Dispatching a workflow needs Actions: write specifically; content \
+             access alone is not enough.\n\
+             See https://noirbizarre.github.io/gh-ship/workflows/#what-the-token-must-be-allowed-to-do"
                 .to_string(),
         )
     } else if lower.contains("rate limit") {
@@ -226,8 +236,11 @@ mod tests {
         assert!(help.as_ref().unwrap().contains("404"), "{help:?}");
     }
 
+    /// The 403 help must serve both token models. Naming only classic scopes
+    /// is useless to anyone holding a fine-grained token — which is what
+    /// GitHub offers by default, and what actually failed in practice.
     #[test]
-    fn explains_permission_failures() {
+    fn explains_permission_failures_for_both_token_kinds() {
         let e = classify(
             "workflow run",
             "HTTP 403: Resource not accessible by integration",
@@ -235,7 +248,36 @@ mod tests {
         let GhError::Failed { help, .. } = &e else {
             panic!("expected Failed")
         };
-        assert!(help.as_ref().unwrap().contains("workflow"), "{help:?}");
+        let help = help.as_ref().expect("403 must carry help");
+
+        // Classic PAT vocabulary.
+        assert!(help.contains("`repo`"), "{help}");
+        assert!(help.contains("`workflow`"), "{help}");
+
+        // Fine-grained PAT vocabulary — every permission gh-ship needs.
+        for permission in ["Actions", "Contents", "Pull requests", "Issues", "Metadata"] {
+            assert!(
+                help.contains(permission),
+                "fine-grained permission `{permission}` missing from: {help}"
+            );
+        }
+
+        // The specific cause of the real-world failure.
+        assert!(help.contains("Actions: write"), "{help}");
+    }
+
+    /// A fine-grained token reports differently from a GitHub App; both must
+    /// be recognised as permission problems.
+    #[test]
+    fn recognises_the_fine_grained_token_403_wording() {
+        let e = classify(
+            "workflow run",
+            "HTTP 403: Resource not accessible by personal access token",
+        );
+        let GhError::Failed { help, .. } = &e else {
+            panic!("expected Failed")
+        };
+        assert!(help.as_ref().unwrap().contains("Actions"), "{help:?}");
     }
 
     #[test]
