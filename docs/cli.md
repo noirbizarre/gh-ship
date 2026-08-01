@@ -159,6 +159,15 @@ $ gh ship release [--merge]
 5. Dispatches the publish workflow so it can attach assets.
 6. Makes the release visible.
 
+!!! note "The tag is created before the release, deliberately"
+
+    A draft release does not create its git ref — the tag only appears when the
+    release is published. Since the publish workflow is dispatched on that tag
+    and checks it out, gh-ship creates `refs/tags/<tag>` itself first.
+
+    The step is idempotent, so re-running after a failure part-way through is
+    safe.
+
 | Option | Meaning |
 |---|---|
 | `--merge` | Merge the Release PR if it is still open. |

@@ -1,17 +1,20 @@
 name: 🚢 Ship
 
-# gh-ship releases gh-ship.
+# gh-ship releases gh-ship. This workflow does none of the release work itself;
+# it drives the two halves of the lifecycle:
 #
-# Every push to main asks whether there is anything to release. This workflow
-# does none of the work itself: it runs `gh ship prepare`, which dispatches
-# 🚀 Prepare Release and opens or updates the Release PR.
+#   push to main          -> `gh ship prepare` -> opens or updates the Release PR
+#   Release PR is merged  -> `gh ship release` -> tags, drafts, publishes assets,
+#                                                 then makes the release public
 #
-# Nothing to release is the common case and costs one prepare-release run that
-# reports `changed: false` and exits 0.
+# Nothing to release is the common case for the first half, and costs one
+# prepare-release run reporting `changed: false` and exiting 0.
 
 on:
   push:
     branches: [main]
+  pull_request:
+    types: [closed]
 
 # These apply when falling back to GITHUB_TOKEN; a PAT carries its own scopes.
 permissions:
@@ -20,8 +23,14 @@ permissions:
   pull-requests: write # create or update the Release PR
   issues: write # create missing labels
 
-# Never cancel a prepare in flight: it is waiting on a dispatched run, and
-# killing it here would orphan that run rather than stop it.
+# One release action at a time. Merging the Release PR fires *both* triggers —
+# the merge is also a push to main — and this queue is what keeps them from
+# interleaving. Either order is correct: if prepare runs first its
+# pending-release guard short-circuits, and if release runs first the next
+# prepare finds nothing to release.
+#
+# Never cancel: both commands block on a dispatched workflow run, and cancelling
+# here would orphan that run rather than stop it.
 concurrency:
   group: ship
   cancel-in-progress: false
@@ -29,6 +38,7 @@ concurrency:
 jobs:
   prepare:
     name: 🚢 Prepare
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     # `gh ship prepare` blocks on the dispatched workflow; cap the wait well
     # below its own 60 minute default so a stuck run fails the job visibly.
@@ -71,3 +81,39 @@ jobs:
           # https://noirbizarre.github.io/gh-ship/workflows/#what-the-token-must-be-allowed-to-do
           GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
         run: ./target/release/gh-ship prepare
+
+  release:
+    name: 🚢 Release
+    # Only the Release PR, and only when it actually merged — `closed` fires for
+    # abandoned pull requests too.
+    if: >-
+      github.event_name == 'pull_request'
+      && github.event.pull_request.merged
+      && github.event.pull_request.head.ref == 'release/next'
+    runs-on: ubuntu-latest
+    # `gh ship release` waits on the publish workflow, which cross-compiles six
+    # targets.
+    timeout-minutes: 60
+
+    environment:
+      name: release
+      deployment: false
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # Built from source for the same reason as prepare: no release exists yet
+      # for `gh extension install` to fetch. Once 0.1.0 ships, both jobs can
+      # install the extension instead.
+      - name: Build gh-ship
+        run: cargo build --release
+
+      # Tags the merge commit, creates the release as a draft, dispatches
+      # 📦 Publish Release to attach the binaries, then makes it public.
+      - name: Ship the release
+        env:
+          GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
+        run: ./target/release/gh-ship release

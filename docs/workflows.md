@@ -249,6 +249,37 @@ jobs:
           GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
 ```
 
+Add a second job to release when that PR merges, and the whole lifecycle runs
+itself:
+
+```yaml
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [closed]
+
+jobs:
+  prepare:
+    if: github.event_name == 'push'
+    # ... gh ship prepare
+
+  release:
+    # `closed` fires for abandoned pull requests too, so check it merged.
+    if: >-
+      github.event_name == 'pull_request'
+      && github.event.pull_request.merged
+      && github.event.pull_request.head.ref == 'release/next'
+    # ... gh ship release
+```
+
+So:
+
+| Event | What happens |
+|---|---|
+| push to your default branch | `gh ship prepare` opens or updates the Release PR |
+| the Release PR merges | `gh ship release` tags, drafts, attaches assets, publishes |
+
 A push with nothing to release costs one prepare-release run reporting
 `changed: false`, and exits 0.
 
@@ -259,8 +290,13 @@ A push with nothing to release costs one prepare-release run reporting
     awaiting `gh ship release` and stops. See
     [`gh ship prepare`](cli.md#gh-ship-prepare).
 
-    `cancel-in-progress: false` matters: `prepare` blocks on a dispatched run,
-    and cancelling it would orphan that run rather than stop it.
+    `cancel-in-progress: false` matters: both commands block on a dispatched
+    run, and cancelling would orphan that run rather than stop it.
+
+    Merging fires **both** triggers, since the merge is also a push. The
+    concurrency queue keeps them from interleaving, and either order is
+    correct — if `prepare` goes first it stops at the pending-release guard, and
+    if `release` goes first the next `prepare` finds nothing to release.
 
 ## Tokens
 
