@@ -115,7 +115,9 @@ jobs:
 
       - name: Checksums
         working-directory: dist
-        run: sha256sum * > SHA256SUMS
+        # `--` so an asset whose name begins with a dash is treated as a
+        # file rather than an option (shellcheck SC2035).
+        run: sha256sum -- * > SHA256SUMS
 
       # The release already exists as a DRAFT: gh-ship created it before
       # dispatching this workflow, and will undraft it once we succeed.

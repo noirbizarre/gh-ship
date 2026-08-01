@@ -168,6 +168,10 @@ url = "https://github.com/j178/prek/releases/download/v0.4.11/prek-x86_64-pc-win
 url_api = "https://api.github.com/repos/j178/prek/releases/assets/488626488"
 provenance = "github-attestations"
 
+[[tools.shellcheck]]
+version = "0.10.0"
+backend = "asdf:shellcheck"
+
 [[tools.typos]]
 version = "1.47.1"
 backend = "aqua:crate-ci/typos"

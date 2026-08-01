@@ -26,6 +26,10 @@ target
 !mise.toml
 !mise.lock
 
+# Release notes are scratch input for the prepare workflow, never a source
+# file. Belt and braces: the workflow writes them outside the worktree.
+/NOTES.md
+
 # Zensical documentation build output
 site/
 

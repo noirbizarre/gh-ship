@@ -103,7 +103,18 @@ jobs:
         run: |
           set -euo pipefail
           git cliff --bump -o CHANGELOG.md
-          git cliff --unreleased --bump --strip header -o NOTES.md
+
+          # git-cliff ends the file with several newlines; prek's
+          # end-of-file-fixer rewrites it to one and then fails, turning the
+          # Release PR's own lint red. Normalise here rather than fighting
+          # the template: `$(cat)` drops every trailing newline and printf
+          # restores exactly one.
+          printf '%s\n' "$(cat CHANGELOG.md)" > CHANGELOG.md
+
+          # Release notes are scratch input for `jq --rawfile`, not a
+          # source file. Keep them out of the worktree so `git add -A`
+          # cannot commit them.
+          git cliff --unreleased --bump --strip header -o "$RUNNER_TEMP/ship-notes.md"
 
       - name: Apply the version
         if: steps.version.outputs.changed == 'true'
@@ -120,6 +131,11 @@ jobs:
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Self-healing: an earlier revision of this workflow committed
+          # NOTES.md to the release branch. Drop it if it is still tracked.
+          git rm --cached --ignore-unmatch NOTES.md >/dev/null
+
           git add -A
           git diff --cached --quiet || \
             git commit -m "chore(release): ${{ steps.version.outputs.version }}"
@@ -136,7 +152,7 @@ jobs:
             jq -n \
               --arg version "${{ steps.version.outputs.version }}" \
               --arg tag     "${{ steps.version.outputs.tag }}" \
-              --rawfile notes NOTES.md \
+              --rawfile notes "$RUNNER_TEMP/ship-notes.md" \
               '{
                 "$schema": "https://noirbizarre.github.io/gh-ship/schema/release/v1.json",
                 schemaVersion: 1,

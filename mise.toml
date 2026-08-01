@@ -22,6 +22,9 @@ idiomatic_version_file_enable_tools = []
 
 [tools]
 actionlint = "latest"
+# actionlint silently skips its shellcheck integration when the binary is
+# absent, so without this a local run is NOT the CI run. Runners ship it.
+shellcheck = "latest"
 prek = "latest"
 typos = "latest"
 uv = "latest"
