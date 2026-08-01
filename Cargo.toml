@@ -12,6 +12,12 @@ keywords = ["github", "release", "gh-extension", "cli", "changelog"]
 categories = ["command-line-utilities", "development-tools"]
 readme = "README.md"
 
+# gh-ship is distributed as a GitHub CLI extension and nothing else. Publishing
+# to crates.io would create a second install path (`cargo install gh-ship`).
+# Setting this makes `cargo publish` refuse outright, rather than leaving the
+# decision to depend on a registry token happening to be absent.
+publish = false
+
 [[bin]]
 name = "gh-ship"
 path = "src/main.rs"
