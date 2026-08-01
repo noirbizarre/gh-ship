@@ -91,6 +91,21 @@ for size in 128 256 512; do
 done
 """
 
+[tasks.social]
+description = "Render the GitHub social preview image from the logo"
+# GitHub has no API for the social preview, so this is generated here and
+# uploaded by hand, once, under:
+#   Settings -> General -> Social preview
+#
+# The canvas lives in social-preview.svg rather than being passed as flags:
+# resvg scales to fit rather than padding, so --width 1280 --height 640 on a
+# 1.8:1 logo yields 1151x640, not GitHub's required 1280x640. The wrapper
+# references logo.svg instead of copying it, so the two cannot drift.
+run = """
+resvg docs/images/social-preview.svg docs/images/social-preview.png
+echo "docs/images/social-preview.png — upload under Settings > General > Social preview"
+"""
+
 [tasks.snapshots]
 description = "Review and update insta snapshots interactively"
 run = "cargo insta review"
