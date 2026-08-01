@@ -1,6 +1,7 @@
 # Installation
 
-## As a `gh` extension
+gh-ship is a [GitHub CLI](https://cli.github.com) extension, and that is the only
+way it is distributed.
 
 ```console
 $ gh extension install noirbizarre/gh-ship
@@ -12,26 +13,13 @@ Upgrade:
 $ gh extension upgrade ship
 ```
 
-This is the recommended route. It gives you `gh ship`, and inherits your existing
-GitHub authentication.
-
-## Standalone binary
-
-gh-ship also works as a plain binary called `gh-ship`. This matters for
-`gh ship validate`, which needs no `gh`, no network, and no repository — see
-[validating in CI](#in-github-actions).
-
-Download a release for your platform from the
-[releases page](https://github.com/noirbizarre/gh-ship/releases), or build it:
-
-```console
-$ cargo install --git https://github.com/noirbizarre/gh-ship
-```
+You get `gh ship`, using the GitHub authentication you already have. There is no
+separate binary to download, no package on crates.io, and nothing to keep in sync.
 
 ## In GitHub Actions
 
-Your prepare workflow should validate the artifact before uploading it. GitHub
-runners already have `gh` and a token, so installing the extension is one line:
+Your prepare workflow should validate the artifact before uploading it. Runners
+already have `gh` and a token, so installing is one line:
 
 ```yaml
 - name: Validate the release artifact
@@ -44,13 +32,33 @@ runners already have `gh` and a token, so installing the extension is one line:
 
 !!! tip "Validation is fully self-contained"
 
-    `gh ship validate FILE` performs no network access, needs no repository, and
-    needs no GitHub authentication. The schema is embedded in the binary. It is
-    safe as the very first step of any job, on any CI system.
+    Installing needs `gh`, but *running* `gh ship validate FILE` does not need
+    much of anything: no network access, no repository, and no GitHub
+    authentication. The schema is embedded in the binary.
+
+    So it is safe as the very first step of any job, and the check itself works
+    on any CI system. This is enforced by a test that runs it under `env -i` with
+    an empty `PATH`.
 
 ## Requirements
 
-- The [GitHub CLI](https://cli.github.com) (for everything except `validate`).
-- Authentication: `gh auth login` locally, or `GH_TOKEN` in CI.
-- A repository whose release workflows declare `on: workflow_dispatch` — see
+- The [GitHub CLI](https://cli.github.com).
+- Authentication: `gh auth login` locally, or `GH_TOKEN` in CI. See
+  [what the token must be allowed to do](workflows.md#what-the-token-must-be-allowed-to-do).
+- Release workflows that declare `on: workflow_dispatch` — see
   [Workflows](workflows.md).
+
+## Building from source
+
+You do not need this to use gh-ship. It is here because gh-ship's own workflows
+do it, and that can look like a contradiction:
+
+```yaml
+- run: cargo build --release
+- run: ./target/release/gh-ship prepare
+```
+
+That is bootstrapping, not a second installation route. gh-ship releases itself,
+and an extension cannot install itself before its own first release exists. Once
+a release is published, those workflows will use `gh extension install` like
+everyone else.
