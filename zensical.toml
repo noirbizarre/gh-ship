@@ -1,74 +1,91 @@
 # Zensical configuration.
-# https://zensical.org
+# https://zensical.org/docs/setup/
 
 [project]
-name = "gh-ship"
-description = "The GitHub Release Orchestrator"
+
+site_name = "gh-ship"
+site_description = "The GitHub Release Orchestrator — orchestrate Release PRs and GitHub Actions release workflows."
 site_url = "https://noirbizarre.github.io/gh-ship/"
+site_author = "noirbizarre"
+
 repo_url = "https://github.com/noirbizarre/gh-ship"
+repo_name = "noirbizarre/gh-ship"
 edit_uri = "edit/main/docs/"
 
-[build]
-docs_dir = "docs"
-site_dir = "site"
+copyright = """
+Copyright &copy; 2026 noirbizarre — MIT licensed
+"""
 
-[theme]
-name = "material"
-palette = [
-  { media = "(prefers-color-scheme: light)", scheme = "default", primary = "black", accent = "indigo", toggle = { icon = "material/brightness-7", name = "Switch to dark mode" } },
-  { media = "(prefers-color-scheme: dark)", scheme = "slate", primary = "black", accent = "indigo", toggle = { icon = "material/brightness-4", name = "Switch to light mode" } },
+nav = [
+  { "Home" = "index.md" },
+  { "Getting Started" = [
+    { "Installation" = "installation.md" },
+    { "Quick Start" = "quickstart.md" },
+  ] },
+  { "Guides" = [
+    { "Configuration" = "configuration.md" },
+    { "Workflows" = "workflows.md" },
+    { "CLI Reference" = "cli.md" },
+  ] },
+  { "Protocol" = [
+    { "Release Artifact" = "specifications/release-artifact.md" },
+  ] },
+  { "About" = [
+    { "Architecture" = "architecture.md" },
+    { "FAQ" = "faq.md" },
+  ] },
 ]
+
+[project.theme]
+
+language = "en"
+
 features = [
-  "content.code.copy",
+  "content.action.edit",
   "content.code.annotate",
+  "content.code.copy",
+  "navigation.instant",
   "navigation.sections",
   "navigation.top",
-  "navigation.instant",
+  "navigation.tracking",
   "search.highlight",
+  "search.suggest",
   "toc.follow",
 ]
 
-[[nav]]
-title = "Home"
-path = "index.md"
+[[project.theme.palette]]
+scheme = "default"
+primary = "black"
+accent = "indigo"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
 
-[[nav]]
-title = "Getting Started"
-children = [
-  { title = "Installation", path = "installation.md" },
-  { title = "Quick Start", path = "quickstart.md" },
-]
+[[project.theme.palette]]
+scheme = "slate"
+primary = "black"
+accent = "indigo"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
 
-[[nav]]
-title = "Guides"
-children = [
-  { title = "Configuration", path = "configuration.md" },
-  { title = "Workflows", path = "workflows.md" },
-  { title = "CLI Reference", path = "cli.md" },
-]
-
-[[nav]]
-title = "Protocol"
-children = [
-  { title = "Release Artifact", path = "specifications/release-artifact.md" },
-]
-
-[[nav]]
-title = "About"
-children = [
-  { title = "Architecture", path = "architecture.md" },
-  { title = "FAQ", path = "faq.md" },
-]
-
-[markdown]
-extensions = [
-  "admonition",
-  "attr_list",
-  "def_list",
-  "md_in_html",
-  "pymdownx.details",
-  "pymdownx.superfences",
-  "pymdownx.tabbed",
-  "tables",
-  "toc",
-]
+# Markdown extensions used by the documentation. Admonitions and tabs carry
+# most of the guidance; superfences is required for fenced code blocks with
+# annotations.
+[project.markdown_extensions.abbr]
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.def_list]
+[project.markdown_extensions.md_in_html]
+[project.markdown_extensions.tables]
+[project.markdown_extensions.toc]
+permalink = true
+[project.markdown_extensions.pymdownx.details]
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+line_spans = "__span"
+pygments_lang_class = true
+[project.markdown_extensions.pymdownx.inlinehilite]
+[project.markdown_extensions.pymdownx.superfences]
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+[project.markdown_extensions.pymdownx.tasklist]
+custom_checkbox = true

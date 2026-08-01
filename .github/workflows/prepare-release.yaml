@@ -33,16 +33,26 @@ permissions:
 jobs:
   prepare:
     runs-on: ubuntu-latest
+
+    # SHIP_TOKEN lives only in the `release` environment. Declared without a
+    # `url:` deliberately: preparing a release is not a deployment, so this
+    # gates secrets and reviews without registering one. The deployment is
+    # publish-release.
+    environment: release
+
     steps:
       - uses: actions/checkout@v7
         with:
-          # git-cliff needs the full history and all tags.
+          # Full history *and* tags: git-cliff derives the next version from
+          # the last tag, and a shallow clone has neither.
           fetch-depth: 0
-          # The default GITHUB_TOKEN cannot trigger workflows, so a PR it
-          # authors would show no CI. SHIP_TOKEN is preferred when set.
+          fetch-tags: true
+          # The default GITHUB_TOKEN cannot trigger workflows, so a Release PR
+          # it authors would show no CI results.
           token: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
 
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
 
       # git-cliff is pinned by mise.lock: a changelog tool that changes
       # version between releases would silently change our release notes.
@@ -56,38 +66,53 @@ jobs:
       - name: Compute the next version
         id: version
         run: |
-          current="$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)"
-          next="$(git cliff --bumped-version | sed 's/^v//')"
-          echo "current=$current" >> "$GITHUB_OUTPUT"
-          echo "version=$next"    >> "$GITHUB_OUTPUT"
-          echo "tag=v$next"       >> "$GITHUB_OUTPUT"
-          if [ "$current" = "$next" ]; then
+          set -euo pipefail
+
+          # Compare against the last *tag*, not the version in Cargo.toml.
+          # Cargo.toml already carries the version being prepared, so
+          # comparing to it would report "no change" for the very first
+          # release and make bootstrapping impossible.
+          last_tag="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          next_tag="$(git cliff --bumped-version)"
+
+          {
+            echo "tag=$next_tag"
+            echo "version=${next_tag#v}"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ "$last_tag" = "$next_tag" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No new releasable commits since ${last_tag:-the beginning}."
           else
-            echo "changed=true"  >> "$GITHUB_OUTPUT"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Releasing ${last_tag:-<nothing>} -> $next_tag"
           fi
 
       - name: Generate the changelog
         if: steps.version.outputs.changed == 'true'
         env:
-          # git-cliff reads GITHUB_TOKEN, not GH_TOKEN. On a private repo
-          # a missing scope surfaces as 404, not 401, which is very
-          # confusing — so set it explicitly.
+          # git-cliff reads GITHUB_TOKEN, not GH_TOKEN. On a private repo a
+          # missing scope surfaces as 404 rather than 401, which is very
+          # confusing, so set it explicitly.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           git cliff --bump -o CHANGELOG.md
           git cliff --unreleased --bump --strip header -o NOTES.md
 
       - name: Apply the version
         if: steps.version.outputs.changed == 'true'
         run: |
+          set -euo pipefail
           version="${{ steps.version.outputs.version }}"
+          # Only the first `version =` belongs to [package].
           sed -i "0,/^version = \".*\"/s//version = \"$version\"/" Cargo.toml
-          cargo update --workspace --offline || cargo update --workspace
+          cargo update --workspace
 
       - name: Commit and push
         if: steps.version.outputs.changed == 'true' && !inputs.dry_run
         run: |
+          set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
@@ -99,6 +124,7 @@ jobs:
 
       - name: Write the release artifact
         run: |
+          set -euo pipefail
           if [ "${{ steps.version.outputs.changed }}" != "true" ]; then
             jq -n '{schemaVersion: 1, changed: false}' > ship.release.json
           else
@@ -115,9 +141,10 @@ jobs:
                 release: { name: ("Release " + $tag), notes: $notes }
               }' > ship.release.json
           fi
+          cat ship.release.json
 
-      # Dogfooding: gh-ship validates its own release artifact using the
-      # build from this very commit, so a protocol regression cannot ship.
+      # Dogfooding: gh-ship validates its own release artifact using the build
+      # from this very commit, so a protocol regression cannot ship.
       - name: Validate the release artifact
         run: |
           cargo build --release
