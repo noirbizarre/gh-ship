@@ -77,6 +77,38 @@ pub fn create_branch(gh: &Gh, repo: &str, branch: &str, from: &str) -> Result<()
     create_branch_at(gh, repo, branch, &sha)
 }
 
+/// Create `refs/tags/{tag}` at `sha`.
+///
+/// gh-ship tags explicitly rather than letting `gh release create` do it as a
+/// side effect, because a **draft** release does not create the git ref — the
+/// tag only appears when the release is published. The publish workflow is
+/// dispatched on that tag and checks it out, so without this the very first
+/// release fails after the release object already exists.
+///
+/// Idempotent: a tag that already exists is not an error, so re-running after a
+/// partial failure works.
+pub fn create_tag(gh: &Gh, repo: &str, tag: &str, sha: &str) -> Result<(), GhError> {
+    match gh.run(&[
+        "api",
+        &format!("repos/{repo}/git/refs"),
+        "--method",
+        "POST",
+        "-f",
+        &format!("ref=refs/tags/{tag}"),
+        "-f",
+        &format!("sha={sha}"),
+        "--silent",
+    ]) {
+        Ok(_) => Ok(()),
+        Err(GhError::Failed { stderr, .. })
+            if stderr.contains("already exists") || stderr.contains("422") =>
+        {
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
 /// Force `branch` to point at `sha`, discarding whatever was there.
 ///
 /// Used to bring the release branch back in line with its base. The reset is

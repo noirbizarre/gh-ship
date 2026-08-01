@@ -6,6 +6,7 @@ expression: out.stderr
   version: 1.4.0
   tag: v1.4.0
   merged as: abc1234
+▶ tagging v1.4.0
 ▶ creating draft release v1.4.0
 ✔ release created
   release: https://github.com/acme/widgets/releases/tag/v1.0.0

@@ -41,6 +41,7 @@ impl GhStub {
         env.insert("STUB_BRANCH_EXISTS".into(), "1".into());
         env.insert("STUB_PR_EXISTS".into(), "0".into());
         env.insert("STUB_RELEASE_EXISTS".into(), "0".into());
+        env.insert("STUB_TAG_EXISTS".into(), "0".into());
         // By default the dispatched run is found immediately, carrying
         // whatever nonce gh-ship passed.
         env.insert("STUB_RUN_FOUND".into(), "1".into());
@@ -157,6 +158,13 @@ impl GhStub {
     /// actually does and what cost a real Release PR.
     pub fn pr_create_rejects_unknown_labels(mut self) -> Self {
         self.env.insert("STUB_PR_STRICT_LABELS".into(), "1".into());
+        self
+    }
+
+    /// Make tag creation report "already exists", as GitHub does when
+    /// re-running after a partially completed release.
+    pub fn tag_exists(mut self) -> Self {
+        self.env.insert("STUB_TAG_EXISTS".into(), "1".into());
         self
     }
 
@@ -408,8 +416,17 @@ case "$1 ${2:-}" in
       *"/git/ref/"*)
         printf 'a1b2c3d4e5f6\n'
         ;;
-      # POST creates a ref; PATCH .../git/refs/heads/<branch> force-updates one.
+      # POST creates a ref (branch or tag); PATCH .../git/refs/heads/<branch>
+      # force-updates one.
       *"/git/refs"*)
+        if [ "${STUB_TAG_EXISTS:-0}" = "1" ]; then
+          case "$*" in
+            *refs/tags/*)
+              echo "HTTP 422: Reference already exists" >&2
+              exit 1
+              ;;
+          esac
+        fi
         ;;
       *)
         printf '{}\n'

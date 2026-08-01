@@ -9,9 +9,20 @@
 //!
 //! So gh-ship creates the release as a **draft**, dispatches the publish
 //! workflow to attach assets to it, and only then undrafts it. A draft
-//! release is invisible to watchers and to the releases API, but its tag
-//! exists and `gh release upload` works against it. That is the only
-//! ordering where a release becomes visible complete.
+//! release is invisible to watchers and to the releases API, yet
+//! `gh release upload` still works against it. That is the only ordering
+//! where a release becomes visible complete.
+//!
+//! # Why the tag is created explicitly
+//!
+//! A draft release does **not** create its git ref — the tag appears only when
+//! the release is published. Since the publish workflow is dispatched on that
+//! tag and checks it out, relying on `gh release create` to produce it would
+//! fail on the first release, after the release object already existed.
+//!
+//! So gh-ship creates `refs/tags/<tag>` itself, before the release. Tagging is
+//! then something gh-ship does rather than a side effect it hopes for, and the
+//! step is idempotent so a partial failure is recoverable by re-running.
 //!
 //! # Why the merge commit, not the branch tip
 //!
@@ -87,7 +98,15 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: &Theme) -> Result<()> {
         logger::detail(theme, "merged as", &target[..target.len().min(7)])
     );
 
-    // --- 4. Create the release (draft by default) ------------------------
+    // --- 4. Tag the merge commit -----------------------------------------
+    //
+    // Before the release, not as a side effect of it: a draft release does not
+    // create the git ref, and the publish workflow is dispatched on this tag
+    // and checks it out.
+    eprintln!("{}", logger::action(theme, "tagging", tag));
+    repo::create_tag(&ctx.gh, ctx.repo_slug(), tag, target)?;
+
+    // --- 5. Create the release (draft by default) ------------------------
     if repo::release_exists(&ctx.gh, tag)? {
         eprintln!(
             "{}",
@@ -100,7 +119,7 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: &Theme) -> Result<()> {
         create_release(&ctx, &artifact, tag, target)?;
     }
 
-    // --- 5. Publish workflow, then undraft -------------------------------
+    // --- 6. Publish workflow, then undraft -------------------------------
     let draft = ctx.config.settings.release.draft;
 
     match ctx.config.publish_workflow() {

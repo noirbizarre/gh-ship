@@ -1020,3 +1020,92 @@ fn prepare_proceeds_when_there_is_no_release_pr() {
     assert_eq!(out.code, 0, "{}", out.stderr);
     assert!(repo.stub.called_with(&["workflow run"]));
 }
+
+// --- tagging --------------------------------------------------------------
+
+/// A draft release does not create its git ref, and the publish workflow is
+/// dispatched on that tag and checks it out. Without an explicit tag the very
+/// first release fails *after* the release object already exists.
+#[test]
+fn release_tags_the_merge_commit_before_creating_the_release() {
+    let repo = merged_repo(GhStub::new());
+    let out = repo.ship(&["release"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+
+    let calls = repo.stub.calls();
+    let tagged = calls
+        .iter()
+        .position(|c| c.contains("refs/tags/v1.4.0") || c.contains("ref=refs/tags/v1.4.0"));
+    let created = calls.iter().position(|c| c.starts_with("release create"));
+
+    assert!(tagged.is_some(), "the tag must be created: {calls:?}");
+    assert!(created.is_some(), "the release must be created: {calls:?}");
+    assert!(
+        tagged < created,
+        "the tag must exist before the release, not as a side effect of it: {calls:?}"
+    );
+}
+
+/// The tag must land on the merge commit. A squash merge creates a new commit,
+/// so a SHA remembered from prepare would tag something not on the base branch.
+#[test]
+fn the_tag_points_at_the_merge_commit() {
+    let repo = merged_repo(GhStub::new());
+    repo.ship(&["release"]);
+
+    let tag_call = repo
+        .stub
+        .calls()
+        .into_iter()
+        .find(|c| c.contains("refs/tags/"))
+        .expect("tag was created");
+    assert!(
+        tag_call.contains("sha=abc1234def5678"),
+        "the tag must point at the merge commit: {tag_call}"
+    );
+}
+
+/// Re-running after a partly completed release must not fail on the tag.
+#[test]
+fn an_existing_tag_is_not_an_error() {
+    let repo = merged_repo(GhStub::new().tag_exists());
+    let out = repo.ship(&["release"]);
+
+    assert_eq!(
+        out.code, 0,
+        "re-running after a partial failure must work:\n{}",
+        out.stderr
+    );
+    assert!(repo.stub.called_with(&["release create"]));
+}
+
+/// The publish workflow is dispatched on the tag, which is why the tag has to
+/// exist first.
+#[test]
+fn the_publish_workflow_is_dispatched_on_the_tag() {
+    let config = "version: 1\nworkflows:\n  prepare: prepare-release\n  publish: prepare-release\n";
+    let body = format!("Notes\n\n<!-- ship:artifact\n{CHANGED_ARTIFACT}\n-->");
+    let repo = Repo::new(
+        config,
+        GhStub::new()
+            .pr_body(&body)
+            .pr_state("MERGED")
+            .merge_commit("abc1234def5678"),
+    );
+    let out = repo.ship(&["release"]);
+    assert_eq!(out.code, 0, "{}", out.stderr);
+
+    let calls = repo.stub.calls();
+    let tagged = calls.iter().position(|c| c.contains("refs/tags/"));
+    let dispatched = calls.iter().position(|c| c.starts_with("workflow run"));
+
+    assert!(
+        repo.stub.called_with(&["workflow run", "--ref v1.4.0"]),
+        "publish must be dispatched on the tag: {calls:?}"
+    );
+    assert!(
+        tagged < dispatched,
+        "the ref must exist before it is dispatched on: {calls:?}"
+    );
+}
