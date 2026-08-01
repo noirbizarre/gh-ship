@@ -41,7 +41,7 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: &Theme) -> Result<()> {
         return Ok(());
     }
 
-    ensure_release_branch(&ctx, &release_branch, &base_branch)?;
+    sync_release_branch(&ctx, &release_branch, &base_branch)?;
 
     if args.no_wait {
         return dispatch_only(&ctx, &release_branch);
@@ -205,22 +205,51 @@ fn pending_release(ctx: &Context, release_branch: &str, base_branch: &str) -> Re
     Ok(true)
 }
 
-/// Create the release branch if it does not exist yet.
-fn ensure_release_branch(ctx: &Context, release: &str, base: &str) -> Result<()> {
+/// Bring the release branch in line with the base branch.
+///
+/// Creating the branch when missing is not enough. Once it exists, every later
+/// prepare would run against whatever it contained the first time — so a
+/// changelog tool sees a history that is missing everything merged into the base
+/// since, produces byte-identical output, and the Release PR silently stops
+/// updating. The failure is invisible: the workflow succeeds, gh-ship reports
+/// "Release PR updated", and nothing changes. It also gets worse the longer a
+/// Release PR stays open, which is exactly when it matters.
+///
+/// So the branch is reset to the base on every run. That is safe because it is
+/// machine-managed and disposable: the version bump and the changelog are
+/// regenerated from scratch each time, so nothing is lost, and the Release PR
+/// always ends up as exactly one commit on top of the base.
+fn sync_release_branch(ctx: &Context, release: &str, base: &str) -> Result<()> {
     let theme = &ctx.theme;
+    let base_sha = repo::branch_sha(&ctx.gh, ctx.repo_slug(), base)?;
 
-    if repo::branch_exists(&ctx.gh, ctx.repo_slug(), release)? {
-        eprintln!("{}", logger::detail(theme, "branch", release));
+    if !repo::branch_exists(&ctx.gh, ctx.repo_slug(), release)? {
+        eprintln!(
+            "{}",
+            logger::action(theme, "creating branch", &format!("{release} from {base}"))
+        );
+        repo::create_branch_at(&ctx.gh, ctx.repo_slug(), release, &base_sha)?;
+        eprintln!("{}", logger::ok(theme, &format!("created {release}")));
         return Ok(());
     }
 
+    // Announce it: force-updating a branch deserves to be visible, even when it
+    // is the expected behaviour.
     eprintln!(
         "{}",
-        logger::action(theme, "creating branch", &format!("{release} from {base}"))
+        logger::action(
+            theme,
+            "resetting",
+            &format!("{release} to {base}@{}", short_sha(&base_sha))
+        )
     );
-    repo::create_branch(&ctx.gh, ctx.repo_slug(), release, base)?;
-    eprintln!("{}", logger::ok(theme, &format!("created {release}")));
+    repo::reset_branch(&ctx.gh, ctx.repo_slug(), release, &base_sha)?;
     Ok(())
+}
+
+/// Abbreviate a SHA the way git does.
+fn short_sha(sha: &str) -> &str {
+    &sha[..sha.len().min(7)]
 }
 
 /// Dispatch without waiting.

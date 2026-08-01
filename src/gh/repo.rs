@@ -55,9 +55,8 @@ pub fn branch_exists(gh: &Gh, repo: &str, branch: &str) -> Result<bool, GhError>
     }
 }
 
-/// Create `branch` pointing at the tip of `from`.
-pub fn create_branch(gh: &Gh, repo: &str, branch: &str, from: &str) -> Result<(), GhError> {
-    let sha = branch_sha(gh, repo, from)?;
+/// Create `branch` pointing at `sha`.
+pub fn create_branch_at(gh: &Gh, repo: &str, branch: &str, sha: &str) -> Result<(), GhError> {
     gh.run(&[
         "api",
         &format!("repos/{repo}/git/refs"),
@@ -67,6 +66,32 @@ pub fn create_branch(gh: &Gh, repo: &str, branch: &str, from: &str) -> Result<()
         &format!("ref=refs/heads/{branch}"),
         "-f",
         &format!("sha={sha}"),
+        "--silent",
+    ])
+    .map(|_| ())
+}
+
+/// Create `branch` pointing at the tip of `from`.
+pub fn create_branch(gh: &Gh, repo: &str, branch: &str, from: &str) -> Result<(), GhError> {
+    let sha = branch_sha(gh, repo, from)?;
+    create_branch_at(gh, repo, branch, &sha)
+}
+
+/// Force `branch` to point at `sha`, discarding whatever was there.
+///
+/// Used to bring the release branch back in line with its base. The reset is
+/// not a fast-forward — the release branch carries a version bump the base does
+/// not — so `force` is required.
+pub fn reset_branch(gh: &Gh, repo: &str, branch: &str, sha: &str) -> Result<(), GhError> {
+    gh.run(&[
+        "api",
+        &format!("repos/{repo}/git/refs/heads/{branch}"),
+        "--method",
+        "PATCH",
+        "-f",
+        &format!("sha={sha}"),
+        "-F",
+        "force=true",
         "--silent",
     ])
     .map(|_| ())

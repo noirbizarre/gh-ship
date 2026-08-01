@@ -408,6 +408,7 @@ case "$1 ${2:-}" in
       *"/git/ref/"*)
         printf 'a1b2c3d4e5f6\n'
         ;;
+      # POST creates a ref; PATCH .../git/refs/heads/<branch> force-updates one.
       *"/git/refs"*)
         ;;
       *)

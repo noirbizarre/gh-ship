@@ -285,8 +285,11 @@ fn prepare_creates_the_release_branch_when_missing() {
     );
 }
 
+/// The regression that made every prepare after the first a silent no-op: an
+/// existing release branch was reused untouched, so it drifted behind the base
+/// and the changelog was regenerated from stale history.
 #[test]
-fn prepare_reuses_an_existing_release_branch() {
+fn prepare_resets_an_existing_release_branch_to_base() {
     let repo = Repo::new(
         CONFIG,
         GhStub::new().branch_exists(true).artifact(CHANGED_ARTIFACT),
@@ -295,8 +298,107 @@ fn prepare_reuses_an_existing_release_branch() {
 
     assert_eq!(out.code, 0, "{}", out.stderr);
     assert!(
+        repo.stub
+            .called_with(&["git/refs/heads/release/next", "PATCH", "force=true"]),
+        "an existing branch must be forced back to the base: {:?}",
+        repo.stub.calls()
+    );
+    assert!(
         !repo.stub.called_with(&["git/refs", "POST"]),
-        "an existing branch must not be recreated"
+        "it exists, so it must not be recreated"
+    );
+    assert!(
+        out.stderr.contains("resetting release/next to main"),
+        "{}",
+        out.stderr
+    );
+}
+
+/// The reset is worthless if it happens after the workflow has already read the
+/// branch.
+#[test]
+fn the_reset_happens_before_the_workflow_is_dispatched() {
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new().branch_exists(true).artifact(CHANGED_ARTIFACT),
+    );
+    repo.ship(&["prepare"]);
+
+    let calls = repo.stub.calls();
+    let reset = calls.iter().position(|c| c.contains("PATCH"));
+    let dispatch = calls.iter().position(|c| c.starts_with("workflow run"));
+
+    assert!(reset.is_some(), "no reset: {calls:?}");
+    assert!(dispatch.is_some(), "no dispatch: {calls:?}");
+    assert!(
+        reset < dispatch,
+        "the branch must be current before the workflow reads it: {calls:?}"
+    );
+}
+
+#[test]
+fn prepare_creates_rather_than_resets_a_missing_branch() {
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new()
+            .branch_exists(false)
+            .artifact(CHANGED_ARTIFACT),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(repo.stub.called_with(&["git/refs", "POST"]));
+    assert!(
+        !repo.stub.called_with(&["PATCH"]),
+        "nothing to reset when the branch did not exist: {:?}",
+        repo.stub.calls()
+    );
+}
+
+/// A merged-but-unpublished release must be protected before anything is reset.
+#[test]
+fn the_pending_release_guard_runs_before_any_reset() {
+    let body = format!("Notes\n\n<!-- ship:artifact\n{CHANGED_ARTIFACT}\n-->");
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new()
+            .pr_body(&body)
+            .pr_state("MERGED")
+            .merge_commit("abc1234")
+            .release_exists(false)
+            .artifact(CHANGED_ARTIFACT),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        !repo.stub.called_with(&["PATCH"]),
+        "the guard must short-circuit before the branch is touched: {:?}",
+        repo.stub.calls()
+    );
+}
+
+/// Preview must not dispatch on the release branch: `prepare` resets it to
+/// base, so base is what a real prepare runs against. Using a stale release
+/// branch would make preview report history that no longer matches reality.
+#[test]
+fn preview_dispatches_on_the_base_branch() {
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new().branch_exists(true).artifact(CHANGED_ARTIFACT),
+    );
+    let out = repo.ship(&["preview"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        repo.stub.called_with(&["workflow run", "--ref main"]),
+        "preview should run against the base: {:?}",
+        repo.stub.calls()
+    );
+    assert!(
+        !repo.stub.called_with(&["PATCH"]),
+        "preview must still mutate nothing: {:?}",
+        repo.stub.calls()
     );
 }
 

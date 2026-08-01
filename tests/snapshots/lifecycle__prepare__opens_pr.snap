@@ -3,7 +3,7 @@ source: tests/lifecycle.rs
 expression: out.stderr
 ---
 ▶ preparing acme/widgets
-  branch: release/next
+▶ resetting release/next to main@a1b2c3d
 ▶ dispatching prepare-release on release/next
   ship id: [nonce]
   run: https://github.com/acme/widgets/actions/runs/42

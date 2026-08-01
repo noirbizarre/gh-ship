@@ -11,7 +11,6 @@
 use miette::Result;
 
 use gh_ship::cli::{Cli, PreviewArgs};
-use gh_ship::gh::repo;
 use gh_ship::gh::workflow::DRY_RUN_INPUT;
 use gh_ship::logger;
 use gh_ship::render;
@@ -31,7 +30,7 @@ pub fn run(cli: &Cli, args: &PreviewArgs, theme: &Theme) -> Result<()> {
     // Preview runs on a branch that already exists so it never creates
     // one. The release branch is preferred when present, because that is
     // where a real prepare would run and the result should match.
-    let branch = preview_branch(&ctx)?;
+    let branch = preview_branch(&ctx);
 
     let artifact = run_workflow(
         &ctx,
@@ -80,13 +79,16 @@ pub fn run(cli: &Cli, args: &PreviewArgs, theme: &Theme) -> Result<()> {
 
 /// Choose a branch to dispatch the preview on.
 ///
-/// `workflow_dispatch` reads the workflow definition from the ref it is
-/// given, so the ref has to exist. Preferring the release branch when it
-/// exists means a preview reflects what a real prepare would produce.
-fn preview_branch(ctx: &Context) -> Result<String> {
-    let release = ctx.release_branch();
-    if repo::branch_exists(&ctx.gh, ctx.repo_slug(), release)? {
-        return Ok(release.to_string());
-    }
-    Ok(ctx.base_branch().to_string())
+/// The base branch, always.
+///
+/// This used to prefer the release branch when it existed, reasoning that a
+/// preview should reflect what a real prepare would produce. That reasoning no
+/// longer holds: `prepare` now resets the release branch to the base before
+/// dispatching, so the base *is* what a real prepare runs against.
+///
+/// Preferring a stale release branch would make preview report a history that
+/// no longer matches reality — the same silent-staleness bug, in the one command
+/// whose whole job is to tell you the truth without changing anything.
+fn preview_branch(ctx: &Context) -> String {
+    ctx.base_branch().to_string()
 }

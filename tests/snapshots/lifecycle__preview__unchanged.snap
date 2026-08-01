@@ -4,7 +4,7 @@ expression: out.stderr
 ---
 ▶ previewing acme/widgets
 - dry run — nothing on GitHub will be modified
-▶ dispatching prepare-release on release/next
+▶ dispatching prepare-release on main
   ship id: [nonce]
   run: https://github.com/acme/widgets/actions/runs/42
 ▶ waiting for prepare-release
