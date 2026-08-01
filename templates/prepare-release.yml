@@ -1,9 +1,9 @@
-name: 🚢 Prepare Release
+name: 🚀 Prepare Release
 
 # gh-ship finds the run it started by looking for its nonce here.
 # `gh workflow run` returns no run id, so this is not decorative:
 # remove it and gh-ship cannot correlate the dispatch to a run.
-run-name: 🚢 Prepare Release (ship:${{ inputs.ship_id }})
+run-name: 🚀 Prepare Release (ship:${{ inputs.ship_id }})
 
 on:
   # Required. gh-ship starts this workflow through the API, which can

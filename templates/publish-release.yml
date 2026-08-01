@@ -1,8 +1,8 @@
-name: 🚀 Publish Release
+name: 📦 Publish Release
 
 # gh-ship correlates the run it started via this nonce. See the
 # prepare-release template for why this is required.
-run-name: 🚀 Publish Release (ship:${{ inputs.ship_id }})
+run-name: 📦 Publish Release (ship:${{ inputs.ship_id }})
 
 on:
   workflow_dispatch:

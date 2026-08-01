@@ -353,6 +353,6 @@ fn our_own_emoji_named_workflows_resolve() {
     let stderr = String::from_utf8_lossy(&out.stderr);
 
     assert_eq!(out.status.code(), Some(0), "{stderr}");
-    assert!(stderr.contains("🚢 Prepare Release"), "{stderr}");
-    assert!(stderr.contains("🚀 Publish Release"), "{stderr}");
+    assert!(stderr.contains("🚀 Prepare Release"), "{stderr}");
+    assert!(stderr.contains("📦 Publish Release"), "{stderr}");
 }

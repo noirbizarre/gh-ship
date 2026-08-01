@@ -210,6 +210,58 @@ history. Publishing one is, so it does — and its `url` links straight to the r
     combining the two fails immediately. Wait timers and required reviewers are
     unaffected.
 
+## Releasing on every push
+
+To have gh-ship check for a release on every push to your default branch, add a
+workflow that runs `gh ship prepare`. It performs no release work itself — it
+dispatches your prepare workflow and manages the Release PR.
+
+```yaml
+name: 🚢 Ship
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ship
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+      deployment: false
+    steps:
+      - uses: actions/checkout@v7
+      - run: gh extension install noirbizarre/gh-ship
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: gh ship prepare
+        env:
+          GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
+```
+
+A push with nothing to release costs one prepare-release run reporting
+`changed: false`, and exits 0.
+
+!!! tip "Merging the Release PR does not start another one"
+
+    The merge is itself a push to your default branch, so this workflow runs
+    again — but `gh ship prepare` detects that a merged Release PR is still
+    awaiting `gh ship release` and stops. See
+    [`gh ship prepare`](cli.md#gh-ship-prepare).
+
+    `cancel-in-progress: false` matters: `prepare` blocks on a dispatched run,
+    and cancelling it would orphan that run rather than stop it.
+
 ## Tokens
 
 !!! warning "The default token cannot trigger workflows"

@@ -1,8 +1,8 @@
-name: 🚢 Prepare Release
+name: 🚀 Prepare Release
 
 # gh-ship finds the run it dispatched by looking for this nonce.
 # See https://noirbizarre.github.io/gh-ship/workflows/
-run-name: 🚢 Prepare Release (ship:${{ inputs.ship_id }})
+run-name: 🚀 Prepare Release (ship:${{ inputs.ship_id }})
 
 on:
   workflow_dispatch:

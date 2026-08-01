@@ -1,0 +1,67 @@
+name: 🚢 Ship
+
+# gh-ship releases gh-ship.
+#
+# Every push to main asks whether there is anything to release. This workflow
+# does none of the work itself: it runs `gh ship prepare`, which dispatches
+# 🚀 Prepare Release and opens or updates the Release PR.
+#
+# Nothing to release is the common case and costs one prepare-release run that
+# reports `changed: false` and exits 0.
+
+on:
+  push:
+    branches: [main]
+
+# These apply when falling back to GITHUB_TOKEN; a PAT carries its own scopes.
+permissions:
+  contents: write # create the release branch
+  actions: write # workflow_dispatch, and download its artifact
+  pull-requests: write # create or update the Release PR
+  issues: write # create missing labels
+
+# Never cancel a prepare in flight: it is waiting on a dispatched run, and
+# killing it here would orphan that run rather than stop it.
+concurrency:
+  group: ship
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: 🚢 Prepare
+    runs-on: ubuntu-latest
+    # `gh ship prepare` blocks on the dispatched workflow; cap the wait well
+    # below its own 60 minute default so a stuck run fails the job visibly.
+    timeout-minutes: 30
+
+    # Same pattern as 🚀 Prepare Release: SHIP_TOKEN lives in this
+    # environment, and starting a release is not itself a deployment, so it
+    # stays out of the deployment history. 📦 Publish Release is the only job
+    # that registers one.
+    environment:
+      name: release
+      deployment: false
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # `gh ship prepare` reads .github/ship.yml and discovers workflows
+          # from .github/workflows. Without them it cannot resolve
+          # `prepare-release` to a filename, and the dispatch fails.
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # Built from source rather than `gh extension install`, because no
+      # release exists yet — the documented install path cannot bootstrap
+      # itself. Revisit once 0.1.0 is published.
+      - name: Build gh-ship
+        run: cargo build --release
+
+      - name: Prepare the release
+        env:
+          # Must be SHIP_TOKEN: a pull request authored by GITHUB_TOKEN does
+          # not trigger workflows, so the Release PR would show no CI checks.
+          GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
+        run: ./target/release/gh-ship prepare

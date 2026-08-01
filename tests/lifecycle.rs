@@ -799,3 +799,122 @@ fn gh_receives_the_filename_while_output_shows_the_slug() {
         out.stderr
     );
 }
+
+// --- pending-release guard ------------------------------------------------
+
+/// Between merging the Release PR and running `gh ship release` the tag does
+/// not exist, so a changelog tool still reports the version as unreleased.
+/// Preparing again there would start a second release for a version already
+/// merged. This is the window a push-triggered prepare lands in on the very
+/// push that merges the PR.
+#[test]
+fn prepare_refuses_while_a_merged_release_is_unpublished() {
+    let body = format!("Notes\n\n<!-- ship:artifact\n{CHANGED_ARTIFACT}\n-->");
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new()
+            .pr_body(&body)
+            .pr_state("MERGED")
+            .merge_commit("abc1234")
+            .release_exists(false)
+            .artifact(CHANGED_ARTIFACT),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(
+        out.code, 0,
+        "a pending release is an expected state, not a failure — an \
+         orchestrator must not go red on every push:\n{}",
+        out.stderr
+    );
+    assert!(out.stderr.contains("not yet published"), "{}", out.stderr);
+    assert!(out.stderr.contains("gh ship release"), "{}", out.stderr);
+
+    assert!(
+        !repo.stub.called_with(&["workflow run"]),
+        "nothing should be dispatched: {:?}",
+        repo.stub.calls()
+    );
+    assert!(
+        !repo.stub.called_with(&["pr create"]) && !repo.stub.called_with(&["pr edit"]),
+        "no second Release PR: {:?}",
+        repo.stub.calls()
+    );
+}
+
+/// Once the release exists, that cycle is done and the next may start.
+#[test]
+fn prepare_proceeds_once_the_merged_release_is_published() {
+    let body = format!("Notes\n\n<!-- ship:artifact\n{CHANGED_ARTIFACT}\n-->");
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new()
+            .pr_body(&body)
+            .pr_state("MERGED")
+            .merge_commit("abc1234")
+            .release_exists(true)
+            .artifact(CHANGED_ARTIFACT),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        repo.stub.called_with(&["workflow run"]),
+        "a completed release must not block the next one: {:?}",
+        repo.stub.calls()
+    );
+}
+
+#[test]
+fn prepare_proceeds_while_the_release_pr_is_open() {
+    let body = format!("Notes\n\n<!-- ship:artifact\n{CHANGED_ARTIFACT}\n-->");
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new()
+            .pr_body(&body)
+            .pr_state("OPEN")
+            .artifact(CHANGED_ARTIFACT),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(repo.stub.called_with(&["workflow run"]));
+    assert!(
+        repo.stub.called_with(&["pr edit"]),
+        "an open Release PR should be refreshed: {:?}",
+        repo.stub.calls()
+    );
+}
+
+/// A merged PR carrying no artifact cannot be released from, so preparing
+/// afresh is the way out rather than a dead end.
+#[test]
+fn prepare_proceeds_when_a_merged_pr_has_no_artifact() {
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new()
+            .pr_body("Someone edited this body away.")
+            .pr_state("MERGED")
+            .artifact(CHANGED_ARTIFACT),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        repo.stub.called_with(&["workflow run"]),
+        "{:?}",
+        repo.stub.calls()
+    );
+}
+
+#[test]
+fn prepare_proceeds_when_there_is_no_release_pr() {
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new().pr_exists(false).artifact(CHANGED_ARTIFACT),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(repo.stub.called_with(&["workflow run"]));
+}

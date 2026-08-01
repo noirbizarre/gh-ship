@@ -109,6 +109,19 @@ Re-running is safe, and is the supported way to refresh a Release PR.
 |---|---|
 | `--no-wait` | Dispatch and return. The PR is not created; run `prepare` again later. |
 
+!!! note "It refuses while a release is pending"
+
+    If the Release PR has been **merged** but `gh ship release` has not run yet,
+    `prepare` stops and says so, exiting `0`.
+
+    In that window the tag does not exist, so your changelog tool still reports the
+    same version as unreleased — preparing again would start a second release for a
+    version you already merged. Run `gh ship release` to finish, and the next
+    `prepare` proceeds normally.
+
+    Exiting `0` is deliberate: this is an expected state, and a workflow that runs
+    `prepare` on every push should not go red until someone ships.
+
 ---
 
 ## `gh ship status`

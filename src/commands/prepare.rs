@@ -36,6 +36,11 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: &Theme) -> Result<()> {
     let release_branch = ctx.release_branch().to_string();
     let base_branch = ctx.base_branch().to_string();
 
+    // Refuse to start a second release on top of one already merged.
+    if pending_release(&ctx, &release_branch, &base_branch)? {
+        return Ok(());
+    }
+
     ensure_release_branch(&ctx, &release_branch, &base_branch)?;
 
     if args.no_wait {
@@ -137,6 +142,67 @@ fn ensure_labels(ctx: &Context, wanted: &[String]) -> Vec<String> {
     }
 
     usable
+}
+
+/// Whether a merged Release PR is still waiting on `gh ship release`.
+///
+/// Between merging the Release PR and running `gh ship release` the tag does
+/// not exist yet, so a changelog tool still reports the same version as
+/// unreleased. Preparing again in that window starts a *second* release for a
+/// version already merged, quietly clobbering the first.
+///
+/// This matters most under automation — a push-triggered prepare hits this
+/// window on the very push that merges the Release PR — but the hole is real
+/// either way, so the guard lives here rather than in a workflow condition.
+///
+/// It is also why this cannot be a commit-message check: the Release PR lands
+/// as `Merge pull request #N…`, or as the PR title when squashed. Neither
+/// carries the release prefix.
+///
+/// Returns `true` when the caller should stop. Stopping is a **success**:
+/// nothing is wrong, the release simply needs finishing, and an orchestrator
+/// workflow must not go red on every push until someone ships it.
+fn pending_release(ctx: &Context, release_branch: &str, base_branch: &str) -> Result<bool> {
+    let theme = &ctx.theme;
+
+    let Some(pr) = repo::find_pull_request(&ctx.gh, release_branch, base_branch)? else {
+        return Ok(false);
+    };
+    if !pr.is_merged() {
+        return Ok(false);
+    }
+
+    // A merged PR with no artifact cannot be released from; `gh ship status`
+    // already reports that, and preparing afresh is the way out.
+    let Some(artifact) = render::extract_artifact(&pr.body) else {
+        return Ok(false);
+    };
+    let Some(tag) = artifact.tag().filter(|_| artifact.changed) else {
+        return Ok(false);
+    };
+
+    if repo::release_exists(&ctx.gh, tag)? {
+        // Released already: that cycle is complete, so a new one may start.
+        return Ok(false);
+    }
+
+    eprintln!(
+        "{}",
+        logger::ok(
+            theme,
+            &format!("release {tag} is prepared and merged, but not yet published")
+        )
+    );
+    eprintln!("{}", logger::detail_url(theme, "pr", &pr.url));
+    eprintln!(
+        "{}",
+        logger::skip(
+            theme,
+            "run `gh ship release` to publish it — preparing now would start a \
+             second release for a version already merged"
+        )
+    );
+    Ok(true)
 }
 
 /// Create the release branch if it does not exist yet.
