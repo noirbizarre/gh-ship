@@ -25,12 +25,17 @@ jobs:
     name: 🏗️ Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v6
+      # uv is pinned by mise.lock, so the docs build uses the same version
+      # as `mise run docs:build` locally.
+      - uses: jdx/mise-action@v4
+        with:
+          version: 2026.7.18
+          cache: true
 
       - name: Build the site
-        run: uvx zensical build
+        run: mise run docs:build
 
       # The JSON Schema is a published contract: users reference it by URL
       # from every artifact they produce, and editors fetch it for
@@ -49,7 +54,7 @@ jobs:
           grep -q 'https://noirbizarre.github.io/gh-ship/schema/release/v1.json' \
             site/schema/release/v1.json
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
@@ -62,4 +67,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

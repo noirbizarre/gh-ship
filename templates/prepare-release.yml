@@ -40,7 +40,7 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # Full history: changelog generators need the tags.
           fetch-depth: 0
@@ -118,7 +118,7 @@ jobs:
           gh extension install noirbizarre/gh-ship
           gh ship validate ship.release.json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ship-release
           path: ship.release.json

@@ -1,0 +1,20 @@
+# typos configuration.
+# https://github.com/crate-ci/typos
+
+[files]
+extend-exclude = [
+  "Cargo.lock",
+  "mise.lock",
+  # Snapshots contain the deliberate typos below, echoed back in diagnostics.
+  "tests/snapshots/**",
+  # Fixtures are the invalid-artifact corpus: being wrong is the point.
+  "tests/fixtures/**",
+  "site/**",
+]
+
+[default.extend-words]
+# Deliberate typos used to exercise "did you mean?" suggestions and JSON
+# syntax-error reporting. Correcting these would silently delete the tests.
+relase = "relase"
+releas = "releas"
+tru = "tru"

@@ -150,7 +150,7 @@ struct RawWorkflow {
 
 /// Parse a workflow definition.
 ///
-/// Returns `None` when the file is not valid YAML: an unparseable
+/// Returns `None` when the file is not valid YAML: an unparsable
 /// workflow is GitHub's problem to report, not gh-ship's.
 pub fn parse(path: &Path, text: &str) -> Option<Workflow> {
     let raw: RawWorkflow = serde_norway::from_str(text).ok()?;

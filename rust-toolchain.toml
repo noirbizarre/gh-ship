@@ -1,0 +1,11 @@
+# Pins the Rust channel and components for local development.
+#
+# CI installs the toolchain via `dtolnay/rust-toolchain`, which reads this
+# file, so contributors and CI build with the same compiler.
+#
+# The minimum supported version is declared separately as `rust-version` in
+# Cargo.toml; this file only chooses the channel to develop against.
+
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

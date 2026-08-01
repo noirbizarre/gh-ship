@@ -46,7 +46,7 @@ jobs:
           - { target: aarch64-apple-darwin,       runner: macos-latest,   asset: darwin-arm64,  cross: false }
           - { target: x86_64-pc-windows-msvc,     runner: windows-latest, asset: windows-amd64, cross: false, ext: .exe }
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # Build exactly what is being released, not a branch tip that
           # may have moved since.
@@ -56,6 +56,9 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
+      # `cross` is only needed on the Linux cross-compilation legs, so it is
+      # installed conditionally here rather than added to mise.toml, which
+      # would pull it onto every runner in the matrix.
       - uses: taiki-e/install-action@cross
         if: matrix.cross
 
@@ -75,7 +78,7 @@ jobs:
           cp "target/${{ matrix.target }}/release/gh-ship${{ matrix.ext }}" \
              "dist/gh-ship_${{ inputs.tag }}_${{ matrix.asset }}${{ matrix.ext }}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: asset-${{ matrix.asset }}
           path: dist/*
@@ -86,11 +89,11 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag }}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: asset-*
           merge-multiple: true

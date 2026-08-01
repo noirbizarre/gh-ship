@@ -20,6 +20,12 @@ target
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+# mise is this project's toolchain manager, and CI installs from these two
+# files so local and CI runs pin identical tool versions. They are commonly
+# ignored globally as personal dev files, so un-ignore them explicitly here.
+!mise.toml
+!mise.lock
+
 # Zensical documentation build output
 site/
 

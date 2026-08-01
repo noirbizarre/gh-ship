@@ -34,7 +34,7 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # git-cliff needs the full history and all tags.
           fetch-depth: 0
@@ -43,7 +43,13 @@ jobs:
           token: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
 
       - uses: dtolnay/rust-toolchain@stable
-      - uses: taiki-e/install-action@git-cliff
+
+      # git-cliff is pinned by mise.lock: a changelog tool that changes
+      # version between releases would silently change our release notes.
+      - uses: jdx/mise-action@v4
+        with:
+          version: 2026.7.18
+          cache: true
 
       # --- versioning: ours, not gh-ship's ---------------------------------
 
@@ -117,7 +123,7 @@ jobs:
           cargo build --release
           ./target/release/gh-ship validate ship.release.json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ship-release
           path: ship.release.json

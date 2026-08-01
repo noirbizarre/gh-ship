@@ -21,12 +21,23 @@ jobs:
     name: 🕵️ Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+
+      # The channel and components come from rust-toolchain.toml.
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - uses: j178/prek-action@v2
+
+      # Tool versions come from mise.toml + mise.lock, so CI runs exactly
+      # what `mise run default` runs locally.
+      - uses: jdx/mise-action@v4
+        with:
+          version: 2026.7.18
+          cache: true
+
+      - name: Run hooks
+        run: prek run --all-files --show-diff-on-failure
 
   test:
     name: 🧪 Tests (${{ matrix.os.name }})
@@ -42,13 +53,18 @@ jobs:
           - name: macOS
             runner: macos-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@cargo-llvm-cov
-      - uses: taiki-e/install-action@nextest
+
+      # nextest and llvm-cov are pinned by mise.lock rather than resolved
+      # per-run, so a tool release cannot change CI behaviour on its own.
+      - uses: jdx/mise-action@v4
+        with:
+          version: 2026.7.18
+          cache: true
 
       - name: Run tests (with coverage)
         run: |
@@ -56,12 +72,12 @@ jobs:
           cargo llvm-cov report --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: lcov.info
 
       - name: Upload test results to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         if: ${{ !cancelled() }}
         with:
           directory: target/nextest/ci
@@ -74,12 +90,16 @@ jobs:
     name: 📜 Protocol
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - uses: jdx/mise-action@v4
+        with:
+          version: 2026.7.18
+          cache: true
 
       - name: Validate the artifact corpus
-        run: cargo test --test validate
+        run: mise run schema
 
       - name: Ensure `validate` needs no network, repo or auth
         run: |

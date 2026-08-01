@@ -1,0 +1,95 @@
+# Toolchain and task definitions.
+#
+# Tool versions are resolved to exact builds in `mise.lock`, which is
+# committed. CI installs from these two files, so a local `mise run default`
+# and a CI run use identical tool versions.
+#
+# Rust itself is intentionally not managed here: CI needs per-job components
+# (rustfmt, clippy, llvm-tools-preview) and cross-compilation targets, which
+# `dtolnay/rust-toolchain` handles better. `rust-toolchain.toml` pins the
+# channel for both.
+
+[settings]
+# Resolve tools through mise.lock and keep it updated. Without this, the
+# lockfile is ignored and `latest` really means latest.
+lockfile = true
+
+# Do not let mise adopt `rust-toolchain.toml`. Rust is installed by rustup
+# locally and by `dtolnay/rust-toolchain` in CI, which handle per-job
+# components and cross-compilation targets that mise does not. Leaving both
+# in charge would have mise shadow the toolchain CI just installed.
+idiomatic_version_file_enable_tools = []
+
+[tools]
+prek = "latest"
+typos = "latest"
+uv = "latest"
+git-cliff = "latest"
+cargo-binstall = "latest"
+"cargo:cargo-nextest" = "latest"
+"cargo:cargo-llvm-cov" = "latest"
+"cargo:cargo-insta" = "latest"
+
+# --- Everyday ---------------------------------------------------------------
+
+[tasks.default]
+description = "Run fmt, lint, build and test"
+depends = ["fmt", "lint", "build", "test"]
+
+[tasks.build]
+description = "Build the binary"
+run = "cargo build"
+
+[tasks.test]
+description = "Run tests (accepts nextest selectors)"
+raw_args = true
+run = "cargo nextest run"
+
+[tasks.cover]
+description = "Run tests with coverage"
+run = "cargo llvm-cov nextest"
+
+[tasks.fmt]
+description = "Format the code"
+run = "cargo fmt --all"
+
+[tasks.lint]
+description = "Lint the code"
+run = "cargo clippy --all-targets --all-features -- -D warnings"
+
+[tasks.spell]
+description = "Check spelling"
+run = "typos"
+
+[tasks.snapshots]
+description = "Review and update insta snapshots interactively"
+run = "cargo insta review"
+
+# --- gh-ship itself ---------------------------------------------------------
+
+[tasks.ship]
+description = "Run gh-ship from source"
+raw_args = true
+run = "cargo run --"
+
+[tasks.setup]
+description = "Install gh-ship locally"
+run = "cargo install --path . --force"
+
+[tasks.schema]
+description = "Validate every artifact fixture against the schema"
+run = "cargo nextest run --test validate"
+
+[tasks.dogfood]
+description = "Validate this repository's own gh-ship setup"
+run = "cargo run -- validate"
+
+# --- Documentation ----------------------------------------------------------
+
+[tasks.docs]
+description = "Serve the documentation locally"
+run = "uvx zensical serve"
+
+[tasks."docs:build"]
+description = "Build the documentation"
+run = "uvx zensical build"

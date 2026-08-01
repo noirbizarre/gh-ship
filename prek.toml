@@ -26,6 +26,13 @@ additional_dependencies = ["@commitlint/config-conventional"]
 repo = "local"
 
 [[repos.hooks]]
+id = "typos"
+name = "typos"
+language = "system"
+entry = "typos"
+pass_filenames = false
+
+[[repos.hooks]]
 id = "fmt"
 name = "cargo fmt"
 language = "system"

@@ -73,7 +73,7 @@ pub fn run(cli: &Cli, args: &InitArgs, theme: &Theme) -> Result<()> {
     // --- publish (optional) ---------------------------------------------
     //
     // The prepare workflow is excluded: using one workflow for both roles
-    // is never what someone means, and offering it invites a mis-click
+    // is never what someone means, and offering it invites a misclick
     // that only shows up at release time.
     let publish_candidates: Vec<Workflow> = conforming
         .iter()
