@@ -678,3 +678,124 @@ fn release_output_is_stable() {
     let out = repo.ship(&["release"]);
     with_redactions(|| insta::assert_snapshot!("release__ships", out.stderr));
 }
+
+// --- labels --------------------------------------------------------------
+
+const LABELLED_CONFIG: &str = r#"
+version: 1
+workflows:
+  prepare: prepare-release
+pull_request:
+  labels: [release]
+"#;
+
+/// The regression that cost a real Release PR: `gh pr create --label release`
+/// fails outright when the label does not exist, taking the PR with it.
+/// gh-ship must create the label first.
+#[test]
+fn a_missing_label_is_created_before_the_pr() {
+    let repo = Repo::new(
+        LABELLED_CONFIG,
+        GhStub::new()
+            .artifact(CHANGED_ARTIFACT)
+            .labels(&[])
+            .pr_create_rejects_unknown_labels(),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        repo.stub.called_with(&["label create", "release"]),
+        "the missing label must be created: {:?}",
+        repo.stub.calls()
+    );
+    assert!(repo.stub.called_with(&["pr create", "--label release"]));
+}
+
+#[test]
+fn an_existing_label_is_not_recreated() {
+    let repo = Repo::new(
+        LABELLED_CONFIG,
+        GhStub::new()
+            .artifact(CHANGED_ARTIFACT)
+            .labels(&["release"]),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        !repo.stub.called_with(&["label create"]),
+        "an existing label must not be recreated: {:?}",
+        repo.stub.calls()
+    );
+}
+
+/// A label is decoration; the Release PR is the valuable artifact. If the
+/// label cannot be created, the PR must still be opened.
+#[test]
+fn the_pr_is_still_created_when_a_label_cannot_be() {
+    let repo = Repo::new(
+        LABELLED_CONFIG,
+        GhStub::new()
+            .artifact(CHANGED_ARTIFACT)
+            .labels(&[])
+            .label_create_fails()
+            .pr_create_rejects_unknown_labels(),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(
+        out.code, 0,
+        "a label must never cost the Release PR:\n{}",
+        out.stderr
+    );
+    assert!(
+        out.stderr.contains("could not be created"),
+        "{}",
+        out.stderr
+    );
+    assert!(out.stderr.contains("issues: write"), "{}", out.stderr);
+    assert!(repo.stub.called_with(&["pr create"]));
+    assert!(
+        !repo.stub.called_with(&["pr create", "--label"]),
+        "the unusable label must be dropped, not sent: {:?}",
+        repo.stub.calls()
+    );
+}
+
+#[test]
+fn no_configured_labels_means_no_label_calls() {
+    let repo = Repo::new(CONFIG, GhStub::new().artifact(CHANGED_ARTIFACT));
+    repo.ship(&["prepare"]);
+    assert!(
+        !repo.stub.called_with(&["label list"]),
+        "nothing to do, so nothing should be asked of GitHub"
+    );
+}
+
+// --- slug identification -------------------------------------------------
+
+/// `gh` resolves a workflow by filename, name or id — never by stem — so
+/// the filename must reach the API even though output shows the slug.
+#[test]
+fn gh_receives_the_filename_while_output_shows_the_slug() {
+    let repo = Repo::new(CONFIG, GhStub::new().artifact(CHANGED_ARTIFACT));
+    let out = repo.ship(&["prepare"]);
+
+    assert!(
+        repo.stub
+            .called_with(&["workflow run", "prepare-release.yml"]),
+        "the API argument must keep the extension: {:?}",
+        repo.stub.calls()
+    );
+    assert!(
+        out.stderr.contains("dispatching prepare-release on"),
+        "output should show the slug: {}",
+        out.stderr
+    );
+    assert!(
+        !out.stderr.contains("prepare-release.yml"),
+        "output should not leak the filename: {}",
+        out.stderr
+    );
+}

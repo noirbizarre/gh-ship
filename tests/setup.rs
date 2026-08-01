@@ -189,7 +189,12 @@ fn validates_the_publish_workflow_too() {
     );
     let (code, stderr) = validate_in(dir.path());
     assert_eq!(code, 1, "{stderr}");
-    assert!(stderr.contains("publish-release.yml"), "{stderr}");
+    // Reported by slug, not filename: that is what the config refers to.
+    assert!(stderr.contains("publish-release"), "{stderr}");
+    assert!(
+        !stderr.contains("publish-release.yml"),
+        "output should use the slug, not the filename: {stderr}"
+    );
 }
 
 #[test]
@@ -279,4 +284,75 @@ fn shipped_templates_are_conforming_workflows() {
             assert_eq!(code, 0, "templates/{name} is not conforming:\n{stderr}");
         }
     }
+}
+
+// --- slug identification --------------------------------------------------
+
+/// A workflow with an emoji display name must still be addressable from
+/// the config by its filename slug. Requiring `🚢 Prepare Release` in
+/// YAML would be miserable, and renaming a workflow would break releases.
+const EMOJI_WORKFLOW: &str = r#"name: 🚢 Prepare Release
+run-name: 🚢 Prepare Release (ship:${{ inputs.ship_id }})
+on:
+  workflow_dispatch:
+    inputs:
+      ship_id: { required: true, type: string }
+      dry_run: { required: false, type: boolean, default: false }
+  workflow_call:
+    inputs:
+      ship_id: { required: true, type: string }
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hi
+"#;
+
+#[test]
+fn a_workflow_with_an_emoji_name_resolves_by_slug() {
+    let dir = repo(
+        Some(MINIMAL_CONFIG),
+        &[("prepare-release.yml", EMOJI_WORKFLOW)],
+    );
+    let (code, stderr) = validate_in(dir.path());
+
+    assert_eq!(code, 0, "{stderr}");
+    assert!(
+        stderr.contains("prepare-release"),
+        "the slug should be shown: {stderr}"
+    );
+    assert!(
+        stderr.contains("🚢 Prepare Release"),
+        "the display name should still be surfaced alongside it: {stderr}"
+    );
+}
+
+/// The emoji name must never leak into a suggestion, because a config
+/// cannot use it.
+#[test]
+fn suggestions_use_slugs_not_display_names() {
+    let config = "version: 1\nworkflows:\n  prepare: prepare-relase\n";
+    let dir = repo(Some(config), &[("prepare-release.yml", EMOJI_WORKFLOW)]);
+    let (code, stderr) = validate_in(dir.path());
+
+    assert_eq!(code, 1, "{stderr}");
+    assert!(stderr.contains("did you mean"), "{stderr}");
+    assert!(stderr.contains("prepare-release"), "{stderr}");
+    assert!(
+        !stderr.contains("🚢"),
+        "a suggestion must be something you can paste into YAML: {stderr}"
+    );
+}
+
+/// The two release workflows in this repository carry emoji names. Proving
+/// they still validate is the dogfooding check for the whole slug change.
+#[test]
+fn our_own_emoji_named_workflows_resolve() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let out = ship().current_dir(root).arg("validate").output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+
+    assert_eq!(out.status.code(), Some(0), "{stderr}");
+    assert!(stderr.contains("🚢 Prepare Release"), "{stderr}");
+    assert!(stderr.contains("🚀 Publish Release"), "{stderr}");
 }

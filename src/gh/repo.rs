@@ -83,6 +83,75 @@ pub fn branch_sha(gh: &Gh, repo: &str, branch: &str) -> Result<String, GhError> 
     Ok(out.trim().to_string())
 }
 
+// --- Labels --------------------------------------------------------------
+
+/// Default colour for labels gh-ship creates.
+///
+/// Fixed rather than random so the result is reproducible and testable.
+/// A pale blue reads as informational without competing with whatever
+/// palette a project already uses.
+const LABEL_COLOR: &str = "BFD4F2";
+
+#[derive(Debug, Deserialize)]
+struct Label {
+    name: String,
+}
+
+/// Ensure every requested label exists, returning those safe to apply.
+///
+/// `gh pr create --label x` fails outright when `x` does not exist, which
+/// means a missing label takes the whole Release PR down with it. That
+/// trade is plainly wrong: the PR is the valuable artifact and the label
+/// is decoration.
+///
+/// So gh-ship creates what is missing, and if it cannot — no `issues:
+/// write`, a protected repository — it reports the label as dropped so
+/// the caller can warn and carry on.
+///
+/// Returns `(usable, dropped)`.
+pub fn ensure_labels(gh: &Gh, labels: &[String]) -> (Vec<String>, Vec<String>) {
+    if labels.is_empty() {
+        return (Vec::new(), Vec::new());
+    }
+
+    // A failure to list is not fatal either: assume nothing exists and
+    // let the create attempts sort it out.
+    let existing: Vec<String> = gh
+        .json::<Vec<Label>, _>(&["label", "list", "--limit", "200", "--json", "name"])
+        .map(|labels| labels.into_iter().map(|l| l.name).collect())
+        .unwrap_or_default();
+
+    let mut usable = Vec::new();
+    let mut dropped = Vec::new();
+
+    for label in labels {
+        // GitHub label names are case-insensitive for uniqueness.
+        if existing.iter().any(|e| e.eq_ignore_ascii_case(label)) {
+            usable.push(label.clone());
+            continue;
+        }
+        match create_label(gh, label) {
+            Ok(()) => usable.push(label.clone()),
+            Err(_) => dropped.push(label.clone()),
+        }
+    }
+
+    (usable, dropped)
+}
+
+fn create_label(gh: &Gh, name: &str) -> Result<(), GhError> {
+    gh.run_scoped(&[
+        "label",
+        "create",
+        name,
+        "--color",
+        LABEL_COLOR,
+        "--description",
+        "Created by gh-ship",
+    ])
+    .map(|_| ())
+}
+
 // --- Pull requests -------------------------------------------------------
 
 /// The subset of PR fields gh-ship needs.

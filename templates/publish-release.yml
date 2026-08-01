@@ -1,8 +1,8 @@
-name: publish-release
+name: 🚀 Publish Release
 
 # gh-ship correlates the run it started via this nonce. See the
 # prepare-release template for why this is required.
-run-name: publish-release (ship:${{ inputs.ship_id }})
+run-name: 🚀 Publish Release (ship:${{ inputs.ship_id }})
 
 on:
   workflow_dispatch:
@@ -31,7 +31,17 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment: release
+
+    # This one IS a deployment: it is what actually ships. The `url:`
+    # registers it in the repository's deployment list and links straight
+    # to the release.
+    #
+    # Contrast prepare-release, which uses the same environment with
+    # `deployment: false` because preparing a release is not a deployment.
+    environment:
+      name: release
+      url: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ inputs.tag }}
+
     steps:
       - uses: actions/checkout@v7
         with:

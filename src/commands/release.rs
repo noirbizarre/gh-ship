@@ -235,8 +235,9 @@ fn create_release(ctx: &Context, artifact: &Artifact, tag: &str, target: &str) -
 /// Dispatched on the tag rather than a branch: the publish workflow
 /// should build exactly what is being released, not whatever the branch
 /// has drifted to since.
-fn run_publish(ctx: &Context, workflow: &str, tag: &str) -> Result<()> {
+fn run_publish(ctx: &Context, workflow_name: &str, tag: &str) -> Result<()> {
     let theme = &ctx.theme;
+    let workflow = ctx.workflow(workflow_name);
     eprintln!(
         "{}",
         logger::skip(
@@ -246,7 +247,7 @@ fn run_publish(ctx: &Context, workflow: &str, tag: &str) -> Result<()> {
     );
 
     let inputs = [("tag", tag.to_string())];
-    let ship_id = gh_ship::gh::run::dispatch(&ctx.gh, workflow, tag, &inputs)?;
+    let ship_id = gh_ship::gh::run::dispatch(&ctx.gh, &workflow, tag, &inputs)?;
     eprintln!(
         "{}",
         logger::action(theme, "dispatching", &format!("{workflow} on {tag}"))
@@ -255,7 +256,7 @@ fn run_publish(ctx: &Context, workflow: &str, tag: &str) -> Result<()> {
 
     let found = gh_ship::gh::run::find(
         &ctx.gh,
-        workflow,
+        &workflow,
         tag,
         &ship_id,
         gh_ship::gh::run::appear_timeout(),
@@ -266,7 +267,7 @@ fn run_publish(ctx: &Context, workflow: &str, tag: &str) -> Result<()> {
     let mut last = String::new();
     gh_ship::gh::run::wait(
         &ctx.gh,
-        workflow,
+        &workflow,
         &found,
         gh_ship::gh::run::complete_timeout(),
         |_, current| {

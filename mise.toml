@@ -21,6 +21,7 @@ lockfile = true
 idiomatic_version_file_enable_tools = []
 
 [tools]
+actionlint = "latest"
 prek = "latest"
 typos = "latest"
 uv = "latest"
@@ -34,7 +35,7 @@ cargo-binstall = "latest"
 
 [tasks.default]
 description = "Run fmt, lint, build and test"
-depends = ["fmt", "lint", "build", "test"]
+depends = ["fmt", "lint", "lint:actions", "build", "test"]
 
 [tasks.build]
 description = "Build the binary"
@@ -60,6 +61,17 @@ run = "cargo clippy --all-targets --all-features -- -D warnings"
 [tasks.spell]
 description = "Check spelling"
 run = "typos"
+
+[tasks."lint:actions"]
+description = "Lint the GitHub Actions workflows"
+# actionlint 1.7.7 does not yet know `environment.deployment`, which is a
+# documented, supported key:
+# https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/control-deployments
+# Suppress that one rule only — every other unexpected key is still caught.
+# Drop the -ignore once actionlint ships support.
+run = """
+actionlint -ignore 'unexpected key "deployment" for "environment" section' .github/workflows/*.yaml
+"""
 
 [tasks.snapshots]
 description = "Review and update insta snapshots interactively"

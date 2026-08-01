@@ -1,9 +1,9 @@
-name: prepare-release
+name: 🚢 Prepare Release
 
 # gh-ship finds the run it started by looking for its nonce here.
 # `gh workflow run` returns no run id, so this is not decorative:
 # remove it and gh-ship cannot correlate the dispatch to a run.
-run-name: prepare-release (ship:${{ inputs.ship_id }})
+run-name: 🚢 Prepare Release (ship:${{ inputs.ship_id }})
 
 on:
   # Required. gh-ship starts this workflow through the API, which can
@@ -39,6 +39,17 @@ permissions:
 jobs:
   prepare:
     runs-on: ubuntu-latest
+
+    # Environment secrets without a deployment record. Preparing a release
+    # is not a deployment, and `deployment: false` keeps it out of the
+    # repository's deployment history while still granting the secrets:
+    # https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/control-deployments
+    #
+    # GitHub creates the environment on first use. Put SHIP_TOKEN in it.
+    environment:
+      name: release
+      deployment: false
+
     steps:
       - uses: actions/checkout@v7
         with:

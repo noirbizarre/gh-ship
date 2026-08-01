@@ -27,6 +27,7 @@ use std::time::{Duration, Instant};
 use serde::Deserialize;
 
 use super::cli::{Gh, GhError};
+use super::workflow::WorkflowRef;
 
 /// How long to wait for a dispatched run to *appear* in the run list.
 ///
@@ -167,7 +168,7 @@ pub enum RunError {
 ///
 /// Ordered by likelihood, because the first suggestion is the one people
 /// actually read.
-fn not_found_help(workflow: &str) -> String {
+fn not_found_help(workflow: &WorkflowRef) -> String {
     format!(
         "the most likely cause is that `{workflow}` does not stamp the nonce into its `run-name`. \
          gh-ship finds your run by looking for `ship:<id>` in the run title, because dispatching \
@@ -183,7 +184,7 @@ fn not_found_help(workflow: &str) -> String {
 /// [`find`] or [`wait`].
 pub fn dispatch(
     gh: &Gh,
-    workflow: &str,
+    workflow: &WorkflowRef,
     branch: &str,
     inputs: &[(&str, String)],
 ) -> Result<ShipId, RunError> {
@@ -192,7 +193,9 @@ pub fn dispatch(
     let mut args: Vec<String> = vec![
         "workflow".into(),
         "run".into(),
-        workflow.into(),
+        // The API resolves a workflow by filename, name or numeric id —
+        // never by slug — so the id is what must go on the wire.
+        workflow.id.clone(),
         "--ref".into(),
         branch.into(),
         "-f".into(),
@@ -210,7 +213,7 @@ pub fn dispatch(
 /// Poll until a run carrying `ship_id` appears.
 pub fn find(
     gh: &Gh,
-    workflow: &str,
+    workflow: &WorkflowRef,
     branch: &str,
     ship_id: &ShipId,
     timeout: Duration,
@@ -244,7 +247,7 @@ pub fn find(
 /// Poll a known run until it reaches a terminal state.
 pub fn wait(
     gh: &Gh,
-    workflow: &str,
+    workflow: &WorkflowRef,
     run: &Run,
     timeout: Duration,
     mut on_wait: impl FnMut(Duration, &Run),
@@ -291,12 +294,12 @@ pub fn wait(
 /// between the dispatch and the first poll, and missing ours because it
 /// fell off a short page would be the exact failure this design exists
 /// to prevent.
-pub fn list(gh: &Gh, workflow: &str, branch: &str) -> Result<Vec<Run>, GhError> {
+pub fn list(gh: &Gh, workflow: &WorkflowRef, branch: &str) -> Result<Vec<Run>, GhError> {
     gh.json(&[
         "run",
         "list",
         "--workflow",
-        workflow,
+        &workflow.id,
         "--branch",
         branch,
         "--limit",
@@ -445,7 +448,7 @@ mod tests {
 
     #[test]
     fn not_found_help_names_the_two_real_causes() {
-        let help = not_found_help("prepare-release");
+        let help = not_found_help(&WorkflowRef::unresolved("prepare-release"));
         assert!(help.contains("run-name"), "{help}");
         assert!(
             help.contains("from that ref"),

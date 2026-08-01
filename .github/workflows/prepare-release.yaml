@@ -1,8 +1,8 @@
-name: prepare-release
+name: 🚢 Prepare Release
 
 # gh-ship finds the run it dispatched by looking for this nonce.
 # See https://noirbizarre.github.io/gh-ship/workflows/
-run-name: prepare-release (ship:${{ inputs.ship_id }})
+run-name: 🚢 Prepare Release (ship:${{ inputs.ship_id }})
 
 on:
   workflow_dispatch:
@@ -34,10 +34,10 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
 
-    # SHIP_TOKEN lives only in the `release` environment. 
-    # Preparing a release is not a deployment, so this gates secrets and reviews without registering one. 
+    # SHIP_TOKEN lives only in the `release` environment.
+    # Preparing a release is not a deployment, so this gates secrets and reviews without registering one.
     # The deployment is publish-release.
-    environment: 
+    environment:
       name: release
       deployment: false
 

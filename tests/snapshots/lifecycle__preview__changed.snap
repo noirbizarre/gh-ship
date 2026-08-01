@@ -4,11 +4,11 @@ expression: out.stderr
 ---
 ▶ previewing acme/widgets
 - dry run — nothing on GitHub will be modified
-▶ dispatching prepare-release.yml on release/next
+▶ dispatching prepare-release on release/next
   ship id: [nonce]
   run: https://github.com/acme/widgets/actions/runs/42
-▶ waiting for prepare-release.yml
-✔ prepare-release.yml succeeded
+▶ waiting for prepare-release
+✔ prepare-release succeeded
 ▶ downloading ship-release
 ✔ artifact is valid
 

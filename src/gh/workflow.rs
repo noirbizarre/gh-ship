@@ -29,6 +29,50 @@ pub const DRY_RUN_INPUT: &str = "dry_run";
 /// Directory holding workflow definitions.
 pub const WORKFLOW_DIR: &str = ".github/workflows";
 
+/// A workflow, as gh-ship refers to it.
+///
+/// Three identifiers are easy to conflate, so they are kept apart
+/// deliberately:
+///
+/// | Concept | Example | Used for |
+/// |---|---|---|
+/// | **slug** | `prepare-release` | configuration and all human output |
+/// | **id** | `prepare-release.yaml` | arguments passed to `gh` |
+/// | **name** | `🚢 Prepare Release` | display only, never matched on |
+///
+/// The slug is the stable identity: a display name is free-form, may
+/// carry emoji, and may be changed at any time without breaking a
+/// configuration. `gh` resolves a workflow by name, filename or numeric
+/// id — but *not* by stem — so the id is what actually reaches the API.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowRef {
+    /// Filename with extension, e.g. `prepare-release.yaml`.
+    pub id: String,
+    /// Filename without extension, e.g. `prepare-release`.
+    pub slug: String,
+}
+
+impl std::fmt::Display for WorkflowRef {
+    /// Renders the slug. Everything user-facing goes through this, so a
+    /// log line and an API argument cannot silently diverge.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.slug)
+    }
+}
+
+impl WorkflowRef {
+    /// Build a reference for a workflow gh-ship could not find on disk.
+    ///
+    /// The configured string is used verbatim for both, because it is
+    /// all we know; `gh` may still resolve it by display name.
+    pub fn unresolved(configured: &str) -> Self {
+        Self {
+            id: configured.to_string(),
+            slug: configured.to_string(),
+        }
+    }
+}
+
 /// A workflow definition found on disk.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Workflow {
@@ -47,7 +91,7 @@ pub struct Workflow {
 }
 
 impl Workflow {
-    /// The identifier to pass to `gh workflow run`.
+    /// The identifier to pass to `gh`.
     ///
     /// The filename is preferred over the display name: it is unique,
     /// stable, and unambiguous when two workflows share a `name:`.
@@ -56,6 +100,32 @@ impl Workflow {
             .file_name()
             .map(|f| f.to_string_lossy().into_owned())
             .unwrap_or_else(|| self.name.clone())
+    }
+
+    /// The stable identity used in configuration and in output.
+    ///
+    /// This is what `.github/ship.yml` refers to, so that a workflow can
+    /// be renamed — or given an emoji — without breaking anything.
+    pub fn slug(&self) -> String {
+        self.path
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| self.name.clone())
+    }
+
+    /// Whether the display name says something the slug does not.
+    ///
+    /// Used to avoid printing `prepare-release (prepare-release)`.
+    pub fn has_distinct_name(&self) -> bool {
+        self.name != self.slug()
+    }
+
+    /// This workflow as an id/slug pair.
+    pub fn as_ref(&self) -> WorkflowRef {
+        WorkflowRef {
+            id: self.id(),
+            slug: self.slug(),
+        }
     }
 
     /// Whether the `run-name` interpolates gh-ship's nonce, which is
@@ -261,23 +331,26 @@ pub fn discover(root: &Path) -> Vec<Workflow> {
         })
         .collect();
 
-    workflows.sort_by(|a, b| a.name.cmp(&b.name));
+    // Sorted by slug, so ordering is stable and unaffected by emoji or
+    // other decoration in display names.
+    workflows.sort_by_key(|w| w.slug());
     workflows
 }
 
-/// Find a workflow by `name:` or by filename.
+/// Find a workflow by slug, filename, or — as a fallback — display name.
+///
+/// Slug wins. That matters once display names carry emoji: a config
+/// should never have to spell `🚢 Prepare Release`, and renaming a
+/// workflow should not break a release.
+///
+/// The display-name tier is kept last for compatibility with
+/// configurations written before slugs were adopted.
 pub fn find<'a>(workflows: &'a [Workflow], needle: &str) -> Option<&'a Workflow> {
     workflows
         .iter()
-        .find(|w| w.name == needle)
+        .find(|w| w.slug() == needle)
         .or_else(|| workflows.iter().find(|w| w.id() == needle))
-        .or_else(|| {
-            workflows.iter().find(|w| {
-                w.path
-                    .file_stem()
-                    .is_some_and(|s| s.to_string_lossy() == needle)
-            })
-        })
+        .or_else(|| workflows.iter().find(|w| w.name == needle))
 }
 
 #[cfg(test)]
@@ -404,12 +477,86 @@ jobs:
     }
 
     #[test]
-    fn find_matches_name_filename_and_stem() {
+    fn find_matches_slug_filename_and_name() {
         let workflows = vec![wf(CONFORMING)];
-        assert!(find(&workflows, "prepare-release").is_some());
-        assert!(find(&workflows, "prepare.yml").is_some());
+        // slug (file stem), filename, and display name all resolve.
         assert!(find(&workflows, "prepare").is_some());
+        assert!(find(&workflows, "prepare.yml").is_some());
+        assert!(find(&workflows, "prepare-release").is_some());
         assert!(find(&workflows, "nope").is_none());
+    }
+
+    #[test]
+    fn slug_is_the_filename_without_extension() {
+        let w = wf(CONFORMING);
+        assert_eq!(w.slug(), "prepare");
+        assert_eq!(w.id(), "prepare.yml");
+        assert_eq!(w.name, "prepare-release");
+    }
+
+    /// A display name may carry emoji; the slug must stay clean, because
+    /// the slug is what a configuration file has to spell.
+    #[test]
+    fn emoji_display_name_leaves_the_slug_alone() {
+        let w = parse(
+            Path::new(".github/workflows/prepare-release.yaml"),
+            "name: 🚢 Prepare Release\non: workflow_dispatch\n",
+        )
+        .unwrap();
+        assert_eq!(w.slug(), "prepare-release");
+        assert_eq!(w.id(), "prepare-release.yaml");
+        assert_eq!(w.name, "🚢 Prepare Release");
+        assert!(w.has_distinct_name());
+
+        let workflows = vec![w];
+        assert!(
+            find(&workflows, "prepare-release").is_some(),
+            "a config must never have to spell the emoji name"
+        );
+    }
+
+    /// Slug beats display name, so one workflow cannot hijack another's
+    /// identifier by adopting it as a `name:`.
+    #[test]
+    fn slug_wins_over_a_colliding_display_name() {
+        let decoy = parse(
+            Path::new(".github/workflows/decoy.yml"),
+            "name: prepare-release\non: workflow_dispatch\n",
+        )
+        .unwrap();
+        let real = parse(
+            Path::new(".github/workflows/prepare-release.yml"),
+            "name: 🚢 Prepare Release\non: workflow_dispatch\n",
+        )
+        .unwrap();
+
+        let workflows = vec![decoy, real];
+        let found = find(&workflows, "prepare-release").expect("resolves");
+        assert_eq!(
+            found.id(),
+            "prepare-release.yml",
+            "the slug match must win over the decoy's display name"
+        );
+    }
+
+    #[test]
+    fn workflow_ref_displays_the_slug_but_carries_the_id() {
+        let r = wf(CONFORMING).as_ref();
+        assert_eq!(r.to_string(), "prepare", "output uses the slug");
+        assert_eq!(r.id, "prepare.yml", "the API argument keeps the extension");
+    }
+
+    #[test]
+    fn unresolved_ref_uses_the_configured_string_for_both() {
+        let r = WorkflowRef::unresolved("whatever");
+        assert_eq!(r.id, "whatever");
+        assert_eq!(r.to_string(), "whatever");
+    }
+
+    #[test]
+    fn has_distinct_name_is_false_when_name_matches_the_slug() {
+        let w = parse(Path::new("release.yml"), "name: release\non: push\n").unwrap();
+        assert!(!w.has_distinct_name());
     }
 
     #[test]
@@ -423,8 +570,8 @@ jobs:
 
         let found = discover(dir.path());
         assert_eq!(found.len(), 2, "non-YAML files must be ignored");
-        assert_eq!(found[0].name, "aaa", "results are sorted by name");
-        assert_eq!(found[1].name, "prepare-release");
+        assert_eq!(found[0].slug(), "a", "results are sorted by slug");
+        assert_eq!(found[1].slug(), "b");
         assert_eq!(
             found[1].path,
             Path::new(".github/workflows/b.yml"),

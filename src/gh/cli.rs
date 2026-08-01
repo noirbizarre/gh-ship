@@ -150,7 +150,16 @@ fn classify(display: &str, stderr: &str) -> GhError {
         return GhError::NoRepository;
     }
 
-    let help = if lower.contains("404") || lower.contains("could not resolve to a repository") {
+    let help = if lower.contains("could not add label")
+        || lower.contains("label") && lower.contains("not found")
+    {
+        Some(
+            "the label does not exist in this repository. gh-ship normally creates missing \
+             labels, which needs `issues: write`; otherwise create it by hand or remove it \
+             from `pull_request.labels` in .github/ship.yml."
+                .to_string(),
+        )
+    } else if lower.contains("404") || lower.contains("could not resolve to a repository") {
         Some(
             "the repository does not exist, or your token cannot see it. On a private repository \
              GitHub returns 404 rather than 401, so this often means missing scopes rather than a typo."

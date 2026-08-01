@@ -62,7 +62,16 @@ release:
 | `prepare` | string | **Required.** Workflow that produces the release artifact. |
 | `publish` | string | Optional. Workflow that builds and uploads assets. |
 
-Values may be a workflow's `name:`, its filename, or its filename without extension.
+Values are the workflow's **filename without the extension** — its slug:
+
+```
+.github/workflows/prepare-release.yaml   ->   prepare-release
+```
+
+The `name:` inside the workflow is display only, so it is free to carry emoji
+(`🚢 Prepare Release`) and can be changed without touching this file. A full
+filename or a display name is still accepted, but the slug is the stable identity
+and what `gh ship init` writes.
 
 !!! warning "These must be dispatchable"
 

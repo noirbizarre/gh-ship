@@ -6,6 +6,8 @@
 //! cannot drift in how they wait, how they report, or how strictly they
 //! validate.
 
+use std::path::{Path, PathBuf};
+
 use miette::Result;
 
 use gh_ship::artifact::{ARTIFACT_FILE, ARTIFACT_NAME, Artifact, validate};
@@ -13,6 +15,7 @@ use gh_ship::cli::Cli;
 use gh_ship::config::Config;
 use gh_ship::gh::repo::{self, Repository};
 use gh_ship::gh::run::{self, Run, ShipId};
+use gh_ship::gh::workflow::WorkflowRef;
 use gh_ship::gh::{Gh, workflow};
 use gh_ship::logger;
 use gh_ship::style::Theme;
@@ -23,6 +26,13 @@ pub struct Context {
     pub config: Config,
     pub repository: Repository,
     pub theme: Theme,
+    /// Repository root, derived from the config path.
+    ///
+    /// Workflow discovery must not depend on the current directory: with
+    /// `--repo`, or when run from a subdirectory, a CWD-relative lookup
+    /// silently finds nothing and the raw config string ends up on the
+    /// wire instead of a filename.
+    pub root: PathBuf,
 }
 
 impl Context {
@@ -36,7 +46,20 @@ impl Context {
             config,
             repository,
             theme: *theme,
+            root: repo_root(&cli.config),
         })
+    }
+
+    /// Resolve a configured workflow name to an id/slug pair.
+    ///
+    /// Falls back to the configured string when the workflow is not on
+    /// disk — `gh` may still resolve it by display name, and failing here
+    /// would be worse than letting GitHub answer.
+    pub fn workflow(&self, configured: &str) -> WorkflowRef {
+        let available = workflow::discover(&self.root);
+        workflow::find(&available, configured)
+            .map(|w| w.as_ref())
+            .unwrap_or_else(|| WorkflowRef::unresolved(configured))
     }
 
     /// The branch the Release PR targets.
@@ -74,7 +97,7 @@ pub fn run_workflow(
 ) -> Result<Artifact> {
     let theme = &ctx.theme;
 
-    let resolved = resolve_workflow_id(workflow_name);
+    let resolved = ctx.workflow(workflow_name);
 
     eprintln!(
         "{}",
@@ -92,18 +115,20 @@ pub fn run_workflow(
     fetch_artifact(ctx, &finished)
 }
 
-/// Resolve a configured workflow name to the identifier `gh` wants.
+/// Infer the repository root from the config path.
 ///
-/// The filename is unambiguous where a display name is not, so prefer it
-/// when the workflow can be found on disk.
-fn resolve_workflow_id(name: &str) -> String {
-    let available = workflow::discover(std::path::Path::new("."));
-    workflow::find(&available, name)
-        .map(|w| w.id())
-        .unwrap_or_else(|| name.to_string())
+/// `.github/ship.yml` -> the directory containing `.github`.
+fn repo_root(config: &Path) -> PathBuf {
+    config
+        .parent()
+        .filter(|p| p.file_name().is_some_and(|n| n == ".github"))
+        .and_then(|p| p.parent())
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."))
 }
 
-fn find_run(ctx: &Context, workflow: &str, branch: &str, ship_id: &ShipId) -> Result<Run> {
+fn find_run(ctx: &Context, workflow: &WorkflowRef, branch: &str, ship_id: &ShipId) -> Result<Run> {
     let theme = &ctx.theme;
     let mut announced = false;
     let found = run::find(
@@ -130,9 +155,12 @@ fn find_run(ctx: &Context, workflow: &str, branch: &str, ship_id: &ShipId) -> Re
     Ok(found)
 }
 
-fn wait_for_run(ctx: &Context, workflow: &str, found: &Run) -> Result<Run> {
+fn wait_for_run(ctx: &Context, workflow: &WorkflowRef, found: &Run) -> Result<Run> {
     let theme = &ctx.theme;
-    eprintln!("{}", logger::action(theme, "waiting for", workflow));
+    eprintln!(
+        "{}",
+        logger::action(theme, "waiting for", &workflow.to_string())
+    );
 
     let mut last_status = String::new();
     let finished = run::wait(

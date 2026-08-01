@@ -142,7 +142,7 @@ fn check_workflow(
     theme: &Theme,
 ) {
     let Some(found) = workflow::find(available, name) else {
-        let names: Vec<&str> = available.iter().map(|w| w.name.as_str()).collect();
+        let names: Vec<String> = available.iter().map(|w| w.slug()).collect();
         let help = if available.is_empty() {
             Some(format!(
                 "no workflows found under {} — run `gh ship init` to generate one",
@@ -164,16 +164,20 @@ fn check_workflow(
 
     let violations = found.contract_violations();
     if violations.is_empty() {
-        eprintln!(
-            "{}",
-            logger::detail(theme, role, &format!("{} ({})", found.name, found.id()))
-        );
+        // Slug first: it is what the config refers to. The display name
+        // is shown only when it says something the slug does not.
+        let described = if found.has_distinct_name() {
+            format!("{} ({})", found.slug(), found.name)
+        } else {
+            found.slug()
+        };
+        eprintln!("{}", logger::detail(theme, role, &described));
         return;
     }
 
     for v in violations {
         issues.push(WorkflowIssue {
-            workflow: found.id(),
+            workflow: found.slug(),
             problem: v.message().to_string(),
             help: Some(v.help().to_string()),
         });

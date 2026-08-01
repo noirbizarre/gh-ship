@@ -45,6 +45,9 @@ impl GhStub {
         // whatever nonce gh-ship passed.
         env.insert("STUB_RUN_FOUND".into(), "1".into());
         env.insert("STUB_PR_BODY_JSON".into(), "\"\"".into());
+        // Labels that already exist in the fake repository.
+        env.insert("STUB_LABELS".into(), String::new());
+        env.insert("STUB_LABEL_CREATE_FAILS".into(), "0".into());
         env.insert(
             "STUB_ARTIFACT".into(),
             r#"{"schemaVersion":1,"changed":false}"#.into(),
@@ -136,6 +139,27 @@ impl GhStub {
         self
     }
 
+    /// Labels that already exist in the repository.
+    pub fn labels(mut self, names: &[&str]) -> Self {
+        self.env.insert("STUB_LABELS".into(), names.join(","));
+        self
+    }
+
+    /// Make `gh label create` fail, simulating a token without
+    /// `issues: write`.
+    pub fn label_create_fails(mut self) -> Self {
+        self.env
+            .insert("STUB_LABEL_CREATE_FAILS".into(), "1".into());
+        self
+    }
+
+    /// Make `gh pr create` reject an unknown label, which is what GitHub
+    /// actually does and what cost a real Release PR.
+    pub fn pr_create_rejects_unknown_labels(mut self) -> Self {
+        self.env.insert("STUB_PR_STRICT_LABELS".into(), "1".into());
+        self
+    }
+
     /// Simulate `gh` being unauthenticated.
     pub fn unauthenticated(mut self) -> Self {
         self.env.insert("STUB_UNAUTHENTICATED".into(), "1".into());
@@ -222,6 +246,23 @@ fi
 
 REPO="${STUB_REPO:-acme/widgets}"
 DEFAULT_BRANCH="${STUB_DEFAULT_BRANCH:-main}"
+LABEL_FILE="${STUB_LOG:-/tmp/stub}.labels"
+
+# Labels the repository "has": those seeded by the test, plus any created
+# by an earlier invocation in the same test.
+#
+# Note the trailing newline in the printf: without it `read` returns
+# non-zero on the final field and the loop body never runs.
+all_labels() {
+  printf '%s\n' "${STUB_LABELS:-}" | tr ',' '\n' | while read -r l; do
+    if [ -n "$l" ]; then
+      printf '%s\n' "$l"
+    fi
+  done
+  if [ -f "$LABEL_FILE" ]; then
+    cat "$LABEL_FILE"
+  fi
+}
 
 case "$1 ${2:-}" in
 
@@ -296,7 +337,47 @@ case "$1 ${2:-}" in
       "$(if [ -n "${STUB_MERGE_SHA:-}" ]; then printf '{"oid":"%s"}' "$STUB_MERGE_SHA"; else printf 'null'; fi)"
     ;;
 
+  "label list")
+    printf '['
+    first=1
+    for l in $(all_labels); do
+      [ "$first" = "1" ] || printf ','
+      printf '{"name":"%s"}' "$l"
+      first=0
+    done
+    printf ']\n'
+    ;;
+
+  "label create")
+    if [ "${STUB_LABEL_CREATE_FAILS:-0}" = "1" ]; then
+      echo "HTTP 403: Resource not accessible by integration" >&2
+      exit 1
+    fi
+    # Persist to a file: each stub invocation is its own process, so an
+    # exported variable would not survive to the next call.
+    printf '%s\n' "$3" >> "$LABEL_FILE"
+    ;;
+
   "pr create")
+    if [ "${STUB_PR_STRICT_LABELS:-0}" = "1" ]; then
+      # GitHub rejects the whole PR when a label is unknown.
+      prev=""
+      for arg in "$@"; do
+        if [ "$prev" = "--label" ]; then
+          found=0
+          for l in $(all_labels); do
+            if [ "$l" = "$arg" ]; then
+              found=1
+            fi
+          done
+          if [ "$found" = "0" ]; then
+            echo "could not add label: '$arg' not found" >&2
+            exit 1
+          fi
+        fi
+        prev="$arg"
+      done
+    fi
     printf 'https://github.com/%s/pull/7\n' "$REPO"
     ;;
 

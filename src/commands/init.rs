@@ -62,7 +62,7 @@ pub fn run(cli: &Cli, args: &InitArgs, theme: &Theme) -> Result<()> {
         theme,
     )?;
     let prepare_name = match prepare {
-        Choice::Existing(w) => w.name,
+        Choice::Existing(w) => w.slug(),
         Choice::Generate => {
             write_template(&root, "prepare-release.yml", PREPARE_TEMPLATE, theme)?;
             "prepare-release".to_string()
@@ -77,7 +77,7 @@ pub fn run(cli: &Cli, args: &InitArgs, theme: &Theme) -> Result<()> {
     // that only shows up at release time.
     let publish_candidates: Vec<Workflow> = conforming
         .iter()
-        .filter(|w| w.name != prepare_name)
+        .filter(|w| w.slug() != prepare_name)
         .cloned()
         .collect();
 
@@ -88,7 +88,7 @@ pub fn run(cli: &Cli, args: &InitArgs, theme: &Theme) -> Result<()> {
         theme,
     )?;
     let publish_name = match publish {
-        Choice::Existing(w) => Some(w.name),
+        Choice::Existing(w) => Some(w.slug()),
         Choice::Generate => {
             write_template(&root, "publish-release.yml", PUBLISH_TEMPLATE, theme)?;
             Some("publish-release".to_string())
@@ -202,8 +202,7 @@ fn choose_optional_workflow(
             );
     } else {
         for w in conforming {
-            select =
-                select.option(DemandOption::new(w.id()).label(&format!("{} ({})", w.name, w.id())));
+            select = select.option(DemandOption::new(w.slug()).label(&option_label(w)));
         }
         select = select
             .option(
@@ -220,13 +219,25 @@ fn choose_optional_workflow(
     Ok(resolve(picked, conforming))
 }
 
+/// Label a workflow for the prompt.
+///
+/// The slug leads because that is the identifier written to the config;
+/// the display name follows only when it adds information.
+fn option_label(w: &Workflow) -> String {
+    if w.has_distinct_name() {
+        format!("{}  —  {}", w.slug(), w.name)
+    } else {
+        w.slug()
+    }
+}
+
 fn resolve(picked: String, conforming: &[Workflow]) -> Choice {
     match picked.as_str() {
         "__generate__" => Choice::Generate,
         "__skip__" => Choice::Skip,
-        id => conforming
+        slug => conforming
             .iter()
-            .find(|w| w.id() == id)
+            .find(|w| w.slug() == slug)
             .cloned()
             .map(Choice::Existing)
             .unwrap_or(Choice::Skip),
@@ -260,7 +271,7 @@ fn report_nonconforming(workflows: &[Workflow], theme: &Theme) {
     );
     for w in &relevant {
         for v in w.contract_violations() {
-            eprintln!("{}", logger::detail(theme, &w.id(), v.message()));
+            eprintln!("{}", logger::detail(theme, &w.slug(), v.message()));
         }
     }
     eprintln!(
@@ -499,6 +510,28 @@ mod tests {
     fn publish_template_checks_out_the_tag_not_a_branch() {
         assert!(PUBLISH_TEMPLATE.contains("ref: ${{ inputs.tag }}"));
         assert!(PUBLISH_TEMPLATE.contains("--clobber"));
+    }
+
+    /// `init` must write the slug, never the display name: an emoji name
+    /// in `.github/ship.yml` would be unusable.
+    #[test]
+    fn option_label_leads_with_the_slug() {
+        let emoji = workflow::parse(
+            Path::new(".github/workflows/prepare-release.yml"),
+            "name: 🚢 Prepare Release\non: workflow_dispatch\n",
+        )
+        .unwrap();
+        let label = option_label(&emoji);
+        assert!(label.starts_with("prepare-release"), "{label}");
+        assert!(label.contains("🚢 Prepare Release"), "{label}");
+
+        // No decoration when the name adds nothing.
+        let plain = workflow::parse(
+            Path::new(".github/workflows/ci.yml"),
+            "name: ci\non: push\n",
+        )
+        .unwrap();
+        assert_eq!(option_label(&plain), "ci");
     }
 
     #[test]

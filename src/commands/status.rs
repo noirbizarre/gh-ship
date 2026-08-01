@@ -85,16 +85,20 @@ fn collect(ctx: &Context) -> Result<Status> {
     // The most recent prepare run on the release branch, whether or not
     // gh-ship started it.
     let last_run = if branch_exists {
-        run::list(&ctx.gh, ctx.config.prepare_workflow(), &release_branch)
-            .ok()
-            .and_then(|runs| runs.into_iter().next())
-            .map(|r| RunStatus {
-                id: r.id,
-                title: r.title,
-                status: r.status,
-                conclusion: r.conclusion,
-                url: r.url,
-            })
+        run::list(
+            &ctx.gh,
+            &ctx.workflow(ctx.config.prepare_workflow()),
+            &release_branch,
+        )
+        .ok()
+        .and_then(|runs| runs.into_iter().next())
+        .map(|r| RunStatus {
+            id: r.id,
+            title: r.title,
+            status: r.status,
+            conclusion: r.conclusion,
+            url: r.url,
+        })
     } else {
         None
     };

@@ -1,6 +1,6 @@
-name: publish-release
+name: 🚀 Publish Release
 
-run-name: publish-release (ship:${{ inputs.ship_id }})
+run-name: 🚀 Publish Release (ship:${{ inputs.ship_id }})
 
 on:
   workflow_dispatch:

@@ -33,6 +33,24 @@ on:
       dry_run: { required: false, type: boolean, default: false }
 ```
 
+### 0. gh-ship refers to it by filename slug
+
+`.github/ship.yml` names workflows by their **filename without the extension**:
+
+```
+.github/workflows/prepare-release.yaml   ->   prepare: prepare-release
+```
+
+Not by the `name:` in the workflow. That means the display name is yours to
+decorate:
+
+```yaml
+name: 🚢 Prepare Release
+```
+
+and renaming it never breaks a release. `gh ship validate` prints the slug, with
+the display name beside it when it differs.
+
 ### 1. It must be dispatchable
 
 gh-ship starts workflows through the GitHub API, which can only start workflows
@@ -154,6 +172,43 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ inputs.tag }}" dist/* --clobber
 ```
+
+## The `release` environment
+
+The generated workflows both run in an environment named `release`, which is where
+`SHIP_TOKEN` lives. GitHub creates the environment the first time a workflow
+references it.
+
+They declare it differently, on purpose:
+
+```yaml
+# prepare-release: secrets, but no deployment record.
+environment:
+  name: release
+  deployment: false
+```
+
+```yaml
+# publish-release: this one really is a deployment.
+environment:
+  name: release
+  url: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ inputs.tag }}
+```
+
+By default, referencing an environment creates a GitHub deployment object.
+`deployment: false` opts out while still granting the environment's secrets and
+still honouring wait timers and required reviewers — see
+[Control deployments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/control-deployments).
+
+Preparing a release is not a deployment, so it should not appear in your deployment
+history. Publishing one is, so it does — and its `url` links straight to the release.
+
+!!! warning "Custom deployment protection rules"
+
+    `deployment: false` is incompatible with custom deployment protection rules
+    (the GitHub App kind), which need a deployment object to function. A job
+    combining the two fails immediately. Wait timers and required reviewers are
+    unaffected.
 
 ## Tokens
 

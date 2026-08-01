@@ -57,6 +57,11 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: &Theme) -> Result<()> {
     // prepared.
     let body = render::embed_artifact(&rendered.body, &artifact);
 
+    // Labels must exist before the PR references them: `gh pr create`
+    // fails outright on an unknown label, which would lose the PR over
+    // pure decoration.
+    let labels = ensure_labels(&ctx, &rendered.labels);
+
     let existing = repo::find_pull_request(&ctx.gh, &release_branch, &base_branch)?;
 
     match existing.filter(|pr| pr.is_open()) {
@@ -65,13 +70,7 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: &Theme) -> Result<()> {
                 "{}",
                 logger::action(theme, "updating", &format!("PR #{}", pr.number))
             );
-            repo::update_pull_request(
-                &ctx.gh,
-                pr.number,
-                &rendered.title,
-                &body,
-                &rendered.labels,
-            )?;
+            repo::update_pull_request(&ctx.gh, pr.number, &rendered.title, &body, &labels)?;
             eprintln!("{}", logger::ok(theme, "Release PR updated"));
             eprintln!("{}", logger::detail_url(theme, "pr", &pr.url));
         }
@@ -83,7 +82,7 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: &Theme) -> Result<()> {
                 &base_branch,
                 &rendered.title,
                 &body,
-                &rendered.labels,
+                &labels,
             )?;
             eprintln!("{}", logger::ok(theme, "Release PR opened"));
             eprintln!("{}", logger::detail_url(theme, "pr", &url));
@@ -106,6 +105,38 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: &Theme) -> Result<()> {
     );
 
     Ok(())
+}
+
+/// Resolve configured labels to ones that actually exist, creating what
+/// is missing and warning about anything that could not be created.
+fn ensure_labels(ctx: &Context, wanted: &[String]) -> Vec<String> {
+    let theme = &ctx.theme;
+    let (usable, dropped) = repo::ensure_labels(&ctx.gh, wanted);
+
+    for label in &dropped {
+        eprintln!(
+            "{}",
+            logger::warn(
+                theme,
+                &format!(
+                    "label `{label}` does not exist and could not be created — \
+                          opening the PR without it"
+                )
+            )
+        );
+    }
+    if !dropped.is_empty() {
+        eprintln!(
+            "{}",
+            logger::skip(
+                theme,
+                "creating labels needs `issues: write`; create them by hand or drop \
+                 them from `pull_request.labels`"
+            )
+        );
+    }
+
+    usable
 }
 
 /// Create the release branch if it does not exist yet.
@@ -134,10 +165,13 @@ fn ensure_release_branch(ctx: &Context, release: &str, base: &str) -> Result<()>
 /// `gh ship prepare` afterwards completes the job.
 fn dispatch_only(ctx: &Context, branch: &str) -> Result<()> {
     let theme = &ctx.theme;
-    let workflow = ctx.config.prepare_workflow();
+    let workflow = ctx.workflow(ctx.config.prepare_workflow());
 
-    eprintln!("{}", logger::action(theme, "dispatching", workflow));
-    let ship_id = gh_ship::gh::run::dispatch(&ctx.gh, workflow, branch, &[])?;
+    eprintln!(
+        "{}",
+        logger::action(theme, "dispatching", &workflow.to_string())
+    );
+    let ship_id = gh_ship::gh::run::dispatch(&ctx.gh, &workflow, branch, &[])?;
 
     eprintln!("{}", logger::ok(theme, "workflow dispatched"));
     eprintln!("{}", logger::detail(theme, "ship id", ship_id.as_str()));
