@@ -82,12 +82,46 @@ an HTML comment:
 Invisible when rendered, durable, and it outlives artifact retention. It also means
 `gh ship status` is a pure query with no cache to go stale.
 
+### Who creates the release
+
+gh-ship tags the merge commit and creates the GitHub Release. The publish
+workflow only builds and attaches assets.
+
+The conventional choice is the other one — most release tooling tags and releases
+from CI — so the split deserves a reason.
+
+**Release notes are generated before the merge and must survive it.** The prepare
+workflow runs your changelog tool against the *release branch*; the publish
+workflow checks out the *tag*, which is post-merge history. If the publish
+workflow regenerated the notes, what shipped could legitimately differ from what
+was reviewed and approved in the Release PR. The artifact exists so that what
+ships is what was read.
+
+That also explains why the artifact carries `release.name`, `release.prerelease`
+and `release.make_latest`: they exist so gh-ship can create the release. Moving
+release creation into the workflow would strand them in a published v1 schema,
+where they cannot be removed without a v2.
+
+**The honest cost.** `gh release create <tag> <assets…>` already performs
+draft → upload → publish atomically, so gh-ship's create-draft → dispatch →
+undraft sequence reimplements it. gh-ship could only use the native behaviour by
+holding the assets itself — downloading every binary from the workflow and
+re-uploading it — which would push release payloads through whatever machine ran
+`gh ship release`. The ordering below is the price of notes fidelity, not an
+accident.
+
 ### Draft-first releases
 
-Create the release as a draft → dispatch the publish workflow → undraft.
+Tag the merge commit → create the release as a draft → dispatch the publish
+workflow → undraft.
 
-A draft is invisible to watchers, but its tag exists and `gh release upload` works
-against it. This is the only ordering where a release becomes visible complete.
+A draft is invisible to watchers, yet `gh release upload` still works against it.
+That is the only ordering where a release becomes visible complete, rather than
+notifying everyone about an empty release whose assets arrive minutes later.
+
+The tag is created explicitly, first. A draft release does **not** create its git
+ref — the tag appears only when the release is published — and the publish
+workflow is dispatched on that tag and checks it out.
 
 ### Diagnostics
 

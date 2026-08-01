@@ -85,14 +85,37 @@ reconciliation: both runs converge on updating the same PR, and the last artifac
 wins. Because each dispatch carries its own nonce, neither run can accidentally
 adopt the other's workflow run.
 
+## Why does gh-ship create the tag and the release, rather than my workflow?
+
+Most release tooling tags and releases from CI, so this is a fair thing to
+question.
+
+Because the release notes are generated **before** the merge and have to survive
+it. Your prepare workflow runs your changelog tool against the release branch;
+the publish workflow checks out the tag, which is post-merge history. If the
+publish workflow regenerated the notes, what shipped could legitimately differ
+from what you reviewed and approved in the Release PR.
+
+The artifact carries the notes so that what ships is what was read. That is also
+why it carries `release.name`, `release.prerelease` and `release.make_latest`:
+they exist for gh-ship to create the release with.
+
+It is not free. `gh release create <tag> <assets…>` already does
+draft → upload → publish in one step, and gh-ship reimplements that sequence
+because it does not hold the assets. See
+[Who creates the release](architecture.md#who-creates-the-release).
+
 ## Why draft the release first?
 
 Publishing first notifies every watcher of a release with no assets attached.
 Anyone who reacts quickly downloads nothing.
 
-A draft is invisible to watchers but its tag exists and `gh release upload` works
-against it, so assets can be attached before anyone is told. Then gh-ship undrafts
-it.
+A draft is invisible to watchers, yet `gh release upload` still works against it,
+so assets can be attached before anyone is told. Then gh-ship undrafts it.
+
+The tag is created explicitly, before the draft. A draft release does **not**
+create its git ref — the tag appears only when the release is published — and the
+publish workflow is dispatched on that tag and checks it out.
 
 ## Why tag the merge commit rather than the branch tip?
 

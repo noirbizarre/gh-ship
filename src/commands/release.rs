@@ -1,5 +1,28 @@
 //! `gh ship release` — tag, publish, and release.
 //!
+//! # Why gh-ship does this, and not the publish workflow
+//!
+//! Tagging and creating the release from CI is the conventional split, so doing
+//! it here needs justifying — and it is the first thing anyone refactoring this
+//! module will want to undo.
+//!
+//! **The release notes are generated before the merge and must survive it.** The
+//! prepare workflow runs the changelog tool against the *release branch*; the
+//! publish workflow checks out the *tag*, which is post-merge history. Were the
+//! publish workflow to regenerate them, what shipped could legitimately differ
+//! from what was reviewed in the Release PR. The artifact carries them so that
+//! what ships is what was read.
+//!
+//! It is also why the artifact has `release.name`, `release.prerelease` and
+//! `release.make_latest` at all: they exist for this code. Moving release
+//! creation into the workflow would strand them in a published v1 schema.
+//!
+//! The cost is the ordering below. `gh release create <tag> <assets…>` already
+//! does draft → upload → publish atomically; this module reimplements that
+//! because it does not hold the assets. Buying the native behaviour would mean
+//! downloading every binary and re-uploading it, pushing release payloads
+//! through whichever machine runs the command.
+//!
 //! # Why draft-first
 //!
 //! The naive ordering — create the release, then build and upload assets
