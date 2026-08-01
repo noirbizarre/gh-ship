@@ -104,11 +104,10 @@ jobs:
           set -euo pipefail
           git cliff --bump -o CHANGELOG.md
 
-          # git-cliff ends the file with several newlines; prek's
-          # end-of-file-fixer rewrites it to one and then fails, turning the
-          # Release PR's own lint red. Normalise here rather than fighting
-          # the template: `$(cat)` drops every trailing newline and printf
-          # restores exactly one.
+          # cliff.toml already normalises the tail to a single newline, so this
+          # is a no-op today. Kept as a safety net: if that ever regresses,
+          # prek's end-of-file-fixer rewrites CHANGELOG.md and turns the
+          # Release PR's own lint red, which is a confusing way to find out.
           printf '%s\n' "$(cat CHANGELOG.md)" > CHANGELOG.md
 
           # Release notes are scratch input for `jq --rawfile`, not a
