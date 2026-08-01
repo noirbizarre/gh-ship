@@ -104,12 +104,6 @@ jobs:
           set -euo pipefail
           git cliff --bump -o CHANGELOG.md
 
-          # cliff.toml already normalises the tail to a single newline, so this
-          # is a no-op today. Kept as a safety net: if that ever regresses,
-          # prek's end-of-file-fixer rewrites CHANGELOG.md and turns the
-          # Release PR's own lint red, which is a confusing way to find out.
-          printf '%s\n' "$(cat CHANGELOG.md)" > CHANGELOG.md
-
           # Release notes are scratch input for `jq --rawfile`, not a
           # source file. Keep them out of the worktree so `git add -A`
           # cannot commit them.
