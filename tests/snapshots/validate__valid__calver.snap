@@ -1,0 +1,7 @@
+---
+source: tests/validate.rs
+expression: out.diagnostics()
+---
+✔ calver.json is a valid release artifact
+  version: 2026.08.1
+  tag: 2026.08.1

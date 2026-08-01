@@ -1,0 +1,125 @@
+name: prepare-release
+
+# gh-ship finds the run it started by looking for its nonce here.
+# `gh workflow run` returns no run id, so this is not decorative:
+# remove it and gh-ship cannot correlate the dispatch to a run.
+run-name: prepare-release (ship:${{ inputs.ship_id }})
+
+on:
+  # Required. gh-ship starts this workflow through the API, which can
+  # only start workflows declaring `workflow_dispatch`.
+  workflow_dispatch:
+    inputs:
+      ship_id:
+        description: gh-ship correlation nonce
+        required: true
+        type: string
+      dry_run:
+        description: Produce the artifact but do not commit or push
+        required: false
+        type: boolean
+        default: false
+
+  # Optional, but recommended: declaring `workflow_call` as well keeps
+  # this workflow reusable from other workflows without giving up the
+  # ability for gh-ship to dispatch it.
+  workflow_call:
+    inputs:
+      ship_id:
+        required: true
+        type: string
+      dry_run:
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Full history: changelog generators need the tags.
+          fetch-depth: 0
+          # gh-ship dispatches this workflow on the release branch, so
+          # the default checkout is already the right ref.
+          #
+          # The default GITHUB_TOKEN cannot trigger other workflows.
+          # If the Release PR must run CI, use a PAT or GitHub App token
+          # here instead. See:
+          # https://noirbizarre.github.io/gh-ship/workflows/#tokens
+          token: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
+
+      # ----------------------------------------------------------------
+      # Everything below is YOURS. gh-ship never bumps versions, writes
+      # changelogs, or runs release logic. Replace these steps with
+      # whatever your project already uses — cargo-release, Commitizen,
+      # git-cliff, semantic-release, Changesets, a shell script.
+      # ----------------------------------------------------------------
+
+      - name: Compute the next version
+        id: version
+        run: |
+          # Replace with your own versioning tool.
+          echo "version=1.0.0" >> "$GITHUB_OUTPUT"
+          echo "changed=true"  >> "$GITHUB_OUTPUT"
+
+      - name: Generate release notes
+        if: steps.version.outputs.changed == 'true'
+        run: |
+          # Replace with your own changelog tool.
+          printf '## What'"'"'s Changed\n\n* ...\n' > NOTES.md
+
+      - name: Apply the version and commit
+        if: steps.version.outputs.changed == 'true' && !inputs.dry_run
+        run: |
+          # Replace with your own file updates.
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "chore(release): ${{ steps.version.outputs.version }}"
+          git push origin HEAD
+
+      # ----------------------------------------------------------------
+      # The protocol. gh-ship reads exactly this artifact and nothing
+      # else. See:
+      # https://noirbizarre.github.io/gh-ship/specifications/release-artifact/
+      # ----------------------------------------------------------------
+
+      - name: Write the release artifact
+        run: |
+          if [ "${{ steps.version.outputs.changed }}" != "true" ]; then
+            jq -n '{schemaVersion: 1, changed: false}' > ship.release.json
+          else
+            jq -n \
+              --arg version "${{ steps.version.outputs.version }}" \
+              --arg tag     "v${{ steps.version.outputs.version }}" \
+              --rawfile notes NOTES.md \
+              '{
+                "$schema": "https://noirbizarre.github.io/gh-ship/schema/release/v1.json",
+                schemaVersion: 1,
+                changed: true,
+                version: $version,
+                tag: $tag,
+                release: { notes: $notes }
+              }' > ship.release.json
+          fi
+
+      # Validating here turns a protocol mistake into a red workflow with
+      # a precise error, instead of a confusing failure in gh-ship later.
+      # This step needs no network and no repository.
+      - name: Validate the release artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh extension install noirbizarre/gh-ship
+          gh ship validate ship.release.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ship-release
+          path: ship.release.json
+          if-no-files-found: error

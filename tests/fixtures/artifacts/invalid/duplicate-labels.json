@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "changed": false,
+  "pull_request": {
+    "labels": ["release", "release"]
+  }
+}

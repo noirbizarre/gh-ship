@@ -1,0 +1,124 @@
+name: prepare-release
+
+# gh-ship finds the run it dispatched by looking for this nonce.
+# See https://noirbizarre.github.io/gh-ship/workflows/
+run-name: prepare-release (ship:${{ inputs.ship_id }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      ship_id:
+        description: gh-ship correlation nonce
+        required: true
+        type: string
+      dry_run:
+        description: Produce the artifact but do not commit or push
+        required: false
+        type: boolean
+        default: false
+
+  workflow_call:
+    inputs:
+      ship_id:
+        required: true
+        type: string
+      dry_run:
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # git-cliff needs the full history and all tags.
+          fetch-depth: 0
+          # The default GITHUB_TOKEN cannot trigger workflows, so a PR it
+          # authors would show no CI. SHIP_TOKEN is preferred when set.
+          token: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@git-cliff
+
+      # --- versioning: ours, not gh-ship's ---------------------------------
+
+      - name: Compute the next version
+        id: version
+        run: |
+          current="$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)"
+          next="$(git cliff --bumped-version | sed 's/^v//')"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "version=$next"    >> "$GITHUB_OUTPUT"
+          echo "tag=v$next"       >> "$GITHUB_OUTPUT"
+          if [ "$current" = "$next" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true"  >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate the changelog
+        if: steps.version.outputs.changed == 'true'
+        env:
+          # git-cliff reads GITHUB_TOKEN, not GH_TOKEN. On a private repo
+          # a missing scope surfaces as 404, not 401, which is very
+          # confusing — so set it explicitly.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git cliff --bump -o CHANGELOG.md
+          git cliff --unreleased --bump --strip header -o NOTES.md
+
+      - name: Apply the version
+        if: steps.version.outputs.changed == 'true'
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          sed -i "0,/^version = \".*\"/s//version = \"$version\"/" Cargo.toml
+          cargo update --workspace --offline || cargo update --workspace
+
+      - name: Commit and push
+        if: steps.version.outputs.changed == 'true' && !inputs.dry_run
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || \
+            git commit -m "chore(release): ${{ steps.version.outputs.version }}"
+          git push origin HEAD
+
+      # --- the protocol ------------------------------------------------------
+
+      - name: Write the release artifact
+        run: |
+          if [ "${{ steps.version.outputs.changed }}" != "true" ]; then
+            jq -n '{schemaVersion: 1, changed: false}' > ship.release.json
+          else
+            jq -n \
+              --arg version "${{ steps.version.outputs.version }}" \
+              --arg tag     "${{ steps.version.outputs.tag }}" \
+              --rawfile notes NOTES.md \
+              '{
+                "$schema": "https://noirbizarre.github.io/gh-ship/schema/release/v1.json",
+                schemaVersion: 1,
+                changed: true,
+                version: $version,
+                tag: $tag,
+                release: { name: ("Release " + $tag), notes: $notes }
+              }' > ship.release.json
+          fi
+
+      # Dogfooding: gh-ship validates its own release artifact using the
+      # build from this very commit, so a protocol regression cannot ship.
+      - name: Validate the release artifact
+        run: |
+          cargo build --release
+          ./target/release/gh-ship validate ship.release.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ship-release
+          path: ship.release.json
+          if-no-files-found: error

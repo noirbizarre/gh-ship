@@ -1,0 +1,16 @@
+---
+source: tests/validate.rs
+expression: out.diagnostics()
+---
+ship::artifact::version
+
+  × unsupported artifact schema version: 2
+   ╭─[future-schema-version.json:2:20]
+ 1 │ {
+ 2 │   "schemaVersion": 2,
+   ·                    ┬
+   ·                    ╰── this version is not supported
+ 3 │   "changed": false
+   ╰────
+  help: this artifact speaks protocol v2, but this gh-ship only understands
+        v1. Upgrade gh-ship: `gh extension upgrade ship`

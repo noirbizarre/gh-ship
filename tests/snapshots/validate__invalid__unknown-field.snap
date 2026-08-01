@@ -1,0 +1,22 @@
+---
+source: tests/validate.rs
+expression: out.diagnostics()
+---
+ship::artifact::invalid
+
+  × `unknown-field.json` is not a valid release artifact (1 problem)
+  help: see https://noirbizarre.github.io/gh-ship/specifications/release-
+        artifact/
+
+Error: ship::artifact::invalid
+
+  × the artifact has unknown field `wibble`
+   ╭─[unknown-field.json:4:3]
+ 3 │   "changed": false,
+ 4 │   "wibble": true
+   ·   ────┬───
+   ·       ╰── not allowed here
+ 5 │ }
+   ╰────
+  help: unknown fields are rejected so typos cannot silently do nothing;
+        prefix a field with `x-` to carry your own metadata

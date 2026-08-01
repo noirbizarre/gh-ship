@@ -1,0 +1,8 @@
+---
+source: tests/setup.rs
+expression: stderr
+---
+✔ .github/ship.yml is valid
+  release branch: release/next
+  prepare: prepare-release (prepare-release.yml)
+✔ workflows satisfy the gh-ship contract

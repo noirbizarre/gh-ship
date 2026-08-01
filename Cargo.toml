@@ -1,0 +1,49 @@
+[package]
+name = "gh-ship"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "The GitHub Release Orchestrator — a gh CLI extension that orchestrates Release PRs and GitHub Actions release workflows"
+license = "MIT"
+repository = "https://github.com/noirbizarre/gh-ship"
+homepage = "https://noirbizarre.github.io/gh-ship"
+documentation = "https://noirbizarre.github.io/gh-ship"
+keywords = ["github", "release", "gh-extension", "cli", "changelog"]
+categories = ["command-line-utilities", "development-tools"]
+readme = "README.md"
+
+[[bin]]
+name = "gh-ship"
+path = "src/main.rs"
+
+[lib]
+name = "gh_ship"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1"
+boon = "0.6"
+clap = { version = "4", features = ["derive", "env"] }
+demand = "2"
+miette = { version = "7", features = ["fancy"] }
+minijinja = { version = "2", features = ["loader"] }
+owo-colors = "4"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+serde_norway = "0.9"
+strsim = "0.11"
+tempfile = "3"
+thiserror = "2"
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+assert_cmd = "2"
+insta = { version = "1", features = ["filters", "json"] }
+predicates = "3"
+serde_json = "1"
+tempfile = "3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

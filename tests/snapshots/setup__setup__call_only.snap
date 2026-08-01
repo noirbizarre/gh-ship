@@ -1,0 +1,35 @@
+---
+source: tests/setup.rs
+expression: stderr
+---
+✔ .github/ship.yml is valid
+  release branch: release/next
+ship::validate::setup
+
+  × the gh-ship setup has 3 problems
+  help: see https://noirbizarre.github.io/gh-ship/workflows/ for the workflow
+        contract
+
+Error: ship::validate::workflow
+
+  × workflow `prepare-release.yml` does not declare `on: workflow_dispatch`
+  help: gh-ship starts workflows through the API, which can only start
+        workflows declaring `on: workflow_dispatch`. A `workflow_call`-only
+        workflow — what is usually called a reusable workflow — cannot be
+        started this way. Declare both triggers to keep it reusable *and*
+        dispatchable.
+
+Error: ship::validate::workflow
+
+  × workflow `prepare-release.yml` does not declare a `ship_id` input
+  help: add a required `ship_id` string input under
+        `workflow_dispatch.inputs`; gh-ship passes a nonce there to find the
+        run it started
+
+Error: ship::validate::workflow
+
+  × workflow `prepare-release.yml` does not stamp `ship_id` into its `run-
+  │ name`
+  help: add `run-name: <name> (ship:${{ inputs.ship_id }})`. `gh workflow run`
+        returns no run id, so the nonce in the run name is how gh-ship locates
+        your run instead of guessing from timestamps.

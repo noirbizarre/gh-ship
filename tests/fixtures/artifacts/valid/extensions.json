@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "changed": true,
+  "version": "1.0.0",
+  "tag": "v1.0.0",
+  "x-generator": "my-release-tool@2.1.0",
+  "release": { "notes": "hi", "x-commit-count": 42 },
+  "pull_request": { "x-reviewers": ["alice"] }
+}

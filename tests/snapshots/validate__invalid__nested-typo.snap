@@ -1,0 +1,21 @@
+---
+source: tests/validate.rs
+expression: out.diagnostics()
+---
+ship::artifact::invalid
+
+  × `nested-typo.json` is not a valid release artifact (1 problem)
+  help: see https://noirbizarre.github.io/gh-ship/specifications/release-
+        artifact/
+
+Error: ship::artifact::invalid
+
+  × `/release` has unknown field `note`
+   ╭─[nested-typo.json:5:5]
+ 4 │   "release": {
+ 5 │     "note": "typo"
+   ·     ───┬──
+   ·        ╰── not allowed here
+ 6 │   }
+   ╰────
+  help: did you mean `notes`?

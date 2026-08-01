@@ -1,0 +1,7 @@
+[profile.ci]
+# Do not cancel the run on the first failure: we want the full picture
+# of what broke, especially across the OS matrix.
+fail-fast = false
+
+[profile.ci.junit]
+path = "junit.xml"

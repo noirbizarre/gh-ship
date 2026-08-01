@@ -1,0 +1,343 @@
+//! A hermetic `gh` stub.
+//!
+//! gh-ship funnels every GitHub interaction through the `gh` binary, so
+//! replacing `gh` on `PATH` with a script gives complete control over
+//! what GitHub "says" — with no network, no credentials, and no fixture
+//! recording to keep in sync.
+//!
+//! The stub is driven entirely by environment variables so a test can
+//! describe a scenario declaratively:
+//!
+//! ```ignore
+//! GhStub::new()
+//!     .run_status("completed", "success")
+//!     .artifact(r#"{"schemaVersion":1,"changed":false}"#)
+//!     .install(&dir);
+//! ```
+
+#![allow(dead_code)]
+
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+
+/// A configurable fake `gh`.
+pub struct GhStub {
+    env: BTreeMap<String, String>,
+}
+
+impl Default for GhStub {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl GhStub {
+    pub fn new() -> Self {
+        let mut env = BTreeMap::new();
+        env.insert("STUB_DEFAULT_BRANCH".into(), "main".into());
+        env.insert("STUB_REPO".into(), "acme/widgets".into());
+        env.insert("STUB_RUN_STATUS".into(), "completed".into());
+        env.insert("STUB_RUN_CONCLUSION".into(), "success".into());
+        env.insert("STUB_BRANCH_EXISTS".into(), "1".into());
+        env.insert("STUB_PR_EXISTS".into(), "0".into());
+        env.insert("STUB_RELEASE_EXISTS".into(), "0".into());
+        // By default the dispatched run is found immediately, carrying
+        // whatever nonce gh-ship passed.
+        env.insert("STUB_RUN_FOUND".into(), "1".into());
+        env.insert("STUB_PR_BODY_JSON".into(), "\"\"".into());
+        env.insert(
+            "STUB_ARTIFACT".into(),
+            r#"{"schemaVersion":1,"changed":false}"#.into(),
+        );
+        Self { env }
+    }
+
+    /// The run's terminal state.
+    pub fn run_status(mut self, status: &str, conclusion: &str) -> Self {
+        self.env.insert("STUB_RUN_STATUS".into(), status.into());
+        self.env
+            .insert("STUB_RUN_CONCLUSION".into(), conclusion.into());
+        self
+    }
+
+    /// Make `gh run list` never return a matching run, simulating a
+    /// workflow that does not stamp the nonce into its `run-name`.
+    pub fn run_never_appears(mut self) -> Self {
+        self.env.insert("STUB_RUN_FOUND".into(), "0".into());
+        self
+    }
+
+    /// The contents of `ship.release.json` the run "uploaded".
+    pub fn artifact(mut self, json: &str) -> Self {
+        self.env.insert("STUB_ARTIFACT".into(), json.into());
+        self
+    }
+
+    /// Make artifact download fail, simulating a workflow that forgot to
+    /// upload one.
+    pub fn no_artifact(mut self) -> Self {
+        self.env.insert("STUB_ARTIFACT".into(), String::new());
+        self
+    }
+
+    /// Upload an artifact under the wrong filename.
+    pub fn artifact_wrong_filename(mut self, name: &str) -> Self {
+        self.env.insert("STUB_ARTIFACT_NAME".into(), name.into());
+        self
+    }
+
+    pub fn repo(mut self, slug: &str) -> Self {
+        self.env.insert("STUB_REPO".into(), slug.into());
+        self
+    }
+
+    pub fn default_branch(mut self, branch: &str) -> Self {
+        self.env.insert("STUB_DEFAULT_BRANCH".into(), branch.into());
+        self
+    }
+
+    pub fn branch_exists(mut self, yes: bool) -> Self {
+        self.env.insert("STUB_BRANCH_EXISTS".into(), bool_env(yes));
+        self
+    }
+
+    pub fn pr_exists(mut self, yes: bool) -> Self {
+        self.env.insert("STUB_PR_EXISTS".into(), bool_env(yes));
+        self
+    }
+
+    pub fn pr_state(mut self, state: &str) -> Self {
+        self.env.insert("STUB_PR_EXISTS".into(), "1".into());
+        self.env.insert("STUB_PR_STATE".into(), state.into());
+        self
+    }
+
+    /// Set the PR body.
+    ///
+    /// JSON-encoded here rather than in the shell stub: escaping
+    /// newlines and quotes correctly in POSIX `sh` is a losing battle,
+    /// and PR bodies always contain both.
+    pub fn pr_body(mut self, body: &str) -> Self {
+        self.env.insert("STUB_PR_EXISTS".into(), "1".into());
+        self.env.insert(
+            "STUB_PR_BODY_JSON".into(),
+            serde_json::to_string(body).expect("string encodes"),
+        );
+        self
+    }
+
+    pub fn merge_commit(mut self, sha: &str) -> Self {
+        self.env.insert("STUB_MERGE_SHA".into(), sha.into());
+        self
+    }
+
+    pub fn release_exists(mut self, yes: bool) -> Self {
+        self.env.insert("STUB_RELEASE_EXISTS".into(), bool_env(yes));
+        self
+    }
+
+    /// Simulate `gh` being unauthenticated.
+    pub fn unauthenticated(mut self) -> Self {
+        self.env.insert("STUB_UNAUTHENTICATED".into(), "1".into());
+        self
+    }
+
+    /// Write the stub into `dir/bin/gh` and return that bin directory,
+    /// plus the environment the stub needs.
+    pub fn install(self, dir: &Path) -> Installed {
+        let bin = dir.join("stubbin");
+        std::fs::create_dir_all(&bin).expect("create stub bin dir");
+
+        let path = bin.join("gh");
+        std::fs::write(&path, SCRIPT).expect("write gh stub");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&path).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&path, perms).unwrap();
+        }
+
+        // The stub records every invocation here so tests can assert on
+        // what gh-ship actually asked GitHub to do.
+        let log = dir.join("gh-calls.log");
+        let mut env = self.env;
+        env.insert("STUB_LOG".into(), log.to_string_lossy().into_owned());
+
+        Installed { bin, env, log }
+    }
+}
+
+/// A stub written to disk.
+pub struct Installed {
+    pub bin: PathBuf,
+    pub env: BTreeMap<String, String>,
+    pub log: PathBuf,
+}
+
+impl Installed {
+    /// Every `gh` invocation made, one per line.
+    pub fn calls(&self) -> Vec<String> {
+        std::fs::read_to_string(&self.log)
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// Whether any invocation contains all the given fragments.
+    pub fn called_with(&self, fragments: &[&str]) -> bool {
+        self.calls()
+            .iter()
+            .any(|c| fragments.iter().all(|f| c.contains(f)))
+    }
+}
+
+fn bool_env(yes: bool) -> String {
+    if yes { "1".into() } else { "0".into() }
+}
+
+/// The stub itself.
+///
+/// POSIX `sh` so it runs anywhere the test suite does. It answers only
+/// the subcommands gh-ship actually issues; anything else exits
+/// non-zero, which makes an unexpected call a loud test failure rather
+/// than a silent success.
+const SCRIPT: &str = r#"#!/bin/sh
+set -eu
+
+# Record the invocation for assertions. Newlines are folded to spaces so
+# each invocation stays a single log line: PR bodies are multi-line, and
+# a call that spanned lines could not be matched as one.
+if [ -n "${STUB_LOG:-}" ]; then
+  printf '%s' "$*" | tr '\n' ' ' >> "$STUB_LOG"
+  printf '\n' >> "$STUB_LOG"
+fi
+
+if [ "${STUB_UNAUTHENTICATED:-0}" = "1" ]; then
+  echo "gh: To get started with GitHub CLI, please run: gh auth login" >&2
+  exit 4
+fi
+
+REPO="${STUB_REPO:-acme/widgets}"
+DEFAULT_BRANCH="${STUB_DEFAULT_BRANCH:-main}"
+
+case "$1 ${2:-}" in
+
+  "repo view")
+    printf '{"nameWithOwner":"%s","defaultBranchRef":{"name":"%s"},"url":"https://github.com/%s"}\n' \
+      "$REPO" "$DEFAULT_BRANCH" "$REPO"
+    ;;
+
+  "workflow run")
+    # Dispatch returns nothing, exactly like the real thing. Capture the
+    # nonce so `run list` can echo it back in the run title.
+    for arg in "$@"; do
+      case "$arg" in
+        ship_id=*) echo "${arg#ship_id=}" > "${STUB_LOG:-/tmp/stub}.shipid" ;;
+      esac
+    done
+    ;;
+
+  "workflow list")
+    printf '[]\n'
+    ;;
+
+  "run list")
+    if [ "${STUB_RUN_FOUND:-1}" = "0" ]; then
+      printf '[]\n'
+      exit 0
+    fi
+    SHIP_ID="$(cat "${STUB_LOG:-/tmp/stub}.shipid" 2>/dev/null || echo unknown)"
+    printf '[{"databaseId":42,"displayTitle":"prepare-release (ship:%s)","status":"%s","conclusion":"%s","url":"https://github.com/%s/actions/runs/42","headBranch":"release/next"}]\n' \
+      "$SHIP_ID" "${STUB_RUN_STATUS:-completed}" "${STUB_RUN_CONCLUSION:-success}" "$REPO"
+    ;;
+
+  "run view")
+    SHIP_ID="$(cat "${STUB_LOG:-/tmp/stub}.shipid" 2>/dev/null || echo unknown)"
+    printf '{"databaseId":42,"displayTitle":"prepare-release (ship:%s)","status":"%s","conclusion":"%s","url":"https://github.com/%s/actions/runs/42","headBranch":"release/next"}\n' \
+      "$SHIP_ID" "${STUB_RUN_STATUS:-completed}" "${STUB_RUN_CONCLUSION:-success}" "$REPO"
+    ;;
+
+  "run download")
+    if [ -z "${STUB_ARTIFACT:-}" ]; then
+      echo "no valid artifacts found to download" >&2
+      exit 1
+    fi
+    DIR=""
+    prev=""
+    for arg in "$@"; do
+      if [ "$prev" = "--dir" ]; then DIR="$arg"; fi
+      prev="$arg"
+    done
+    [ -n "$DIR" ] || DIR="."
+    mkdir -p "$DIR"
+    printf '%s\n' "$STUB_ARTIFACT" > "$DIR/${STUB_ARTIFACT_NAME:-ship.release.json}"
+    ;;
+
+  "pr list")
+    if [ "${STUB_PR_EXISTS:-0}" = "0" ]; then
+      printf '[]\n'
+      exit 0
+    fi
+    printf '[{"number":7,"url":"https://github.com/%s/pull/7","title":"Release 1.0.0","body":%s,"state":"%s","isDraft":false,"mergeCommit":%s}]\n' \
+      "$REPO" \
+      "${STUB_PR_BODY_JSON:-\"\"}" \
+      "${STUB_PR_STATE:-OPEN}" \
+      "$(if [ -n "${STUB_MERGE_SHA:-}" ]; then printf '{"oid":"%s"}' "$STUB_MERGE_SHA"; else printf 'null'; fi)"
+    ;;
+
+  "pr view")
+    printf '{"number":7,"url":"https://github.com/%s/pull/7","title":"Release 1.0.0","body":%s,"state":"%s","isDraft":false,"mergeCommit":%s}\n' \
+      "$REPO" \
+      "${STUB_PR_BODY_JSON:-\"\"}" \
+      "${STUB_PR_STATE:-OPEN}" \
+      "$(if [ -n "${STUB_MERGE_SHA:-}" ]; then printf '{"oid":"%s"}' "$STUB_MERGE_SHA"; else printf 'null'; fi)"
+    ;;
+
+  "pr create")
+    printf 'https://github.com/%s/pull/7\n' "$REPO"
+    ;;
+
+  "pr edit"|"pr merge")
+    ;;
+
+  "release view")
+    if [ "${STUB_RELEASE_EXISTS:-0}" = "0" ]; then
+      echo "release not found" >&2
+      exit 1
+    fi
+    printf '{"tagName":"v1.0.0"}\n'
+    ;;
+
+  "release create")
+    printf 'https://github.com/%s/releases/tag/v1.0.0\n' "$REPO"
+    ;;
+
+  "release edit"|"release upload")
+    ;;
+
+  "api "*|"api")
+    TARGET="${2:-}"
+    case "$TARGET" in
+      *"/branches/"*)
+        [ "${STUB_BRANCH_EXISTS:-1}" = "1" ] || { echo "HTTP 404: Not Found" >&2; exit 1; }
+        ;;
+      *"/git/ref/"*)
+        printf 'a1b2c3d4e5f6\n'
+        ;;
+      *"/git/refs"*)
+        ;;
+      *)
+        printf '{}\n'
+        ;;
+    esac
+    ;;
+
+  *)
+    echo "gh stub: unexpected invocation: $*" >&2
+    exit 127
+    ;;
+esac
+"#;

@@ -1,0 +1,15 @@
+---
+source: tests/lifecycle.rs
+expression: out.stderr
+---
+▶ releasing acme/widgets
+  version: 1.4.0
+  tag: v1.4.0
+  merged as: abc1234
+▶ creating draft release v1.4.0
+✔ release created
+  release: https://github.com/acme/widgets/releases/tag/v1.0.0
+▶ publishing v1.4.0
+✔ release published
+
+✔ shipped v1.4.0

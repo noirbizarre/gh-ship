@@ -1,0 +1,65 @@
+name: 📚 Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - schemas/**
+      - zensical.toml
+      - .github/workflows/docs.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deployment at a time; never cancel one midway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: 🏗️ Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Build the site
+        run: uvx zensical build
+
+      # The JSON Schema is a published contract: users reference it by URL
+      # from every artifact they produce, and editors fetch it for
+      # completion. Serving it from the docs site keeps the URL in
+      # `$id` honest.
+      - name: Publish the JSON Schema
+        run: |
+          mkdir -p site/schema/release
+          cp schemas/release.v1.schema.json site/schema/release/v1.json
+
+      - name: Verify the schema is reachable at its advertised URL
+        run: |
+          test -f site/schema/release/v1.json
+          # The `$id` must match where we just published it, or every
+          # `$schema` reference in the wild breaks.
+          grep -q 'https://noirbizarre.github.io/gh-ship/schema/release/v1.json' \
+            site/schema/release/v1.json
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    name: 🚀 Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

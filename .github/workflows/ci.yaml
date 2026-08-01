@@ -1,0 +1,95 @@
+name: ♻️ CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: full
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: 🕵️ Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: j178/prek-action@v2
+
+  test:
+    name: 🧪 Tests (${{ matrix.os.name }})
+    runs-on: ${{ matrix.os.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - name: Linux
+            runner: ubuntu-latest
+          - name: Windows
+            runner: windows-latest
+          - name: macOS
+            runner: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: taiki-e/install-action@nextest
+
+      - name: Run tests (with coverage)
+        run: |
+          cargo llvm-cov nextest --profile ci
+          cargo llvm-cov report --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: lcov.info
+
+      - name: Upload test results to Codecov
+        uses: codecov/codecov-action@v5
+        if: ${{ !cancelled() }}
+        with:
+          directory: target/nextest/ci
+          report_type: test_results
+
+  # The artifact schema is a published contract. Anything that changes it
+  # must keep the documented examples and the fixture corpus valid, and
+  # must keep the embedded copy identical to the published one.
+  protocol:
+    name: 📜 Protocol
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Validate the artifact corpus
+        run: cargo test --test validate
+
+      - name: Ensure `validate` needs no network, repo or auth
+        run: |
+          cargo build
+          mkdir -p "$RUNNER_TEMP/isolated"
+          cd "$RUNNER_TEMP/isolated"
+          echo '{"schemaVersion":1,"changed":false}' > ship.release.json
+          env -i "$GITHUB_WORKSPACE/target/debug/gh-ship" validate ship.release.json
+
+      # gh-ship releases gh-ship. Its own configuration and workflows must
+      # satisfy the contract it enforces on everyone else.
+      - name: Dogfood — validate our own setup
+        run: ./target/debug/gh-ship validate

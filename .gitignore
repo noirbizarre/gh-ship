@@ -19,3 +19,14 @@ target
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# Zensical documentation build output
+site/
+
+# Coverage and test reports
+lcov.info
+junit.xml
+*.profraw
+
+# insta pending snapshots
+*.snap.new

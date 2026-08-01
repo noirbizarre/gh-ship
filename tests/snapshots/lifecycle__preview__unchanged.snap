@@ -1,0 +1,15 @@
+---
+source: tests/lifecycle.rs
+expression: out.stderr
+---
+▶ previewing acme/widgets
+- dry run — nothing on GitHub will be modified
+▶ dispatching prepare-release.yml on release/next
+  ship id: [nonce]
+  run: https://github.com/acme/widgets/actions/runs/42
+▶ waiting for prepare-release.yml
+✔ prepare-release.yml succeeded
+▶ downloading ship-release
+✔ artifact is valid
+
+✔ nothing to release — the prepare workflow reported no changes

@@ -1,0 +1,21 @@
+---
+source: tests/validate.rs
+expression: out.diagnostics()
+---
+ship::artifact::invalid
+
+  × `missing-changed.json` is not a valid release artifact (1 problem)
+  help: see https://noirbizarre.github.io/gh-ship/specifications/release-
+        artifact/
+
+Error: ship::artifact::invalid
+
+  × the artifact is missing `changed`
+   ╭─[missing-changed.json:1:1]
+ 1 │ ╭─▶ {
+ 2 │ │     "schemaVersion": 1
+ 3 │ ├─▶ }
+   · ╰──── missing `changed`
+   ╰────
+  help: `changed` tells gh-ship whether to proceed; it is required even when
+        true

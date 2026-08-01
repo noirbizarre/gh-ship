@@ -1,0 +1,160 @@
+# Configuration
+
+gh-ship is configured by `.github/ship.yml`. Generate it with
+[`gh ship init`](quickstart.md), or write it by hand.
+
+Only `version` and `workflows.prepare` are required.
+
+## Minimal
+
+```yaml
+version: 1
+workflows:
+  prepare: prepare-release
+```
+
+## Complete
+
+```yaml
+version: 1
+
+# Branch on which the release is staged. gh-ship creates it if missing;
+# your prepare workflow commits to it.
+release_branch: release/next
+
+# Branch the Release PR targets.
+# Defaults to the repository's default branch.
+base_branch: main
+
+workflows:
+  prepare: prepare-release
+  publish: publish-release
+
+pull_request:
+  title: "Release {{ version }}"
+  header: |
+    This PR prepares the next release.
+  footer: |
+    Generated automatically by gh-ship.
+  labels: [release]
+
+release:
+  draft: true
+```
+
+## Reference
+
+### Root
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `version` | integer | — | **Required.** Config schema version. Must be `1`. |
+| `release_branch` | string | `release/next` | Branch the release is staged on. |
+| `base_branch` | string | repo default | Branch the Release PR targets. |
+| `workflows` | object | — | **Required.** See below. |
+| `pull_request` | object | — | Release PR rendering. |
+| `release` | object | — | GitHub Release behaviour. |
+
+### `workflows`
+
+| Key | Type | Meaning |
+|---|---|---|
+| `prepare` | string | **Required.** Workflow that produces the release artifact. |
+| `publish` | string | Optional. Workflow that builds and uploads assets. |
+
+Values may be a workflow's `name:`, its filename, or its filename without extension.
+
+!!! warning "These must be dispatchable"
+
+    A workflow named here **must** declare `on: workflow_dispatch`. A
+    `workflow_call`-only workflow cannot be started through the API at all.
+    See [Workflows](workflows.md).
+
+### `pull_request`
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `title` | template | `Release {{ version }}` | PR title. |
+| `header` | template | — | Markdown prepended to the release notes. |
+| `footer` | template | — | Markdown appended after the release notes. |
+| `labels` | list | `[]` | Labels applied to the Release PR. |
+
+The body is assembled as:
+
+```
+{{ header }}
+
+{{ release notes from your workflow }}
+
+{{ footer }}
+```
+
+Parts that are absent or empty are omitted, with no stray blank lines.
+
+### `release`
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `draft` | boolean | `true` | Create the release as a draft, then publish it after the publish workflow succeeds. |
+
+!!! tip "Leave `draft` alone unless you have a reason"
+
+    Creating the release visible-first notifies every watcher of a release with no
+    assets attached. Draft-first is the only ordering where a release becomes
+    visible complete.
+
+## Templates
+
+Templates are [MiniJinja](https://docs.rs/minijinja) (Jinja2-compatible).
+
+**The release artifact is the root context.** The vocabulary is exactly what the
+[artifact specification](specifications/release-artifact.md) documents:
+
+| Expression | Value |
+|---|---|
+| `{{ version }}` | `1.4.0` |
+| `{{ tag }}` | `v1.4.0` |
+| `{{ changed }}` | `true` |
+| `{{ release.name }}` | `Release v1.4.0` |
+| `{{ release.notes }}` | the changelog your workflow produced |
+| `{{ release.prerelease }}` | `false` |
+
+!!! danger "Not `{{ release.version }}`"
+
+    `version` and `tag` are at the **root**, not under `release`. `release` holds
+    only the GitHub Release fields.
+
+Examples:
+
+```yaml
+pull_request:
+  title: "Release {{ version }}"
+  header: |
+    Shipping `{{ tag }}`.
+    {% if release.prerelease %}
+    :warning: This is a pre-release.
+    {% endif %}
+```
+
+## Overrides from the artifact
+
+A workflow can override rendering per release by setting `pull_request` in the
+artifact. Artifact values win over config:
+
+```json
+{
+  "schemaVersion": 1,
+  "changed": true,
+  "version": "2.0.0",
+  "tag": "v2.0.0",
+  "pull_request": {
+    "title": "Release 2.0.0 — breaking changes",
+    "labels": ["breaking"]
+  }
+}
+```
+
+Setting `pull_request.body` in the artifact replaces the body entirely, skipping
+header/footer assembly.
+
+Labels from both sources are merged, without duplicates.

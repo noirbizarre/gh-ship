@@ -1,0 +1,21 @@
+---
+source: tests/lifecycle.rs
+expression: out.stderr
+---
+▶ preparing acme/widgets
+  branch: release/next
+▶ dispatching prepare-release.yml on release/next
+  ship id: [nonce]
+  run: https://github.com/acme/widgets/actions/runs/42
+▶ waiting for prepare-release.yml
+✔ prepare-release.yml succeeded
+▶ downloading ship-release
+✔ artifact is valid
+▶ opening Release PR
+✔ Release PR opened
+  pr: https://github.com/acme/widgets/pull/7
+
+  version: 1.4.0
+  tag: v1.4.0
+
+- review and merge the PR, then run `gh ship release`

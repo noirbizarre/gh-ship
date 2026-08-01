@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "changed": true,
+  "version": "2.0.0-rc.1",
+  "tag": "v2.0.0-rc.1",
+  "release": { "prerelease": true, "make_latest": false }
+}

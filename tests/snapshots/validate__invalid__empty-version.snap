@@ -1,0 +1,33 @@
+---
+source: tests/validate.rs
+expression: out.diagnostics()
+---
+ship::artifact::invalid
+
+  × `empty-version.json` is not a valid release artifact (2 problems)
+  help: see https://noirbizarre.github.io/gh-ship/specifications/release-
+        artifact/
+
+Error: ship::artifact::invalid
+
+  × `/version` must not be empty
+   ╭─[empty-version.json:4:14]
+ 3 │   "changed": true,
+ 4 │   "version": "",
+   ·              ─┬
+   ·               ╰── empty
+ 5 │   "tag": "v1.0.0"
+   ╰────
+  help: supply a value, or omit the field entirely
+
+Error: ship::artifact::invalid
+
+  × `/version` has an invalid value: ""
+   ╭─[empty-version.json:4:14]
+ 3 │   "changed": true,
+ 4 │   "version": "",
+   ·              ─┬
+   ·               ╰── invalid format
+ 5 │   "tag": "v1.0.0"
+   ╰────
+  help: `version` must not have leading or trailing whitespace

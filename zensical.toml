@@ -1,0 +1,74 @@
+# Zensical configuration.
+# https://zensical.org
+
+[project]
+name = "gh-ship"
+description = "The GitHub Release Orchestrator"
+site_url = "https://noirbizarre.github.io/gh-ship/"
+repo_url = "https://github.com/noirbizarre/gh-ship"
+edit_uri = "edit/main/docs/"
+
+[build]
+docs_dir = "docs"
+site_dir = "site"
+
+[theme]
+name = "material"
+palette = [
+  { media = "(prefers-color-scheme: light)", scheme = "default", primary = "black", accent = "indigo", toggle = { icon = "material/brightness-7", name = "Switch to dark mode" } },
+  { media = "(prefers-color-scheme: dark)", scheme = "slate", primary = "black", accent = "indigo", toggle = { icon = "material/brightness-4", name = "Switch to light mode" } },
+]
+features = [
+  "content.code.copy",
+  "content.code.annotate",
+  "navigation.sections",
+  "navigation.top",
+  "navigation.instant",
+  "search.highlight",
+  "toc.follow",
+]
+
+[[nav]]
+title = "Home"
+path = "index.md"
+
+[[nav]]
+title = "Getting Started"
+children = [
+  { title = "Installation", path = "installation.md" },
+  { title = "Quick Start", path = "quickstart.md" },
+]
+
+[[nav]]
+title = "Guides"
+children = [
+  { title = "Configuration", path = "configuration.md" },
+  { title = "Workflows", path = "workflows.md" },
+  { title = "CLI Reference", path = "cli.md" },
+]
+
+[[nav]]
+title = "Protocol"
+children = [
+  { title = "Release Artifact", path = "specifications/release-artifact.md" },
+]
+
+[[nav]]
+title = "About"
+children = [
+  { title = "Architecture", path = "architecture.md" },
+  { title = "FAQ", path = "faq.md" },
+]
+
+[markdown]
+extensions = [
+  "admonition",
+  "attr_list",
+  "def_list",
+  "md_in_html",
+  "pymdownx.details",
+  "pymdownx.superfences",
+  "pymdownx.tabbed",
+  "tables",
+  "toc",
+]

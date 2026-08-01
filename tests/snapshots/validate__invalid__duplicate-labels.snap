@@ -1,0 +1,20 @@
+---
+source: tests/validate.rs
+expression: out.diagnostics()
+---
+ship::artifact::invalid
+
+  × `duplicate-labels.json` is not a valid release artifact (1 problem)
+  help: see https://noirbizarre.github.io/gh-ship/specifications/release-
+        artifact/
+
+Error: ship::artifact::invalid
+
+  × `/pull_request/labels` contains duplicate entries (items 0 and 1)
+   ╭─[duplicate-labels.json:5:15]
+ 4 │   "pull_request": {
+ 5 │     "labels": ["release", "release"]
+   ·               ───────────┬──────────
+   ·                          ╰── duplicated
+ 6 │   }
+   ╰────

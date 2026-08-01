@@ -1,0 +1,151 @@
+# Architecture
+
+gh-ship is intentionally small. The interesting decisions are about what it refuses
+to do.
+
+## Principles
+
+**GitHub-first.** Every GitHub interaction goes through the `gh` CLI. gh-ship
+implements no REST client and handles no tokens, because `gh` already solves
+authentication, enterprise hosts, SSO, and rate limiting.
+
+**Convention over configuration.** The only required config is `version` and
+`workflows.prepare`.
+
+**Never execute user release logic.** gh-ship has no `run:` key and no shell
+execution. Your workflows do the work.
+
+**Never manage secrets.**
+
+**Zero local state.** Everything is reconstructed from GitHub.
+
+## The anti-goal
+
+!!! danger "This must never become a workflow engine"
+
+    gh-ship's predecessor was a custom workflow DSL, and it failed in an
+    instructive way: the DSL kept growing ad-hoc escape hatches for control flow it
+    could not express, its built-in actions were perpetually incomplete so users
+    fell back to raw shell anyway, and everything was stringly typed.
+
+    The lesson is that a workflow engine is a bottomless product. GitHub Actions
+    already exists and is better at it. gh-ship orchestrates *around* it and stops
+    there.
+
+## Layout
+
+```
+src/
+  artifact/        # the protocol: model, embedded schema, validation, span lookup
+  gh/              # everything that talks to GitHub, via the gh CLI
+    cli.rs         #   subprocess wrapper and error classification
+    workflow.rs    #   workflow discovery and contract checking
+    run.rs         #   dispatch, correlation, polling
+    repo.rs        #   branches, PRs, releases
+  commands/        # one module per subcommand
+  config.rs        # .github/ship.yml
+  render.rs        # PR templating and artifact embedding
+  error / style / logger / suggest
+schemas/           # the published JSON Schema, embedded via include_str!
+templates/         # workflow templates emitted by `init`
+```
+
+## Key mechanisms
+
+### Dispatch correlation
+
+`gh workflow run` returns 204 No Content. There is no API that maps a dispatch to a
+run.
+
+gh-ship generates a nonce, passes it as the `ship_id` input, and requires the
+workflow to stamp it into `run-name`. It then polls the run list and matches on that
+nonce. `gh ship validate` refuses a workflow that would break this, so the failure
+surfaces at setup time rather than mid-release.
+
+The alternative — newest run after the dispatch timestamp — is wrong under
+concurrency, and wrong rarely enough to survive testing.
+
+### Zero state, via the PR body
+
+`gh ship release` needs the artifact `gh ship prepare` validated, possibly days
+later and on a different machine.
+
+Rather than a state file, gh-ship embeds the artifact in the Release PR body inside
+an HTML comment:
+
+```
+<!-- ship:artifact
+{"schemaVersion":1,"changed":true,"version":"1.4.0","tag":"v1.4.0"}
+-->
+```
+
+Invisible when rendered, durable, and it outlives artifact retention. It also means
+`gh ship status` is a pure query with no cache to go stale.
+
+### Draft-first releases
+
+Create the release as a draft → dispatch the publish workflow → undraft.
+
+A draft is invisible to watchers, but its tag exists and `gh release upload` works
+against it. This is the only ordering where a release becomes visible complete.
+
+### Diagnostics
+
+Errors are [miette](https://docs.rs/miette) diagnostics with source spans, so a
+schema violation points at the offending byte of the user's JSON:
+
+```
+× `/release` has unknown field `note`
+   ╭─[ship.release.json:8:5]
+ 8 │     "note": "## What's Changed\n"
+   ·     ───┬──
+   ·        ╰── not allowed here
+  help: did you mean `notes`?
+```
+
+Because `serde_json` discards positions, `artifact/span.rs` re-scans the raw text to
+resolve a JSON Pointer to a byte range.
+
+Every user-facing error carries a diagnostic code and a `help` that says what to do,
+not just what happened.
+
+## Dependencies
+
+| Crate | Why |
+|---|---|
+| `clap` | CLI |
+| `serde`, `serde_json`, `serde_norway` | JSON and YAML |
+| `boon` | JSON Schema 2020-12 |
+| `miette`, `thiserror` | diagnostics |
+| `minijinja` | PR templating |
+| `demand` | `init` prompts |
+| `uuid` | correlation nonces |
+| `owo-colors`, `strsim` | output and "did you mean?" |
+
+No async runtime. The work is dominated by waiting on GitHub, and a synchronous
+poll loop expresses that more honestly than an executor would.
+
+## Testing
+
+**Unit tests** for pure logic — schema validation, span lookup, templating, workflow
+parsing, error classification.
+
+**A fixture corpus** at `tests/fixtures/artifacts/{valid,invalid}` that is the
+executable specification of the protocol. Every rejection's diagnostic is
+snapshotted, so a regression in message quality shows up as a diff.
+
+**A hermetic `gh` stub.** Because every GitHub interaction goes through the `gh`
+binary, replacing it on `PATH` with a script gives complete control over what GitHub
+"says" — with no network, no credentials, and no recorded fixtures to keep in sync.
+Tests describe scenarios declaratively:
+
+```rust
+GhStub::new()
+    .pr_state("MERGED")
+    .merge_commit("abc1234")
+    .artifact(r#"{"schemaVersion":1,"changed":true,...}"#)
+```
+
+The stub logs every invocation, so tests assert on what gh-ship actually asked
+GitHub to do — including what it must *not* do, like `preview` never calling
+`pr create`.

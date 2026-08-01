@@ -1,0 +1,21 @@
+---
+source: tests/validate.rs
+expression: out.diagnostics()
+---
+ship::artifact::invalid
+
+  × `tag-with-whitespace.json` is not a valid release artifact (1 problem)
+  help: see https://noirbizarre.github.io/gh-ship/specifications/release-
+        artifact/
+
+Error: ship::artifact::invalid
+
+  × `/tag` has an invalid value: "v1 0 0"
+   ╭─[tag-with-whitespace.json:5:10]
+ 4 │   "version": "1.0.0",
+ 5 │   "tag": "v1 0 0"
+   ·          ────┬───
+   ·              ╰── invalid format
+ 6 │ }
+   ╰────
+  help: a git tag cannot contain whitespace

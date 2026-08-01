@@ -1,0 +1,19 @@
+---
+source: tests/validate.rs
+expression: out.diagnostics()
+---
+ship::artifact::invalid
+
+  × `empty-object.json` is not a valid release artifact (1 problem)
+  help: see https://noirbizarre.github.io/gh-ship/specifications/release-
+        artifact/
+
+Error: ship::artifact::invalid
+
+  × the artifact is missing `schemaVersion` and `changed`
+   ╭─[empty-object.json:1:1]
+ 1 │ {}
+   · ─┬
+   ·  ╰── missing `schemaVersion` and `changed`
+   ╰────
+  help: every artifact must declare `"schemaVersion": 1`

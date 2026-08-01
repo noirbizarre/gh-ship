@@ -1,0 +1,6 @@
+---
+source: tests/validate.rs
+expression: out.diagnostics()
+---
+✔ minimal-unchanged.json is a valid release artifact
+- changed: false — gh-ship would report nothing to release

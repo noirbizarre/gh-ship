@@ -1,0 +1,20 @@
+---
+source: tests/validate.rs
+expression: out.diagnostics()
+---
+ship::artifact::invalid
+
+  × `changed-wrong-type.json` is not a valid release artifact (1 problem)
+  help: see https://noirbizarre.github.io/gh-ship/specifications/release-
+        artifact/
+
+Error: ship::artifact::invalid
+
+  × `/changed` must be boolean, but is string
+   ╭─[changed-wrong-type.json:3:14]
+ 2 │   "schemaVersion": 1,
+ 3 │   "changed": "yes"
+   ·              ──┬──
+   ·                ╰── expected boolean
+ 4 │ }
+   ╰────

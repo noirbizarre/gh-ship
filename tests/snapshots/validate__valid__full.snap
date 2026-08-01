@@ -1,0 +1,7 @@
+---
+source: tests/validate.rs
+expression: out.diagnostics()
+---
+✔ full.json is a valid release artifact
+  version: 1.4.0
+  tag: v1.4.0

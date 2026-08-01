@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://noirbizarre.github.io/gh-ship/schema/release/v1.json",
+  "title": "GH Ship Release Artifact",
+  "description": "The public protocol between a GitHub Actions release workflow and GH Ship. A workflow uploads this document as `ship.release.json` inside the `ship-release` artifact; GH Ship reads it to render the Release PR and create the GitHub Release.",
+  "type": "object",
+
+  "required": ["schemaVersion", "changed"],
+
+  "properties": {
+    "$schema": {
+      "description": "Editor metadata only. GH Ship uses `schemaVersion` to decide how to read this document; a mismatch between the two produces a warning, never an error.",
+      "type": "string",
+      "format": "uri"
+    },
+
+    "schemaVersion": {
+      "description": "Authoritative protocol version. GH Ship refuses documents whose version it does not understand.",
+      "type": "integer",
+      "const": 1
+    },
+
+    "changed": {
+      "description": "Whether there is anything to release. When false, GH Ship prints `nothing to release`, exits 0, and touches no branch, PR or release.",
+      "type": "boolean"
+    },
+
+    "version": {
+      "description": "The version being released, in whatever scheme the project uses. GH Ship never parses or validates this beyond requiring a non-empty single-line string — it does not know how your project versions itself.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(.*\\S)?$"
+    },
+
+    "tag": {
+      "description": "The git tag to create. Must not contain whitespace. GH Ship does not derive this from `version`; the workflow owns the tag convention.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\s]+$"
+    },
+
+    "release": {
+      "description": "GitHub Release content. Every field is optional; GH Ship falls back to its configured templates.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Release title. Defaults to the tag when omitted.",
+          "type": "string"
+        },
+        "notes": {
+          "description": "Release body, in GitHub Flavored Markdown. GH Ship never generates this — use git-cliff, release-drafter, or whatever your project already uses.",
+          "type": "string"
+        },
+        "prerelease": {
+          "description": "Mark the GitHub Release as a pre-release.",
+          "type": "boolean",
+          "default": false
+        },
+        "make_latest": {
+          "description": "Whether this release should be marked as the repository's latest.",
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "patternProperties": { "^x-": true },
+      "additionalProperties": false
+    },
+
+    "pull_request": {
+      "description": "Release PR overrides. Every field is optional; GH Ship falls back to its configured templates.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "description": "PR title. Overrides `pull_request.title` from .github/ship.yml.",
+          "type": "string",
+          "minLength": 1
+        },
+        "body": {
+          "description": "Complete PR body. When set, GH Ship uses it verbatim and skips header/notes/footer assembly.",
+          "type": "string"
+        },
+        "labels": {
+          "description": "Labels to apply to the Release PR, in addition to those configured.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      },
+      "patternProperties": { "^x-": true },
+      "additionalProperties": false
+    }
+  },
+
+  "patternProperties": { "^x-": true },
+  "additionalProperties": false,
+
+  "allOf": [
+    {
+      "$comment": "A changed release must identify itself.",
+      "if": {
+        "properties": { "changed": { "const": true } },
+        "required": ["changed"]
+      },
+      "then": {
+        "required": ["version", "tag"]
+      }
+    }
+  ],
+
+  "examples": [
+    {
+      "$schema": "https://noirbizarre.github.io/gh-ship/schema/release/v1.json",
+      "schemaVersion": 1,
+      "changed": false
+    },
+    {
+      "$schema": "https://noirbizarre.github.io/gh-ship/schema/release/v1.json",
+      "schemaVersion": 1,
+      "changed": true,
+      "version": "1.4.0",
+      "tag": "v1.4.0",
+      "release": {
+        "name": "Release v1.4.0",
+        "notes": "## What's Changed\n\n* Add `gh ship preview` by @noirbizarre\n",
+        "prerelease": false
+      },
+      "pull_request": {
+        "title": "Release v1.4.0",
+        "labels": ["release"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+---
+source: tests/validate.rs
+expression: out.diagnostics()
+---
+ship::artifact::invalid
+
+  × `array-at-root.json` is not a valid release artifact (1 problem)
+  help: see https://noirbizarre.github.io/gh-ship/specifications/release-
+        artifact/
+
+Error: ship::artifact::invalid
+
+  × the artifact must be object, but is array
+   ╭─[array-at-root.json:1:1]
+ 1 │ ╭─▶ [
+ 2 │ │     { "schemaVersion": 1, "changed": false }
+ 3 │ ├─▶ ]
+   · ╰──── expected object
+   ╰────
