@@ -1,3 +1,25 @@
+<p align="center">
+  <img src="docs/images/logo.svg" alt="GH Ship logo" />
+</p>
+<p align="center">
+  Ship GitHub releases your way.
+</p>
+<p align="center">
+  A GitHub CLI extension that orchestrates Release PRs and reusable GitHub Actions workflows.
+</p>
+<p align="center">
+  <a href="https://github.com/noirbizarre/gh-ship/actions/workflows/ci.yaml">
+    <img src="https://github.com/noirbizarre/gh-ship/actions/workflows/ci.yaml/badge.svg" alt="CI">
+  </a>
+  <a href="https://codecov.io/gh/noirbizarre/gh-ship">
+    <img src="https://codecov.io/gh/noirbizarre/gh-ship/graph/badge.svg" alt="Codecov">
+  </a>
+  <img src="https://img.shields.io/github/v/release/noirbizarre/gh-ship" alt="Release">
+  <img src="https://img.shields.io/github/license/noirbizarre/gh-ship" alt="License">
+</p>
+
+---
+
 # gh-ship
 
 **The GitHub Release Orchestrator.**
