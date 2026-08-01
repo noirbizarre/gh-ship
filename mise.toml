@@ -33,6 +33,9 @@ cargo-binstall = "latest"
 "cargo:cargo-nextest" = "latest"
 "cargo:cargo-llvm-cov" = "latest"
 "cargo:cargo-insta" = "latest"
+# Rasterizes docs/images/icon.svg (see the `icons` task). Pure Rust, so it
+# needs no system libraries and renders identically on every platform.
+"cargo:resvg" = "latest"
 
 # --- Everyday ---------------------------------------------------------------
 
@@ -74,6 +77,18 @@ description = "Lint the GitHub Actions workflows"
 # Drop the -ignore once actionlint ships support.
 run = """
 actionlint -ignore 'unexpected key "deployment" for "environment" section' .github/workflows/*.yaml
+"""
+
+[tasks.icons]
+description = "Rasterize docs/images/icon.svg into the PNG sizes"
+# Deliberately not a dependency of `default`: it rewrites committed binaries,
+# so every routine run would dirty the working tree. Run it when the SVG
+# changes.
+run = """
+for size in 128 256 512; do
+  resvg --width "$size" --height "$size" docs/images/icon.svg "docs/images/icon-$size.png"
+  echo "docs/images/icon-$size.png"
+done
 """
 
 [tasks.snapshots]
