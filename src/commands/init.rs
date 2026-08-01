@@ -323,6 +323,12 @@ fn write_template(root: &Path, filename: &str, body: &str, theme: &Theme) -> Res
 pub fn render_config(prepare: &str, publish: Option<&str>) -> String {
     let mut out = String::new();
 
+    // The modeline gives editors completion and inline validation for this
+    // file. It is a comment, so it costs nothing at parse time.
+    out.push_str(
+        "# yaml-language-server: $schema=https://noirbizarre.github.io/gh-ship/schema/config/v1.json\n",
+    );
+
     out.push_str(&format!(
         "# gh-ship configuration\n\
          # Docs: https://noirbizarre.github.io/gh-ship/configuration/\n\
@@ -449,6 +455,23 @@ mod tests {
             yaml.contains("# publish: publish-release"),
             "the optional key should be shown as a commented example"
         );
+    }
+
+    /// The generated config must carry the editor modeline, and must still be
+    /// the schema-valid shape asserted by tests/config_schema.rs.
+    #[test]
+    fn generated_config_carries_the_schema_modeline() {
+        let yaml = render_config("prepare-release", None);
+        assert!(
+            yaml.starts_with("# yaml-language-server: $schema="),
+            "the modeline must be the first line to be picked up: {yaml}"
+        );
+        assert!(
+            yaml.contains("schema/config/v1.json"),
+            "it must point at the config schema, not the release one: {yaml}"
+        );
+        // Still parses: it is only a comment.
+        Config::parse(".github/ship.yml", &yaml).expect("modeline must not break parsing");
     }
 
     #[test]

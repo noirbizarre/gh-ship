@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://noirbizarre.github.io/gh-ship/schema/config/v1.json",
+  "title": "GH Ship Configuration",
+  "description": "Configuration for gh-ship, the GitHub Release Orchestrator. Lives at .github/ship.yml. Only `version` and `workflows.prepare` are required — everything else has a sensible default.",
+  "type": "object",
+
+  "required": ["version", "workflows"],
+
+  "properties": {
+    "version": {
+      "description": "Configuration schema version. Must be 1.",
+      "type": "integer",
+      "const": 1
+    },
+
+    "release_branch": {
+      "description": "Branch on which the release is staged. gh-ship creates it if missing and resets it to the base branch on every prepare, so it is machine-managed: your prepare workflow commits to it, but anything else pushed there is discarded.",
+      "type": "string",
+      "minLength": 1,
+      "default": "release/next"
+    },
+
+    "base_branch": {
+      "description": "Branch the Release PR targets. Defaults to the repository's default branch, resolved at runtime.",
+      "type": "string",
+      "minLength": 1
+    },
+
+    "workflows": {
+      "description": "The workflows gh-ship dispatches. These must declare `on: workflow_dispatch` — a `workflow_call`-only (so-called reusable) workflow cannot be started through the API at all. They are referenced by filename slug, so `prepare-release` means `.github/workflows/prepare-release.yaml`.",
+      "type": "object",
+      "required": ["prepare"],
+      "properties": {
+        "prepare": {
+          "description": "Workflow that bumps the version, writes the changelog, commits, pushes, and uploads `ship.release.json`.",
+          "type": "string",
+          "minLength": 1
+        },
+        "publish": {
+          "description": "Optional workflow run after the Release PR is merged and the draft release exists — typically builds and uploads assets.",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "pull_request": {
+      "description": "Release PR rendering. Templates are MiniJinja, with the release artifact as the root context: {{ version }}, {{ tag }}, {{ release.notes }}.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "description": "Template for the PR title.",
+          "type": "string",
+          "minLength": 1,
+          "default": "Release {{ version }}"
+        },
+        "header": {
+          "description": "Markdown prepended to the release notes.",
+          "type": "string"
+        },
+        "footer": {
+          "description": "Markdown appended after the release notes.",
+          "type": "string"
+        },
+        "labels": {
+          "description": "Labels applied to the Release PR. gh-ship creates any that do not exist; if it cannot, it warns and opens the PR without them.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true,
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "release": {
+      "description": "GitHub Release behaviour.",
+      "type": "object",
+      "properties": {
+        "draft": {
+          "description": "Create the release as a draft, then publish it once the publish workflow succeeds. This is the default because it is the only ordering that lets the publish workflow attach assets before anyone watching the repository is notified.",
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+
+  "additionalProperties": false,
+
+  "examples": [
+    {
+      "version": 1,
+      "workflows": { "prepare": "prepare-release" }
+    },
+    {
+      "version": 1,
+      "release_branch": "release/next",
+      "base_branch": "main",
+      "workflows": {
+        "prepare": "prepare-release",
+        "publish": "publish-release"
+      },
+      "pull_request": {
+        "title": "Release {{ version }}",
+        "header": "This PR prepares the next release.\n",
+        "footer": "Generated automatically by gh-ship.\n",
+        "labels": ["release"]
+      },
+      "release": { "draft": true }
+    }
+  ]
+}

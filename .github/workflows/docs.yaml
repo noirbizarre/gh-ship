@@ -41,18 +41,23 @@ jobs:
       # from every artifact they produce, and editors fetch it for
       # completion. Serving it from the docs site keeps the URL in
       # `$id` honest.
-      - name: Publish the JSON Schema
+      - name: Publish the JSON Schemas
         run: |
-          mkdir -p site/schema/release
+          mkdir -p site/schema/release site/schema/config
           cp schemas/release.v1.schema.json site/schema/release/v1.json
+          cp schemas/config.v1.schema.json  site/schema/config/v1.json
 
-      - name: Verify the schema is reachable at its advertised URL
+      - name: Verify the schemas are reachable at their advertised URLs
         run: |
-          test -f site/schema/release/v1.json
-          # The `$id` must match where we just published it, or every
+          # Each `$id` must match where we just published it, or every
           # `$schema` reference in the wild breaks.
+          test -f site/schema/release/v1.json
           grep -q 'https://noirbizarre.github.io/gh-ship/schema/release/v1.json' \
             site/schema/release/v1.json
+
+          test -f site/schema/config/v1.json
+          grep -q 'https://noirbizarre.github.io/gh-ship/schema/config/v1.json' \
+            site/schema/config/v1.json
 
       - uses: actions/upload-pages-artifact@v5
         with:
