@@ -1,4 +1,6 @@
-# gh-ship
+<p align="center" markdown>
+  ![gh-ship](images/logo.svg){ width="520" }
+</p>
 
 **The GitHub Release Orchestrator.**
 

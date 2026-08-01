@@ -40,6 +40,9 @@ nav = [
 
 language = "en"
 
+logo = "images/logo.svg"
+favicon = "images/icon.svg"
+
 features = [
   "content.action.edit",
   "content.code.annotate",
@@ -53,19 +56,31 @@ features = [
   "toc.follow",
 ]
 
+# Three entries, in this order. The first has no `scheme`, so it follows the
+# operating system — and being first, it is what a visitor gets by default. The
+# other two let anyone override that choice, which then persists.
 [[project.theme.palette]]
+media = "(prefers-color-scheme)"
+primary = "black"
+accent = "indigo"
+toggle.icon = "lucide/monitor"
+toggle.name = "Following your system — switch to light"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
 scheme = "default"
 primary = "black"
 accent = "indigo"
 toggle.icon = "lucide/sun"
-toggle.name = "Switch to dark mode"
+toggle.name = "Switch to dark"
 
 [[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
 scheme = "slate"
 primary = "black"
 accent = "indigo"
 toggle.icon = "lucide/moon"
-toggle.name = "Switch to light mode"
+toggle.name = "Switch to following your system"
 
 # Markdown extensions used by the documentation. Admonitions and tabs carry
 # most of the guidance; superfences is required for fenced code blocks with
