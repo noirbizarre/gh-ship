@@ -75,9 +75,13 @@ jobs:
           last_tag="$(git describe --tags --abbrev=0 2>/dev/null || true)"
           next_tag="$(git cliff --bumped-version)"
 
+          # This project tags without a `v` prefix, so the tag and the version
+          # are the same string. They stay separate outputs because the release
+          # artifact keeps them separate: the tag convention is a project's own
+          # choice, and gh-ship never derives one from the other.
           {
             echo "tag=$next_tag"
-            echo "version=${next_tag#v}"
+            echo "version=$next_tag"
           } >> "$GITHUB_OUTPUT"
 
           if [ "$last_tag" = "$next_tag" ]; then

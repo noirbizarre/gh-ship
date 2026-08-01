@@ -94,6 +94,9 @@ jobs:
           if [ "${{ steps.version.outputs.changed }}" != "true" ]; then
             jq -n '{schemaVersion: 1, changed: false}' > ship.release.json
           else
+            # The tag convention is entirely yours: gh-ship never derives the
+            # tag from the version. `v1.4.0` is the common default; drop the
+            # `v` here if your project tags as `1.4.0`.
             jq -n \
               --arg version "${{ steps.version.outputs.version }}" \
               --arg tag     "v${{ steps.version.outputs.version }}" \
