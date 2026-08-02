@@ -15,7 +15,7 @@
     },
 
     "release_branch": {
-      "description": "Branch on which the release is staged. gh-ship creates it if missing and resets it to the base branch on every prepare, so it is machine-managed: your prepare workflow commits to it, but anything else pushed there is discarded.",
+      "description": "Branch on which the release is staged. gh-ship creates it if missing and moves it onto each new release commit, so it is machine-managed: anything else pushed there is discarded. Your prepare workflow commits to a throwaway ship/prepare-* branch, which gh-ship then promotes onto this one.",
       "type": "string",
       "minLength": 1,
       "default": "release/next"

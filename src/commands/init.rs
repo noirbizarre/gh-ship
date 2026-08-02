@@ -333,8 +333,9 @@ pub fn render_config(prepare: &str, publish: Option<&str>) -> String {
     ));
 
     out.push_str(&format!(
-        "# Branch on which the release is staged. gh-ship creates it if\n\
-         # missing; your prepare workflow commits to it.\n\
+        "# Branch on which the release is staged. gh-ship stages each release\n\
+         # on a throwaway branch and moves this one onto the result, so do not\n\
+         # push to it yourself.\n\
          release_branch: {DEFAULT_RELEASE_BRANCH}\n\
          \n\
          # Branch the Release PR targets.\n\
@@ -349,7 +350,8 @@ pub fn render_config(prepare: &str, publish: Option<&str>) -> String {
          # These must declare `on: workflow_dispatch` — a `workflow_call`-only\n\
          # workflow cannot be started through the API. They must also stamp\n\
          # `ship_id` into their `run-name`, which is how gh-ship finds the run\n\
-         # it started. `gh ship validate` checks both.\n\
+         # it started, and the prepare workflow must accept a `dry_run` input.\n\
+         # `gh ship validate` checks all three.\n\
          workflows:\n",
     );
     out.push_str(&format!("  prepare: {prepare}\n"));

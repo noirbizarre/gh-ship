@@ -55,8 +55,9 @@ jobs:
         with:
           # Full history: changelog generators need the tags.
           fetch-depth: 0
-          # gh-ship dispatches this workflow on the release branch, so
-          # the default checkout is already the right ref.
+          # gh-ship dispatches this workflow on a throwaway staging branch
+          # cut from your base branch, so the default checkout is already
+          # the right ref. Push to HEAD, never to the release branch.
           #
           # The default GITHUB_TOKEN cannot trigger other workflows.
           # If the Release PR must run CI, use a PAT or GitHub App token

@@ -80,10 +80,15 @@ where things stand, and `gh ship prepare` again to pick up.
 
 ## Can two people run `gh ship prepare` at once?
 
-Yes, though there is no reason to. The Release PR acts as the point of
-reconciliation: both runs converge on updating the same PR, and the last artifact
-wins. Because each dispatch carries its own nonce, neither run can accidentally
-adopt the other's workflow run.
+No — run them one at a time.
+
+Each `prepare` sweeps abandoned `ship/prepare-*` staging branches, and the sweep
+cannot tell an abandoned branch from one a concurrent run is actively using. The
+second run would delete the first run's branch out from under it.
+
+gh-ship releases one at a time by design; the Release PR is the lock. Serialise
+with `concurrency: group: ship`, as the sample workflow in
+[Workflows](workflows.md) does.
 
 ## Why does gh-ship create the tag and the release, rather than my workflow?
 

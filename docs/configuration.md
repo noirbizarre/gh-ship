@@ -1,7 +1,7 @@
 # Configuration
 
 gh-ship is configured by `.github/ship.yml`. Generate it with
-[`gh ship init`](quickstart.md), or write it by hand.
+[`gh ship init`](cli.md#gh-ship-init), or write it by hand.
 
 Only `version` and `workflows.prepare` are required.
 
@@ -33,8 +33,9 @@ workflows:
 # yaml-language-server: $schema=https://noirbizarre.github.io/gh-ship/schema/config/v1.json
 version: 1
 
-# Branch on which the release is staged. gh-ship creates it if missing;
-# your prepare workflow commits to it.
+# Branch on which the release is staged. gh-ship stages each release on a
+# throwaway branch and moves this one onto the result, so do not push to it
+# yourself — anything else pushed there is discarded.
 release_branch: release/next
 
 # Branch the Release PR targets.
@@ -52,6 +53,7 @@ pull_request:
   footer: |
     Generated automatically by gh-ship.
   labels: [release]
+  reuse: true
 
 release:
   draft: true
