@@ -109,24 +109,37 @@ pub fn run_workflow_as(
     ship_id: &ShipId,
     inputs: &[(&str, String)],
 ) -> Result<Artifact> {
-    let theme = ctx.theme;
-
     let resolved = ctx.workflow(workflow_name);
+    let finished = dispatch_and_wait(ctx, &resolved, branch, ship_id, inputs)?;
+    fetch_artifact(ctx, &finished)
+}
+
+/// Dispatch a workflow on a ref, find the run it created, and wait for it.
+///
+/// Every dispatch gh-ship makes goes through here, so a publish that
+/// cross-compiles for an hour reports itself exactly like a prepare that
+/// takes twenty seconds.
+pub(crate) fn dispatch_and_wait(
+    ctx: &Context,
+    workflow: &WorkflowRef,
+    branch: &str,
+    ship_id: &ShipId,
+    inputs: &[(&str, String)],
+) -> Result<Run> {
+    let theme = ctx.theme;
 
     eprintln!(
         "{}",
-        logger::action(theme, "dispatching", &format!("{resolved} on {branch}"))
+        logger::action(theme, "dispatching", &format!("{workflow} on {branch}"))
     );
 
-    let ship_id = run::dispatch_as(&ctx.gh, &resolved, branch, ship_id, inputs)?;
+    let ship_id = run::dispatch_as(&ctx.gh, workflow, branch, ship_id, inputs)?;
     eprintln!("{}", logger::detail(theme, "ship id", ship_id.as_str()));
 
-    let found = find_run(ctx, &resolved, branch, &ship_id)?;
+    let found = find_run(ctx, workflow, branch, &ship_id)?;
     eprintln!("{}", logger::detail_url(theme, "run", &found.url));
 
-    let finished = wait_for_run(ctx, &resolved, &found)?;
-
-    fetch_artifact(ctx, &finished)
+    wait_for_run(ctx, workflow, &found)
 }
 
 pub(crate) fn find_run(
