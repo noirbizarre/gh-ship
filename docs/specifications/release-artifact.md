@@ -29,7 +29,7 @@ named **`ship.release.json`**.
 - name: Validate the artifact before uploading
   run: gh ship validate ship.release.json
 
-- uses: actions/upload-artifact@v4
+- uses: actions/upload-artifact@v7
   with:
     name: ship-release
     path: ship.release.json

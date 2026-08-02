@@ -114,7 +114,7 @@ dispatches.
     A missing upload surfaces during `gh ship prepare` instead.
 
 ```yaml
-- uses: actions/upload-artifact@v4
+- uses: actions/upload-artifact@v7
   with:
     name: ship-release
     path: ship.release.json
@@ -178,12 +178,18 @@ on:
     inputs:
       ship_id: { required: true, type: string }
       tag: { required: true, type: string }
+  # Optional, recommended: keeps the workflow reusable too. The generated
+  # template declares both.
+  workflow_call:
+    inputs:
+      ship_id: { required: true, type: string }
+      tag: { required: true, type: string }
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag }}
 
@@ -257,6 +263,9 @@ concurrency:
 jobs:
   prepare:
     runs-on: ubuntu-latest
+    # `gh ship prepare` blocks on the dispatched run, whose own default is 60
+    # minutes. Capping below that makes a stuck run fail the job visibly.
+    timeout-minutes: 30
     environment:
       name: release
       deployment: false
