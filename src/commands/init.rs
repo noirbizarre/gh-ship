@@ -14,7 +14,7 @@
 use std::path::Path;
 
 use demand::{Confirm, DemandOption, Select};
-use miette::{IntoDiagnostic, Result, WrapErr};
+use miette::{IntoDiagnostic, Result};
 
 use gh_ship::cli::{Cli, InitArgs};
 use gh_ship::config::{CONFIG_VERSION, DEFAULT_RELEASE_BRANCH};
@@ -103,13 +103,9 @@ pub fn run(cli: &Cli, args: &InitArgs, theme: Theme) -> Result<()> {
     if let Some(parent) = config_path.parent()
         && !parent.as_os_str().is_empty()
     {
-        std::fs::create_dir_all(parent)
-            .into_diagnostic()
-            .wrap_err_with(|| format!("creating {}", parent.display()))?;
+        std::fs::create_dir_all(parent).map_err(|e| write_error("create", parent, &e))?;
     }
-    std::fs::write(config_path, &yaml)
-        .into_diagnostic()
-        .wrap_err_with(|| format!("writing {}", config_path.display()))?;
+    std::fs::write(config_path, &yaml).map_err(|e| write_error("write", config_path, &e))?;
 
     eprintln!();
     eprintln!(
@@ -286,9 +282,7 @@ fn report_nonconforming(workflows: &[Workflow], theme: Theme) {
 
 fn write_template(root: &Path, filename: &str, body: &str, theme: Theme) -> Result<()> {
     let dir = root.join(workflow::WORKFLOW_DIR);
-    std::fs::create_dir_all(&dir)
-        .into_diagnostic()
-        .wrap_err_with(|| format!("creating {}", dir.display()))?;
+    std::fs::create_dir_all(&dir).map_err(|e| write_error("create", &dir, &e))?;
 
     let path = dir.join(filename);
     if path.exists() {
@@ -306,9 +300,7 @@ fn write_template(root: &Path, filename: &str, body: &str, theme: Theme) -> Resu
         }
     }
 
-    std::fs::write(&path, body)
-        .into_diagnostic()
-        .wrap_err_with(|| format!("writing {}", path.display()))?;
+    std::fs::write(&path, body).map_err(|e| write_error("write", &path, &e))?;
     eprintln!(
         "{}",
         logger::ok(theme, &format!("wrote {}", path.display()))
@@ -420,6 +412,19 @@ fn print_next_steps(theme: Theme, has_publish: bool) {
         eprintln!("     gh-ship undrafts it only after that workflow succeeds.");
     }
     eprintln!();
+}
+
+/// A filesystem failure, as a diagnostic rather than a bare `io::Error`.
+///
+/// `init` is the command a newcomer meets first, so its failures carry the
+/// same code and help as everything else gh-ship reports.
+fn write_error(verb: &str, path: &Path, source: &std::io::Error) -> miette::Report {
+    miette::miette!(
+        code = "ship::init::io",
+        help = "check the path exists and is writable, then re-run `gh ship init`",
+        "could not {verb} {}: {source}",
+        path.display()
+    )
 }
 
 #[cfg(test)]
