@@ -117,6 +117,15 @@ impl Artifact {
             .and_then(|r| r.prerelease)
             .unwrap_or(false)
     }
+
+    /// Whether the GitHub Release should be marked as the repository's latest.
+    ///
+    /// `None` means the workflow did not say, in which case GitHub's own
+    /// default applies — which is not the same as `Some(true)`, so the
+    /// distinction is preserved rather than defaulted here.
+    pub fn make_latest(&self) -> Option<bool> {
+        self.release.as_ref().and_then(|r| r.make_latest)
+    }
 }
 
 #[cfg(test)]
@@ -144,17 +153,25 @@ mod tests {
         assert_eq!(a.release_name(), Some("v1.0.0"));
         assert_eq!(a.notes(), "");
         assert!(!a.is_prerelease());
+        assert_eq!(
+            a.make_latest(),
+            None,
+            "an unstated `make_latest` must stay unstated, so GitHub's own \
+             default applies rather than gh-ship forcing `--latest=true`"
+        );
     }
 
     #[test]
     fn explicit_release_fields_win() {
         let a: Artifact = serde_json::from_str(
             r#"{"schemaVersion":1,"changed":true,"version":"1.0.0","tag":"v1.0.0",
-                "release":{"name":"Big One","notes":"stuff","prerelease":true}}"#,
+                "release":{"name":"Big One","notes":"stuff","prerelease":true,
+                           "make_latest":false}}"#,
         )
         .unwrap();
         assert_eq!(a.release_name(), Some("Big One"));
         assert_eq!(a.notes(), "stuff");
         assert!(a.is_prerelease());
+        assert_eq!(a.make_latest(), Some(false));
     }
 }

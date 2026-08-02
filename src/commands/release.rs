@@ -255,12 +255,15 @@ fn create_release(ctx: &Context, artifact: &Artifact, tag: &str, target: &str) -
 
     let url = repo::create_release(
         &ctx.gh,
-        tag,
-        target,
-        artifact.release_name().unwrap_or(tag),
-        artifact.notes(),
-        draft,
-        artifact.is_prerelease(),
+        &repo::NewRelease {
+            tag,
+            target,
+            name: artifact.release_name().unwrap_or(tag),
+            notes: artifact.notes(),
+            draft,
+            prerelease: artifact.is_prerelease(),
+            make_latest: artifact.make_latest(),
+        },
     )?;
 
     eprintln!("{}", logger::ok(theme, "release created"));

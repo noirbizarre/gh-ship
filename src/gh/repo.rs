@@ -393,33 +393,45 @@ pub fn merge_pull_request(gh: &Gh, number: u64) -> Result<(), GhError> {
 
 // --- Releases ------------------------------------------------------------
 
+/// Everything `gh release create` needs.
+///
+/// A struct rather than a parameter list: these are five values of three types,
+/// and at the call site `create_release(gh, tag, target, name, notes, true,
+/// false, None)` says nothing about which flag is which.
+pub struct NewRelease<'a> {
+    pub tag: &'a str,
+    pub target: &'a str,
+    pub name: &'a str,
+    pub notes: &'a str,
+    pub draft: bool,
+    pub prerelease: bool,
+    /// `None` when the artifact did not say, in which case the flag is
+    /// omitted and GitHub applies its own rule — which is not the same as
+    /// asking for `--latest=true`.
+    pub make_latest: Option<bool>,
+}
+
 /// Create a GitHub Release.
-#[allow(clippy::too_many_arguments)]
-pub fn create_release(
-    gh: &Gh,
-    tag: &str,
-    target: &str,
-    name: &str,
-    notes: &str,
-    draft: bool,
-    prerelease: bool,
-) -> Result<String, GhError> {
+pub fn create_release(gh: &Gh, release: &NewRelease<'_>) -> Result<String, GhError> {
     let mut args: Vec<String> = vec![
         "release".into(),
         "create".into(),
-        tag.into(),
+        release.tag.into(),
         "--target".into(),
-        target.into(),
+        release.target.into(),
         "--title".into(),
-        name.into(),
+        release.name.into(),
         "--notes".into(),
-        notes.into(),
+        release.notes.into(),
     ];
-    if draft {
+    if release.draft {
         args.push("--draft".into());
     }
-    if prerelease {
+    if release.prerelease {
         args.push("--prerelease".into());
+    }
+    if let Some(latest) = release.make_latest {
+        args.push(format!("--latest={latest}"));
     }
     let out = gh.run_scoped(&args)?;
     Ok(out.trim().to_string())

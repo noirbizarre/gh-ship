@@ -709,6 +709,44 @@ fn release_is_idempotent_when_the_release_already_exists() {
     );
 }
 
+/// `make_latest` is part of the published v1 artifact schema and exists so a
+/// patch on an old branch, or a prerelease, need not become "Latest".
+#[test]
+fn release_honours_make_latest_from_the_artifact() {
+    let artifact = r###"{"schemaVersion":1,"changed":true,"version":"1.4.0","tag":"v1.4.0","release":{"make_latest":false}}"###;
+    let body = format!("Notes\n\n<!-- ship:artifact\n{artifact}\n-->");
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new()
+            .pr_body(&body)
+            .pr_state("MERGED")
+            .merge_commit("abc1234def5678"),
+    );
+    let out = repo.ship(&["release"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        repo.stub.called_with(&["release create", "--latest=false"]),
+        "an artifact asking not to be latest must say so on the wire: {:?}",
+        repo.stub.calls()
+    );
+}
+
+/// Silence must stay silence: without `make_latest`, GitHub applies its own
+/// rule rather than gh-ship forcing one.
+#[test]
+fn release_omits_latest_when_the_artifact_is_silent() {
+    let repo = merged_repo(GhStub::new());
+    let out = repo.ship(&["release"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        !repo.stub.called_with(&["release create", "--latest"]),
+        "an unstated `make_latest` must not become a flag: {:?}",
+        repo.stub.calls()
+    );
+}
+
 #[test]
 fn release_carries_the_notes_from_the_artifact() {
     let repo = merged_repo(GhStub::new());
