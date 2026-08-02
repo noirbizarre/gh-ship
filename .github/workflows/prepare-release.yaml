@@ -159,7 +159,7 @@ jobs:
                 changed: true,
                 version: $version,
                 tag: $tag,
-                release: { name: ("Release " + $tag), notes: $notes }
+                release: { notes: $notes }
               }' > ship.release.json
           fi
           cat ship.release.json
