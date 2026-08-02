@@ -300,10 +300,6 @@ impl PullRequest {
         state::is_open(&self.state)
     }
 
-    pub fn is_closed(&self) -> bool {
-        state::is_closed(&self.state)
-    }
-
     /// The commit the PR landed as.
     ///
     /// Never cache a SHA taken before the merge: a squash or rebase
@@ -482,6 +478,21 @@ pub fn release_exists(gh: &Gh, tag: &str) -> Result<bool, GhError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// GitHub returns `MERGED`, `gh` echoes `Merged`, and `status`
+    /// re-exposes whatever it was handed — so the comparison must not
+    /// care.
+    #[test]
+    fn pull_request_state_is_read_case_insensitively() {
+        for s in ["MERGED", "merged", "Merged"] {
+            assert!(state::is_merged(s), "{s}");
+            assert!(!state::is_open(s), "{s}");
+            assert!(!state::is_closed(s), "{s}");
+        }
+        assert!(state::is_open("OPEN"));
+        assert!(state::is_closed("CLOSED"));
+        assert!(!state::is_merged("CLOSED"));
+    }
 
     #[test]
     fn repository_json_deserialises() {

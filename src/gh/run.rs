@@ -186,19 +186,6 @@ fn not_found_help(workflow: &WorkflowRef) -> String {
     )
 }
 
-/// Dispatch a workflow and return the nonce used.
-///
-/// Does **not** wait. Callers that need the run pair this with
-/// [`find`] or [`wait`].
-pub fn dispatch(
-    gh: &Gh,
-    workflow: &WorkflowRef,
-    branch: &str,
-    inputs: &[(&str, String)],
-) -> Result<ShipId, RunError> {
-    dispatch_as(gh, workflow, branch, &ShipId::generate(), inputs)
-}
-
 /// Dispatch with a caller-supplied nonce.
 ///
 /// `prepare` stages its work on a branch named after the nonce, so the branch,

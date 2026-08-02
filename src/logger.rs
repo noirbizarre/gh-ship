@@ -141,6 +141,10 @@ mod tests {
             detail_url(t, "pr", "https://example.com/1"),
             rule(t, "Pull Request"),
             nothing_to_release(t),
+            release_identity(t, Some("1.4.0"), Some("v1.4.0")),
+            step(t, 1, &["do a thing", "on two lines"]),
+            note(&["a note"]),
+            note_url(t, "https://example.com"),
         ] {
             assert!(!s.contains('\x1b'), "unexpected ANSI in plain mode: {s:?}");
         }
@@ -162,6 +166,42 @@ mod tests {
         assert_eq!(duration(Duration::from_millis(250)), "250ms");
         assert_eq!(duration(Duration::from_millis(1500)), "1.50s");
         assert_eq!(duration(Duration::from_secs(83)), "1m 23s");
+    }
+
+    /// The pair is reported by four commands, so its shape must not
+    /// depend on what the artifact happened to carry.
+    #[test]
+    fn release_identity_falls_back_to_a_placeholder() {
+        let t = Theme::plain();
+        assert_eq!(
+            release_identity(t, Some("1.4.0"), Some("v1.4.0")),
+            "  version: 1.4.0\n  tag: v1.4.0"
+        );
+        assert_eq!(release_identity(t, None, None), "  version: ?\n  tag: ?");
+    }
+
+    /// Continuations align under the text, not under the number, so a
+    /// wrapped step reads as one instruction.
+    #[test]
+    fn steps_and_notes_align() {
+        let t = Theme::plain();
+        assert_eq!(
+            step(t, 2, &["first line", "second line"]),
+            "  2. first line\n     second line"
+        );
+        assert_eq!(step(t, 1, &["alone"]), "  1. alone");
+        assert_eq!(note(&["a", "b"]), "     a\n     b");
+        assert_eq!(
+            note_url(t, "https://example.com"),
+            "     https://example.com"
+        );
+    }
+
+    #[test]
+    fn plural_says_one_problem_not_one_problems() {
+        assert_eq!(plural(0), "s");
+        assert_eq!(plural(1), "");
+        assert_eq!(plural(2), "s");
     }
 
     #[test]

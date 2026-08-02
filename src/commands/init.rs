@@ -113,7 +113,7 @@ pub fn run(cli: &Cli, args: &InitArgs, theme: Theme) -> Result<()> {
         "{}",
         logger::ok(theme, &format!("wrote {}", config_path.display()))
     );
-    print_next_steps(theme, publish_name.is_some());
+    eprintln!("{}", next_steps(theme, publish_name.is_some()));
 
     Ok(())
 }
@@ -389,68 +389,60 @@ pub fn render_config(prepare: &str, publish: Option<&str>) -> String {
     out
 }
 
-fn print_next_steps(theme: Theme, has_publish: bool) {
-    eprintln!();
-    eprintln!("{}", logger::rule(theme, "Next steps"));
-    eprintln!();
-    eprintln!(
-        "{}",
+/// Render the closing guidance.
+///
+/// Pure, like every other renderer: `init` is the one command nobody can
+/// drive from a test, so the part worth pinning is kept out of the
+/// prompting.
+fn next_steps(theme: Theme, has_publish: bool) -> String {
+    let mut out = vec![
+        String::new(),
+        logger::rule(theme, "Next steps"),
+        String::new(),
         logger::step(
             theme,
             1,
             &[
                 "Edit the generated workflow: replace the placeholder steps",
                 "with your own versioning and changelog tooling.",
-            ]
-        )
-    );
-    eprintln!();
-    eprintln!(
-        "{}",
-        logger::step(theme, 2, &["Run `gh ship validate` to check the setup."])
-    );
-    eprintln!();
-    eprintln!(
-        "{}",
+            ],
+        ),
+        String::new(),
+        logger::step(theme, 2, &["Run `gh ship validate` to check the setup."]),
+        String::new(),
         logger::step(
             theme,
             3,
             &[
                 "Run `gh ship preview` to see the Release PR without",
                 "changing anything.",
-            ]
-        )
-    );
-    eprintln!();
-    eprintln!("{}", logger::warn(theme, "one thing to decide: the token"));
-    eprintln!(
-        "{}",
+            ],
+        ),
+        String::new(),
+        logger::warn(theme, "one thing to decide: the token"),
         logger::note(&[
             "GitHub's default GITHUB_TOKEN cannot trigger other workflows,",
             "so a Release PR it authors will NOT run your CI. If the Release",
             "PR must be tested before merging, add a PAT or GitHub App token",
             "as the `SHIP_TOKEN` secret. The generated workflow already",
             "prefers it when present.",
-        ])
-    );
-    eprintln!(
-        "{}",
+        ]),
         logger::note_url(
             theme,
-            "https://noirbizarre.github.io/gh-ship/workflows/#tokens"
-        )
-    );
+            "https://noirbizarre.github.io/gh-ship/workflows/#tokens",
+        ),
+    ];
+
     if has_publish {
-        eprintln!();
-        eprintln!(
-            "{}",
-            logger::note(&[
-                "Your publish workflow uploads assets to the DRAFT release;",
-                "gh-ship undrafts it only after that workflow succeeds.",
-            ])
-        );
+        out.push(String::new());
+        out.push(logger::note(&[
+            "Your publish workflow uploads assets to the DRAFT release;",
+            "gh-ship undrafts it only after that workflow succeeds.",
+        ]));
     }
-    eprintln!();
+    out.push(String::new());
+
+    out.join("\n")
 }
 
 /// A filesystem failure, as a diagnostic rather than a bare `io::Error`.
@@ -567,6 +559,30 @@ mod tests {
     fn publish_template_checks_out_the_tag_not_a_branch() {
         assert!(PUBLISH_TEMPLATE.contains("ref: ${{ inputs.tag }}"));
         assert!(PUBLISH_TEMPLATE.contains("--clobber"));
+    }
+
+    /// The closing guidance is the only place the token trap is explained
+    /// to someone who has just run `init`, and the publish note must
+    /// appear only when there is a publish workflow to note.
+    #[test]
+    fn next_steps_explain_the_token_and_the_draft() {
+        let t = Theme::plain();
+
+        let without = next_steps(t, false);
+        assert!(without.contains("gh ship validate"), "{without}");
+        assert!(without.contains("gh ship preview"), "{without}");
+        assert!(without.contains("SHIP_TOKEN"), "{without}");
+        assert!(
+            without.contains("https://noirbizarre.github.io/gh-ship/workflows/#tokens"),
+            "{without}"
+        );
+        assert!(
+            !without.contains("DRAFT release"),
+            "there is no publish workflow to talk about:\n{without}"
+        );
+
+        let with = next_steps(t, true);
+        assert!(with.contains("DRAFT release"), "{with}");
     }
 
     /// `init` must write the slug, never the display name: an emoji name
