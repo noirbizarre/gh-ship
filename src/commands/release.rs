@@ -97,9 +97,19 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
         return Ok(());
     }
 
-    let tag = artifact
-        .tag()
-        .expect("schema guarantees a tag when changed");
+    // The schema requires a tag when `changed` is true, but the artifact is
+    // recovered from a PR body that a human can edit, so this is a diagnostic
+    // rather than an assertion.
+    let tag = artifact.tag().ok_or_else(|| {
+        miette::miette!(
+            code = "ship::release::no_tag",
+            help = "the artifact embedded in the Release PR body reports a change but names \
+                    no tag, which usually means the body was edited. Re-run \
+                    `gh ship prepare` to restore it.",
+            "PR #{} carries a release artifact with no tag",
+            pr.number
+        )
+    })?;
     let version = artifact.version().unwrap_or(tag);
 
     eprintln!("{}", logger::detail(theme, "version", version));
