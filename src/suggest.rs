@@ -5,7 +5,7 @@
 //! `prepare-relase` → `prepare-release` without flagging completely unrelated
 //! names.
 //!
-//! `locate` derives a [`miette::SourceSpan`] for a substring inside a
+//! `span_of_substring` derives a [`miette::SourceSpan`] for a substring inside a
 //! YAML source. Since `serde_norway::Value` does not retain positions,
 //! we fall back to a naïve substring search: it is good enough for
 //! the small, hand-written configs `gh ship` targets, and returns a
@@ -40,12 +40,12 @@ pub fn did_you_mean<S: AsRef<str>>(input: &str, candidates: &[S]) -> Option<Stri
     suggest(input, candidates).map(|s| format!("did you mean `{s}`?"))
 }
 
-/// Locate `needle` in `haystack` and return a [`SourceSpan`] over it.
+/// Span the first occurrence of `needle` in `haystack`.
 ///
 /// Falls back to a zero-length span at offset `0` when the needle is
 /// not present — miette renders such spans without a caret, which is
 /// what we want for diagnostics whose span we cannot recover.
-pub fn locate(haystack: &str, needle: &str) -> SourceSpan {
+pub fn span_of_substring(haystack: &str, needle: &str) -> SourceSpan {
     if needle.is_empty() {
         return SourceSpan::from((0usize, 0usize));
     }
@@ -84,8 +84,8 @@ mod tests {
     }
 
     #[test]
-    fn locate_finds_substring() {
-        let span = locate("workflows:\n  prepare: prepare-relase\n", "prepare-relase");
+    fn span_of_substring_finds_it() {
+        let span = span_of_substring("workflows:\n  prepare: prepare-relase\n", "prepare-relase");
         let offset: usize = span.offset();
         let len = span.len();
         assert_eq!(len, "prepare-relase".len());
@@ -93,8 +93,8 @@ mod tests {
     }
 
     #[test]
-    fn locate_missing_returns_zero() {
-        let span = locate("hello", "world");
+    fn span_of_substring_missing_is_empty() {
+        let span = span_of_substring("hello", "world");
         assert_eq!(span.offset(), 0);
         assert_eq!(span.len(), 0);
     }

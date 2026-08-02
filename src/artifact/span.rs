@@ -24,7 +24,7 @@ pub enum Step {
 /// Parse a JSON Pointer (RFC 6901) into steps.
 ///
 /// Numeric steps stay ambiguous (`/items/0` could be a property named
-/// `0`), so we emit `Prop` and let [`locate`] try the index
+/// `0`), so we emit `Prop` and let [`span_at`] try the index
 /// interpretation when it encounters an array.
 pub fn parse_pointer(pointer: &str) -> Vec<Step> {
     pointer
@@ -35,24 +35,28 @@ pub fn parse_pointer(pointer: &str) -> Vec<Step> {
         .collect()
 }
 
-/// Locate the value at `path` and return its span in `src`.
+/// Span the value at `path` in `src`.
 ///
-/// Returns the span of the whole document when `path` is empty, and
-/// `None` when the path does not resolve.
-pub fn locate(src: &str, path: &[Step]) -> Option<SourceSpan> {
+/// Returns the span of the whole document when `path` is empty, and a
+/// zero-length span at offset `0` when the path does not resolve —
+/// miette renders such spans without a caret, which is what we want for
+/// a diagnostic whose location we could not recover.
+pub fn span_at(src: &str, path: &[Step]) -> SourceSpan {
     let mut sc = Scanner {
         b: src.as_bytes(),
         pos: 0,
     };
     sc.ws();
-    sc.value(path).map(|(s, e)| SourceSpan::from(s..e))
+    sc.value(path)
+        .map(|(s, e)| SourceSpan::from(s..e))
+        .unwrap_or_else(|| SourceSpan::from((0usize, 0usize)))
 }
 
-/// Locate the *key* token of an object property, rather than its value.
+/// Span the *key* token of an object property, rather than its value.
 ///
 /// Used for `additionalProperties` diagnostics, where the useful caret
 /// sits under the unexpected key itself.
-pub fn locate_key(src: &str, parent: &[Step], key: &str) -> Option<SourceSpan> {
+pub fn span_of_key(src: &str, parent: &[Step], key: &str) -> Option<SourceSpan> {
     let mut sc = Scanner {
         b: src.as_bytes(),
         pos: 0,
@@ -301,12 +305,9 @@ mod tests {
     #[test]
     fn locates_top_level_scalar() {
         let src = r#"{"schemaVersion": 1, "changed": true}"#;
+        assert_eq!(text(src, span_at(src, &parse_pointer("/changed"))), "true");
         assert_eq!(
-            text(src, locate(src, &parse_pointer("/changed")).unwrap()),
-            "true"
-        );
-        assert_eq!(
-            text(src, locate(src, &parse_pointer("/schemaVersion")).unwrap()),
+            text(src, span_at(src, &parse_pointer("/schemaVersion"))),
             "1"
         );
     }
@@ -315,11 +316,11 @@ mod tests {
     fn locates_nested_string_with_quotes() {
         let src = r#"{"release": {"name": "Big One", "notes": "a\nb"}}"#;
         assert_eq!(
-            text(src, locate(src, &parse_pointer("/release/name")).unwrap()),
+            text(src, span_at(src, &parse_pointer("/release/name"))),
             r#""Big One""#
         );
         assert_eq!(
-            text(src, locate(src, &parse_pointer("/release/notes")).unwrap()),
+            text(src, span_at(src, &parse_pointer("/release/notes"))),
             r#""a\nb""#,
             "escapes must not shift the span"
         );
@@ -329,24 +330,24 @@ mod tests {
     fn locates_whole_object() {
         let src = r#"{"release": {"name": "x"}}"#;
         assert_eq!(
-            text(src, locate(src, &parse_pointer("/release")).unwrap()),
+            text(src, span_at(src, &parse_pointer("/release"))),
             r#"{"name": "x"}"#
         );
-        assert_eq!(text(src, locate(src, &[]).unwrap()), src);
+        assert_eq!(text(src, span_at(src, &[])), src);
     }
 
     #[test]
     fn locates_array_items() {
         let src = r#"{"pull_request": {"labels": ["a", "bb", "ccc"]}}"#;
         let p = parse_pointer("/pull_request/labels/1");
-        assert_eq!(text(src, locate(src, &p).unwrap()), r#""bb""#);
+        assert_eq!(text(src, span_at(src, &p)), r#""bb""#);
     }
 
     #[test]
     fn locates_key_token() {
         let src = "{\n  \"changed\": true,\n  \"bogus\": 1\n}";
         assert_eq!(
-            text(src, locate_key(src, &[], "bogus").unwrap()),
+            text(src, span_of_key(src, &[], "bogus").unwrap()),
             r#""bogus""#
         );
     }
@@ -354,27 +355,29 @@ mod tests {
     #[test]
     fn locates_key_in_nested_object() {
         let src = r#"{"release": {"name": "x", "nope": 1}}"#;
-        let span = locate_key(src, &parse_pointer("/release"), "nope").unwrap();
+        let span = span_of_key(src, &parse_pointer("/release"), "nope").unwrap();
         assert_eq!(text(src, span), r#""nope""#);
     }
 
+    /// An unresolvable path must degrade to a caret-less span rather than
+    /// pointing at something arbitrary.
     #[test]
-    fn missing_paths_return_none() {
+    fn missing_paths_span_nothing() {
         let src = r#"{"a": 1}"#;
-        assert!(locate(src, &parse_pointer("/b")).is_none());
-        assert!(locate(src, &parse_pointer("/a/b")).is_none());
-        assert!(locate_key(src, &[], "zzz").is_none());
+        assert_eq!(span_at(src, &parse_pointer("/b")).len(), 0);
+        assert_eq!(span_at(src, &parse_pointer("/a/b")).len(), 0);
+        assert!(span_of_key(src, &[], "zzz").is_none());
     }
 
     #[test]
     fn handles_multiline_and_unicode() {
         let src = "{\n  \"tag\": \"v1.0.0\",\n  \"emoji\": \"🚀 ship\"\n}";
         assert_eq!(
-            text(src, locate(src, &parse_pointer("/tag")).unwrap()),
+            text(src, span_at(src, &parse_pointer("/tag"))),
             "\"v1.0.0\""
         );
         assert_eq!(
-            text(src, locate(src, &parse_pointer("/emoji")).unwrap()),
+            text(src, span_at(src, &parse_pointer("/emoji"))),
             "\"🚀 ship\""
         );
     }

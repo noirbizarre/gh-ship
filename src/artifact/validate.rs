@@ -185,8 +185,7 @@ pub fn validate_str(name: &str, text: &str) -> Result<Artifact, ArtifactError> {
             return Err(ArtifactError::UnsupportedVersion {
                 found: compact(found),
                 src: src(),
-                span: span::locate(text, &[Step::Prop("schemaVersion".into())])
-                    .unwrap_or_else(|| SourceSpan::from((0, 0))),
+                span: span::span_at(text, &[Step::Prop("schemaVersion".into())]),
                 help,
             });
         }
@@ -238,9 +237,7 @@ fn collect(err: &boon::ValidationError, text: &str, name: &str, out: &mut Vec<Is
     out.push(Issue {
         message,
         src: NamedSource::new(name, text.to_string()).with_language("json"),
-        span: span.unwrap_or_else(|| {
-            span::locate(text, &path).unwrap_or_else(|| SourceSpan::from((0, 0)))
-        }),
+        span: span.unwrap_or_else(|| span::span_at(text, &path)),
         label,
         help,
     });
@@ -291,7 +288,7 @@ fn describe(
                     )
                 });
             // Point at the offending key, not the whole object.
-            let span = names.first().and_then(|n| span::locate_key(text, path, n));
+            let span = names.first().and_then(|n| span::span_of_key(text, path, n));
             (
                 format!(
                     "{at} has unknown field{} {}",

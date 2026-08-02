@@ -49,7 +49,7 @@ impl Source {
     }
 
     fn locate(&self, needle: &str) -> SourceSpan {
-        suggest::locate(&self.text, needle)
+        suggest::span_of_substring(&self.text, needle)
     }
 }
 
