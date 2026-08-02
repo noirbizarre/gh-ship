@@ -13,7 +13,7 @@ mod common;
 
 use common::{GhStub, Repo, with_redactions};
 
-const CONFIG: &str = "version: 1\nworkflows:\n  prepare: prepare-release\n";
+use common::MINIMAL_CONFIG as CONFIG;
 
 const CHANGED_ARTIFACT: &str = r###"{"schemaVersion":1,"changed":true,"version":"1.4.0","tag":"v1.4.0","release":{"notes":"## Changes\n\n* Everything"}}"###;
 
@@ -644,14 +644,21 @@ fn release_can_merge_when_asked() {
     );
     let out = repo.ship(&["release", "--merge"]);
 
-    // The stub keeps reporting OPEN after `pr merge`, so gh-ship stops
-    // at the re-read — which is itself the correct, safe behaviour.
     assert!(
         repo.stub.called_with(&["pr merge"]),
         "{:?}",
         repo.stub.calls()
     );
     assert!(out.stderr.contains("merged"), "{}", out.stderr);
+
+    // `--merge` is only useful if the release then proceeds, so assert the
+    // outcome and not merely that `pr merge` was called.
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        repo.stub.called_with(&["release create"]),
+        "{:?}",
+        repo.stub.calls()
+    );
 }
 
 #[test]

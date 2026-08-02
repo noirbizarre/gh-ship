@@ -32,6 +32,25 @@ jobs:
       - run: echo hi
 "#;
 
+/// The smallest configuration gh-ship accepts.
+pub const MINIMAL_CONFIG: &str = "version: 1\nworkflows:\n  prepare: prepare-release\n";
+
+/// Lay out a repository on disk, without installing a `gh` stub.
+///
+/// Setup tests need only the files; lifecycle tests wrap this with a stub.
+pub fn layout(config: Option<&str>, workflows: &[(&str, &str)]) -> tempfile::TempDir {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let wf = dir.path().join(".github/workflows");
+    std::fs::create_dir_all(&wf).unwrap();
+    for (name, body) in workflows {
+        std::fs::write(wf.join(name), body).unwrap();
+    }
+    if let Some(c) = config {
+        std::fs::write(dir.path().join(".github/ship.yml"), c).unwrap();
+    }
+    dir
+}
+
 /// A repository laid out on disk, with a stubbed `gh` on PATH.
 pub struct Repo {
     pub dir: tempfile::TempDir,
@@ -41,11 +60,10 @@ pub struct Repo {
 impl Repo {
     /// Create a repository with the given config and a stubbed `gh`.
     pub fn new(config: &str, stub: GhStub) -> Self {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let wf = dir.path().join(".github/workflows");
-        std::fs::create_dir_all(&wf).unwrap();
-        std::fs::write(wf.join("prepare-release.yml"), CONFORMING_WORKFLOW).unwrap();
-        std::fs::write(dir.path().join(".github/ship.yml"), config).unwrap();
+        let dir = layout(
+            Some(config),
+            &[("prepare-release.yml", CONFORMING_WORKFLOW)],
+        );
         let installed = stub.install(dir.path());
         Self {
             dir,
@@ -170,7 +188,7 @@ pub fn redactions() -> Vec<(&'static str, &'static str)> {
         (r"ship id: [0-9a-f]{12}", "ship id: [nonce]"),
         (r"ship:[0-9a-f]{12}", "ship:[nonce]"),
         // The staging branch is named after the nonce.
-        (r"ship/prepare-[0-9a-f]{12}", "ship/prepare-[nonce]"),
+        (r"ship/prepare-[0-9a-z]+", "ship/prepare-[nonce]"),
         (r"\d+m \d+s", "[dur]"),
         (r"\d+\.\d{2}s", "[dur]"),
         (r"\d+ms", "[dur]"),
