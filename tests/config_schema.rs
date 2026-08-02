@@ -10,13 +10,23 @@
 //!
 //! These tests are that pressure.
 
+use std::path::{Path, PathBuf};
+
 use boon::{Compiler, Schemas};
 
 const SCHEMA_PATH: &str = "schemas/config.v1.schema.json";
 const SCHEMA_URL: &str = "https://noirbizarre.github.io/gh-ship/schema/config/v1.json";
 
+/// Resolve a repository path independently of the current directory.
+///
+/// Cargo happens to run tests from the package root, but nothing guarantees it
+/// and every other test file in this suite already anchors on the manifest.
+fn repo_path(relative: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join(relative)
+}
+
 fn schema_source() -> serde_json::Value {
-    let text = std::fs::read_to_string(SCHEMA_PATH).expect("config schema exists");
+    let text = std::fs::read_to_string(repo_path(SCHEMA_PATH)).expect("config schema exists");
     serde_json::from_str(&text).expect("config schema is valid JSON")
 }
 
@@ -54,7 +64,8 @@ fn schema_id_matches_the_published_url() {
 /// exercised by every release, must satisfy the schema it ships.
 #[test]
 fn our_own_config_validates() {
-    let yaml = std::fs::read_to_string(".github/ship.yml").expect("this repo is gh-ship enabled");
+    let yaml = std::fs::read_to_string(repo_path(".github/ship.yml"))
+        .expect("this repo is gh-ship enabled");
     check(&yaml).expect("gh-ship's own config must satisfy its own schema");
 }
 
@@ -176,11 +187,27 @@ fn every_config_field_is_described() {
             "workflows.{field} is undocumented"
         );
     }
-    for field in ["title", "header", "footer", "labels"] {
+    for field in ["title", "header", "footer", "labels", "reuse"] {
         assert!(
             !props["pull_request"]["properties"][field].is_null(),
             "pull_request.{field} is undocumented"
         );
     }
     assert!(!props["release"]["properties"]["draft"].is_null());
+
+    // Counts, so that *adding* a field to the model without describing it
+    // fails here rather than passing because the list above was not updated.
+    assert_eq!(
+        props.as_object().expect("root properties").len(),
+        6,
+        "a root config field was added or removed without updating this test"
+    );
+    assert_eq!(
+        props["pull_request"]["properties"]
+            .as_object()
+            .expect("pull_request properties")
+            .len(),
+        5,
+        "a `pull_request` field was added or removed without updating this test"
+    );
 }
