@@ -81,7 +81,7 @@ pub struct WorkflowIssue {
 }
 
 #[derive(Debug, Error, Diagnostic)]
-#[error("the gh-ship setup has {n} problem{s}", n = issues.len(), s = if issues.len() == 1 { "" } else { "s" })]
+#[error("the gh-ship setup has {n} problem{s}", n = issues.len(), s = logger::plural(issues.len()))]
 #[diagnostic(
     code(ship::validate::setup),
     help("see https://noirbizarre.github.io/gh-ship/workflows/ for the workflow contract")
@@ -162,14 +162,7 @@ fn check_workflow(
 
     let violations = found.contract_violations_as(role);
     if violations.is_empty() {
-        // Slug first: it is what the config refers to. The display name
-        // is shown only when it says something the slug does not.
-        let described = if found.has_distinct_name() {
-            format!("{} ({})", found.slug(), found.name)
-        } else {
-            found.slug()
-        };
-        eprintln!("{}", logger::detail(theme, role.key(), &described));
+        eprintln!("{}", logger::detail(theme, role.key(), &found.describe()));
         return;
     }
 

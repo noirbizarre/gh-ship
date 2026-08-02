@@ -120,8 +120,20 @@ impl Workflow {
         self.name != self.slug()
     }
 
+    /// Label this workflow for a human.
+    ///
+    /// The slug leads because that is the identifier written to the
+    /// config; the display name follows only when it adds information.
+    pub fn describe(&self) -> String {
+        if self.has_distinct_name() {
+            format!("{}  \u{2014}  {}", self.slug(), self.name)
+        } else {
+            self.slug()
+        }
+    }
+
     /// This workflow as an id/slug pair.
-    pub fn as_ref(&self) -> WorkflowRef {
+    pub fn to_ref(&self) -> WorkflowRef {
         WorkflowRef {
             id: self.id(),
             slug: self.slug(),
@@ -590,7 +602,7 @@ jobs:
 
     #[test]
     fn workflow_ref_displays_the_slug_but_carries_the_id() {
-        let r = wf(CONFORMING).as_ref();
+        let r = wf(CONFORMING).to_ref();
         assert_eq!(r.to_string(), "prepare", "output uses the slug");
         assert_eq!(r.id, "prepare.yml", "the API argument keeps the extension");
     }

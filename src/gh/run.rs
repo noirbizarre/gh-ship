@@ -22,6 +22,7 @@
 //! This is why `run-name` is mandatory and why `gh ship validate`
 //! refuses a workflow without it: the alternative is a guess.
 
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use serde::Deserialize;
@@ -335,12 +336,7 @@ pub fn view(gh: &Gh, id: u64) -> Result<Run, GhError> {
 }
 
 /// Download a run's artifact into `dest`.
-pub fn download_artifact(
-    gh: &Gh,
-    id: u64,
-    name: &str,
-    dest: &std::path::Path,
-) -> Result<(), GhError> {
+pub fn download_artifact(gh: &Gh, id: u64, name: &str, dest: &Path) -> Result<(), GhError> {
     gh.run_scoped(&[
         "run",
         "download",

@@ -52,6 +52,13 @@ pub fn release_identity(theme: Theme, version: Option<&str>, tag: Option<&str>) 
     )
 }
 
+/// The plural `s`, or nothing.
+///
+/// Four messages count problems; they all agree on how to say "1 problem".
+pub fn plural(n: usize) -> &'static str {
+    if n == 1 { "" } else { "s" }
+}
+
 /// A horizontal rule used to frame rendered PR bodies.
 pub fn rule(theme: Theme, label: &str) -> String {
     let bar = "─".repeat(60usize.saturating_sub(label.chars().count() + 3));

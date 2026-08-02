@@ -163,7 +163,7 @@ fn choose_workflow(
 
     let mut select = Select::new(prompt).description("gh-ship will dispatch this workflow");
     for w in conforming {
-        select = select.option(DemandOption::new(w.slug()).label(&option_label(w)));
+        select = select.option(DemandOption::new(w.slug()).label(&w.describe()));
     }
     select = select.option(
         DemandOption::new("__generate__".to_string()).label(&format!(
@@ -197,7 +197,7 @@ fn choose_optional_workflow(
             );
     } else {
         for w in conforming {
-            select = select.option(DemandOption::new(w.slug()).label(&option_label(w)));
+            select = select.option(DemandOption::new(w.slug()).label(&w.describe()));
         }
         select = select
             .option(
@@ -212,18 +212,6 @@ fn choose_optional_workflow(
 
     let picked = select.run().into_diagnostic()?;
     Ok(resolve(picked, conforming))
-}
-
-/// Label a workflow for the prompt.
-///
-/// The slug leads because that is the identifier written to the config;
-/// the display name follows only when it adds information.
-fn option_label(w: &Workflow) -> String {
-    if w.has_distinct_name() {
-        format!("{}  —  {}", w.slug(), w.name)
-    } else {
-        w.slug()
-    }
 }
 
 fn resolve(picked: String, conforming: &[Workflow]) -> Choice {
@@ -260,7 +248,7 @@ fn report_nonconforming(workflows: &[Workflow], theme: Theme) {
             &format!(
                 "{} workflow{} cannot be used by gh-ship yet:",
                 relevant.len(),
-                if relevant.len() == 1 { "" } else { "s" }
+                logger::plural(relevant.len())
             )
         )
     );
@@ -538,13 +526,13 @@ mod tests {
     /// `init` must write the slug, never the display name: an emoji name
     /// in `.github/ship.yml` would be unusable.
     #[test]
-    fn option_label_leads_with_the_slug() {
+    fn describe_leads_with_the_slug() {
         let emoji = workflow::parse(
             Path::new(".github/workflows/prepare-release.yml"),
             "name: 🚢 Prepare Release\non: workflow_dispatch\n",
         )
         .unwrap();
-        let label = option_label(&emoji);
+        let label = emoji.describe();
         assert!(label.starts_with("prepare-release"), "{label}");
         assert!(label.contains("🚢 Prepare Release"), "{label}");
 
@@ -554,7 +542,7 @@ mod tests {
             "name: ci\non: push\n",
         )
         .unwrap();
-        assert_eq!(option_label(&plain), "ci");
+        assert_eq!(plain.describe(), "ci");
     }
 
     /// Both prompts key their options by slug, so `resolve` must find the

@@ -61,7 +61,7 @@ impl Context {
     pub fn workflow(&self, configured: &str) -> WorkflowRef {
         let available = workflow::discover(&self.root);
         workflow::find(&available, configured)
-            .map(|w| w.as_ref())
+            .map(|w| w.to_ref())
             .unwrap_or_else(|| WorkflowRef::unresolved(configured))
     }
 

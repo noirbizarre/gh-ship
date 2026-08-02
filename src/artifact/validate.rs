@@ -78,7 +78,7 @@ pub enum ArtifactError {
         help: String,
     },
 
-    #[error("`{name}` is not a valid release artifact ({n} problem{s})", n = issues.len(), s = if issues.len() == 1 { "" } else { "s" })]
+    #[error("`{name}` is not a valid release artifact ({n} problem{s})", n = issues.len(), s = crate::logger::plural(issues.len()))]
     #[diagnostic(
         code(ship::artifact::invalid),
         help("see https://noirbizarre.github.io/gh-ship/specifications/release-artifact/")
@@ -292,7 +292,7 @@ fn describe(
             (
                 format!(
                     "{at} has unknown field{} {}",
-                    plural(names.len()),
+                    crate::logger::plural(names.len()),
                     join(&quoted)
                 ),
                 "not allowed here".into(),
@@ -397,10 +397,6 @@ fn known_siblings(pointer: &str) -> Vec<&'static str> {
         "/pull_request" => vec!["title", "body", "labels"],
         _ => vec![],
     }
-}
-
-fn plural(n: usize) -> &'static str {
-    if n == 1 { "" } else { "s" }
 }
 
 fn join(items: &[String]) -> String {
