@@ -27,7 +27,7 @@ pub struct BranchRef {
 
 /// Resolve the current (or `--repo`) repository.
 pub fn repository(gh: &Gh) -> Result<Repository, GhError> {
-    gh.json(&[
+    gh.json_scoped(&[
         "repo",
         "view",
         "--json",
@@ -160,6 +160,9 @@ pub fn matching_branches(gh: &Gh, repo: &str, prefix: &str) -> Vec<String> {
         name: String,
     }
 
+    // Unscoped on purpose: `gh api` has no `--repo` flag, and the repository
+    // is already in the URL path. Using the scoped variant here made the sweep
+    // fail silently whenever `-R`/`SHIP_REPO` was set.
     gh.json::<Vec<Ref>, _>(&[
         "api",
         &format!("repos/{repo}/git/matching-refs/heads/{prefix}"),
@@ -217,7 +220,7 @@ pub fn ensure_labels(gh: &Gh, labels: &[String]) -> (Vec<String>, Vec<String>) {
     // A failure to list is not fatal either: assume nothing exists and
     // let the create attempts sort it out.
     let existing: Vec<String> = gh
-        .json::<Vec<Label>, _>(&["label", "list", "--limit", "200", "--json", "name"])
+        .json_scoped::<Vec<Label>, _>(&["label", "list", "--limit", "200", "--json", "name"])
         .map(|labels| labels.into_iter().map(|l| l.name).collect())
         .unwrap_or_default();
 
@@ -305,7 +308,7 @@ const PR_FIELDS: &str = "number,url,title,body,state,mergeCommit,isDraft";
 /// `gh ship release` can still find a PR that has just been merged.
 pub fn find_pull_request(gh: &Gh, head: &str, base: &str) -> Result<Option<PullRequest>, GhError> {
     for state in ["open", "all"] {
-        let prs: Vec<PullRequest> = gh.json(&[
+        let prs: Vec<PullRequest> = gh.json_scoped(&[
             "pr", "list", "--head", head, "--base", base, "--state", state, "--limit", "1",
             "--json", PR_FIELDS,
         ])?;
@@ -318,7 +321,7 @@ pub fn find_pull_request(gh: &Gh, head: &str, base: &str) -> Result<Option<PullR
 
 /// Fetch a PR by number.
 pub fn view_pull_request(gh: &Gh, number: u64) -> Result<PullRequest, GhError> {
-    gh.json(&["pr", "view", &number.to_string(), "--json", PR_FIELDS])
+    gh.json_scoped(&["pr", "view", &number.to_string(), "--json", PR_FIELDS])
 }
 
 /// Open a Release PR.

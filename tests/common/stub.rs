@@ -414,6 +414,14 @@ case "$1 ${2:-}" in
     ;;
 
   "api "*|"api")
+    # `gh api` has no `--repo` flag and exits 1 on an unknown one. Reproducing
+    # that here is what catches a call routed through the scoped helper.
+    case " $* " in
+      *" --repo "*)
+        echo "unknown flag: --repo" >&2
+        exit 1
+        ;;
+    esac
     TARGET="${2:-}"
     case "$TARGET" in
       *"/branches/"*)

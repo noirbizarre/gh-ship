@@ -109,14 +109,34 @@ impl Gh {
     }
 
     /// Run `gh` and parse stdout as JSON.
+    ///
+    /// `--repo` is *not* injected, mirroring [`Self::run`]: `gh api` rejects
+    /// it outright, so each call site opts in via [`Self::json_scoped`].
     pub fn json<T, S>(&self, args: &[S]) -> Result<T, GhError>
     where
         T: serde::de::DeserializeOwned,
         S: AsRef<OsStr>,
     {
-        let out = self.run_scoped(args)?;
+        self.decode(args, false)
+    }
+
+    /// Run `gh` and parse stdout as JSON, injecting `--repo` when configured.
+    pub fn json_scoped<T, S>(&self, args: &[S]) -> Result<T, GhError>
+    where
+        T: serde::de::DeserializeOwned,
+        S: AsRef<OsStr>,
+    {
+        self.decode(args, true)
+    }
+
+    fn decode<T, S>(&self, args: &[S], scoped: bool) -> Result<T, GhError>
+    where
+        T: serde::de::DeserializeOwned,
+        S: AsRef<OsStr>,
+    {
+        let out = self.exec(args, scoped)?;
         serde_json::from_str(&out).map_err(|e| GhError::Decode {
-            args: display_args(args, self.repo.as_deref()),
+            args: display_args(args, scoped.then_some(self.repo.as_deref()).flatten()),
             message: e.to_string(),
         })
     }

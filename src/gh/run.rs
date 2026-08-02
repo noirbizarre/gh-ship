@@ -308,7 +308,7 @@ pub fn wait(
 /// fell off a short page would be the exact failure this design exists
 /// to prevent.
 pub fn list(gh: &Gh, workflow: &WorkflowRef, branch: &str) -> Result<Vec<Run>, GhError> {
-    gh.json(&[
+    gh.json_scoped(&[
         "run",
         "list",
         "--workflow",
@@ -324,7 +324,7 @@ pub fn list(gh: &Gh, workflow: &WorkflowRef, branch: &str) -> Result<Vec<Run>, G
 
 /// Fetch a single run's current state.
 pub fn view(gh: &Gh, id: u64) -> Result<Run, GhError> {
-    gh.json(&[
+    gh.json_scoped(&[
         "run",
         "view",
         &id.to_string(),

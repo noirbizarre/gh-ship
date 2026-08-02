@@ -1174,3 +1174,27 @@ fn no_existing_pr_simply_opens_one() {
     assert!(!repo.stub.called_with(&["pr reopen"]));
     assert!(!repo.stub.called_with(&["pr close"]));
 }
+
+// --- Staging-branch sweep ------------------------------------------------
+
+/// `gh api` has no `--repo` flag, so routing an API call through the scoped
+/// helper makes it fail — and the sweep swallows its errors, so it fails
+/// silently and staging branches pile up unnoticed.
+#[test]
+fn prepare_works_against_an_explicit_repository() {
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new()
+            .artifact(CHANGED_ARTIFACT)
+            .stale_staging_branch("ship/prepare-deadbeef1234"),
+    );
+    let out = repo.ship(&["--repo", "acme/widgets", "prepare"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        repo.stub
+            .called_with(&["api", "git/refs/heads/ship/prepare-deadbeef1234", "DELETE"]),
+        "the sweep must still work under --repo: {:?}",
+        repo.stub.calls()
+    );
+}
