@@ -70,11 +70,7 @@ pub fn run(cli: &Cli, args: &PreviewArgs, theme: Theme) -> Result<()> {
     eprintln!();
     eprintln!(
         "{}",
-        logger::detail(theme, "version", artifact.version().unwrap_or("?"))
-    );
-    eprintln!(
-        "{}",
-        logger::detail(theme, "tag", artifact.tag().unwrap_or("?"))
+        logger::release_identity(theme, artifact.version(), artifact.tag())
     );
     print_rendered(theme, &rendered.title, &rendered.body, &rendered.labels);
     eprintln!(

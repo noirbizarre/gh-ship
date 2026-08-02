@@ -118,11 +118,7 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
     eprintln!();
     eprintln!(
         "{}",
-        logger::detail(theme, "version", artifact.version().unwrap_or("?"))
-    );
-    eprintln!(
-        "{}",
-        logger::detail(theme, "tag", artifact.tag().unwrap_or("?"))
+        logger::release_identity(theme, artifact.version(), artifact.tag())
     );
     eprintln!();
     eprintln!(

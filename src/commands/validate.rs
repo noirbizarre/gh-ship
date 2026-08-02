@@ -47,12 +47,10 @@ fn validate_artifact(path: &Path, theme: Theme) -> Result<()> {
     );
 
     if artifact.changed {
-        if let Some(v) = artifact.version() {
-            eprintln!("{}", logger::detail(theme, "version", v));
-        }
-        if let Some(t) = artifact.tag() {
-            eprintln!("{}", logger::detail(theme, "tag", t));
-        }
+        eprintln!(
+            "{}",
+            logger::release_identity(theme, artifact.version(), artifact.tag())
+        );
         if artifact.is_prerelease() {
             eprintln!("{}", logger::detail(theme, "prerelease", "yes"));
         }

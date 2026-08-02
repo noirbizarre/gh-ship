@@ -224,11 +224,7 @@ fn report(status: &Status, theme: Theme) {
 
     match &status.artifact {
         Some(a) if a.changed => {
-            eprintln!(
-                "{}",
-                logger::detail(theme, "version", a.version().unwrap_or("?"))
-            );
-            eprintln!("{}", logger::detail(theme, "tag", a.tag().unwrap_or("?")));
+            eprintln!("{}", logger::release_identity(theme, a.version(), a.tag()));
         }
         Some(_) => eprintln!(
             "{}",

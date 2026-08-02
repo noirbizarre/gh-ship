@@ -40,6 +40,18 @@ pub fn detail_url(theme: Theme, key: &str, url: &str) -> String {
     format!("  {} {}", theme.key(&format!("{key}:")), theme.url(url))
 }
 
+/// The `version` / `tag` pair identifying a release, as two detail lines.
+///
+/// Four commands report it. `?` stands in for a field the artifact
+/// omitted, so the shape of the output never depends on the artifact.
+pub fn release_identity(theme: Theme, version: Option<&str>, tag: Option<&str>) -> String {
+    format!(
+        "{}\n{}",
+        detail(theme, "version", version.unwrap_or("?")),
+        detail(theme, "tag", tag.unwrap_or("?"))
+    )
+}
+
 /// A horizontal rule used to frame rendered PR bodies.
 pub fn rule(theme: Theme, label: &str) -> String {
     let bar = "─".repeat(60usize.saturating_sub(label.chars().count() + 3));
