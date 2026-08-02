@@ -60,12 +60,12 @@ use miette::Result;
 use gh_ship::artifact::Artifact;
 use gh_ship::cli::{Cli, ReleaseArgs};
 use gh_ship::gh::repo::{self, PullRequest};
-use gh_ship::gh::workflow::SHIP_ID_INPUT;
+use gh_ship::gh::run::{self, ShipId};
 use gh_ship::logger;
 use gh_ship::render;
 use gh_ship::style::Theme;
 
-use super::context::{Context, report_nothing_to_release};
+use super::context::{Context, find_run, report_nothing_to_release, wait_for_run};
 use super::short_sha;
 
 pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
@@ -299,37 +299,22 @@ fn run_publish(ctx: &Context, workflow_name: &str, tag: &str) -> Result<()> {
         )
     );
 
-    let inputs = [("tag", tag.to_string())];
-    let ship_id = gh_ship::gh::run::dispatch(&ctx.gh, &workflow, tag, &inputs)?;
+    // Report before blocking, and reuse the shared find/wait helpers: a
+    // publish that cross-compiles for an hour must look alive throughout,
+    // and it must look the same as every other wait gh-ship does.
     eprintln!(
         "{}",
         logger::action(theme, "dispatching", &format!("{workflow} on {tag}"))
     );
-    eprintln!("{}", logger::detail(theme, SHIP_ID_INPUT, ship_id.as_str()));
 
-    let found = gh_ship::gh::run::find(
-        &ctx.gh,
-        &workflow,
-        tag,
-        &ship_id,
-        gh_ship::gh::run::appear_timeout(),
-        |_| {},
-    )?;
+    let inputs = [("tag", tag.to_string())];
+    let ship_id: ShipId = run::dispatch(&ctx.gh, &workflow, tag, &inputs)?;
+    eprintln!("{}", logger::detail(theme, "ship id", ship_id.as_str()));
+
+    let found = find_run(ctx, &workflow, tag, &ship_id)?;
     eprintln!("{}", logger::detail_url(theme, "run", &found.url));
 
-    let mut last = String::new();
-    gh_ship::gh::run::wait(
-        &ctx.gh,
-        &workflow,
-        &found,
-        gh_ship::gh::run::complete_timeout(),
-        |_, current| {
-            if current.status != last {
-                last = current.status.clone();
-                eprintln!("{}", logger::detail(theme, "status", &current.status));
-            }
-        },
-    )?;
+    wait_for_run(ctx, &workflow, &found)?;
 
     eprintln!("{}", logger::ok(theme, &format!("{workflow} succeeded")));
     Ok(())
