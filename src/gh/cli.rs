@@ -95,17 +95,7 @@ impl Gh {
 
         let display = display_args(args, scoped.then_some(self.repo.as_deref()).flatten());
 
-        let output = cmd.output().map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                GhError::NotFound
-            } else {
-                GhError::Failed {
-                    args: display.clone(),
-                    stderr: e.to_string(),
-                    help: None,
-                }
-            }
-        })?;
+        let output = cmd.output().map_err(|e| spawn_error(&display, &e))?;
 
         if output.status.success() {
             return String::from_utf8(output.stdout).map_err(|e| GhError::Decode {
@@ -129,6 +119,24 @@ impl Gh {
             args: display_args(args, self.repo.as_deref()),
             message: e.to_string(),
         })
+    }
+}
+
+/// Map a failure to *spawn* `gh` onto an error.
+///
+/// Separate from [`classify`], which interprets what `gh` said: this one runs
+/// when `gh` never ran at all. `NotFound` is worth singling out because it means
+/// the extension is installed but its host is not, and the fix is "install the
+/// GitHub CLI" rather than anything about the command.
+fn spawn_error(display: &str, e: &std::io::Error) -> GhError {
+    if e.kind() == std::io::ErrorKind::NotFound {
+        GhError::NotFound
+    } else {
+        GhError::Failed {
+            args: display.to_string(),
+            stderr: e.to_string(),
+            help: None,
+        }
     }
 }
 
@@ -207,6 +215,8 @@ fn display_args<S: AsRef<OsStr>>(args: &[S], repo: Option<&str>) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::io;
+
     use super::*;
 
     #[test]
@@ -299,16 +309,46 @@ mod tests {
         assert_eq!(display_args(&["run", "list"], None), "run list");
     }
 
+    // The two halves of "gh is not installed", tested without touching the
+    // environment. The previous version of this set `PATH` to an empty string
+    // for the duration of the call — process-global state, mutated while the
+    // rest of the suite runs in parallel, and left empty if `PATH` had been
+    // unset to begin with.
+
+    /// A missing binary must produce the actionable error, not a generic one:
+    /// the fix is "install the GitHub CLI", which the message has to say.
     #[test]
-    fn missing_gh_binary_is_reported_clearly() {
-        // An empty PATH guarantees `gh` cannot be found.
-        let gh = Gh::new(None);
-        let saved = std::env::var_os("PATH");
-        unsafe { std::env::set_var("PATH", "") };
-        let result = gh.run(&["repo", "view"]);
-        if let Some(p) = saved {
-            unsafe { std::env::set_var("PATH", p) };
-        }
-        assert!(matches!(result, Err(GhError::NotFound)), "{result:?}");
+    fn a_missing_gh_binary_is_reported_clearly() {
+        let e = spawn_error("repo view", &io::Error::from(io::ErrorKind::NotFound));
+        assert!(matches!(e, GhError::NotFound), "{e:?}");
+
+        let help = miette::Diagnostic::help(&e).expect("NotFound carries help");
+        assert!(help.to_string().contains("cli.github.com"), "{help}");
+    }
+
+    /// Any other spawn failure keeps its original message rather than being
+    /// mislabelled as "not installed".
+    #[test]
+    fn other_spawn_failures_are_not_mistaken_for_a_missing_binary() {
+        let e = spawn_error(
+            "repo view",
+            &io::Error::from(io::ErrorKind::PermissionDenied),
+        );
+        let GhError::Failed { args, stderr, .. } = &e else {
+            panic!("expected Failed, got {e:?}")
+        };
+        assert_eq!(args, "repo view");
+        assert!(!stderr.is_empty());
+    }
+
+    /// The half that belongs to the standard library: a binary that is not on
+    /// `PATH` really does surface as `NotFound`. Asserted against a name that
+    /// cannot exist, rather than by emptying `PATH` for every other test.
+    #[test]
+    fn spawning_an_absent_binary_yields_not_found() {
+        let err = std::process::Command::new("gh-ship-no-such-binary-8f3a1c")
+            .output()
+            .expect_err("this binary cannot exist");
+        assert_eq!(err.kind(), io::ErrorKind::NotFound);
     }
 }
