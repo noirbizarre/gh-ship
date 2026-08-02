@@ -57,9 +57,8 @@
           "default": false
         },
         "make_latest": {
-          "description": "Whether this release should be marked as the repository's latest.",
-          "type": "boolean",
-          "default": true
+          "description": "Whether this release should be marked as the repository's latest. Omitting this is not the same as setting it to true: gh-ship then passes nothing and GitHub applies its own default.",
+          "type": "boolean"
         }
       },
       "patternProperties": { "^x-": true },
@@ -103,6 +102,12 @@
       },
       "then": {
         "required": ["version", "tag"]
+      },
+      "else": {
+        "$comment": "An unchanged release must not identify one.",
+        "not": {
+          "anyOf": [{ "required": ["version"] }, { "required": ["tag"] }]
+        }
       }
     }
   ],

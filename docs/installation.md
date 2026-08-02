@@ -49,6 +49,9 @@ already have `gh` and a token, so installing is one line:
 - Release workflows that declare `on: workflow_dispatch` — see
   [Workflows](workflows.md).
 
+Building from source additionally needs Rust 1.88 or later, the `rust-version`
+declared in `Cargo.toml`.
+
 ## Building from source
 
 You do not need this to use gh-ship, and gh-ship's own workflows no longer do

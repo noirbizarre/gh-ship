@@ -81,7 +81,13 @@ precise error, instead of a confusing failure in gh-ship minutes later.
 | `name` | string | the tag | Release title. |
 | `notes` | string | `""` | Release body, GitHub Flavored Markdown. |
 | `prerelease` | boolean | `false` | Mark as a pre-release. |
-| `make_latest` | boolean | `true` | Mark as the repository's latest release. |
+| `make_latest` | boolean | GitHub's | Mark as the repository's latest release. |
+
+!!! note "Omitting `make_latest` is not the same as setting it to `true`"
+
+    When the field is absent gh-ship passes nothing, so GitHub applies its own
+    default (`legacy`: the release with the highest semver tag wins). Set it
+    explicitly if you need the outcome pinned.
 
 ### `pull_request`
 
@@ -97,7 +103,8 @@ precise error, instead of a confusing failure in gh-ship minutes later.
 
 `changed` is the workflow's answer to "is there anything to release?".
 
-- **`changed: false`** — `version` and `tag` must be omitted. gh-ship prints
+- **`changed: false`** — `version` and `tag` are rejected: promising nothing to
+  release while naming a release is a schema error. gh-ship prints
   `nothing to release`, **exits 0**, and touches no branch, PR, tag or release.
 - **`changed: true`** — `version` and `tag` are required. Promising a release
   without identifying it is a schema error.

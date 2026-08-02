@@ -84,6 +84,25 @@ jobs:
           directory: target/nextest/ci
           report_type: test_results
 
+  # `rust-version` in Cargo.toml is a promise. Without a job that keeps it,
+  # it drifts the first time anyone uses a newer language feature.
+  msrv:
+    name: 🧓 MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Read the MSRV from Cargo.toml
+        id: msrv
+        run: |
+          version=$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Check
+        run: cargo check --all-targets
+
   # The artifact schema is a published contract. Anything that changes it
   # must keep the documented examples and the fixture corpus valid, and
   # must keep the embedded copy identical to the published one.
