@@ -315,7 +315,5 @@ fn run_publish(ctx: &Context, workflow_name: &str, tag: &str) -> Result<()> {
     eprintln!("{}", logger::detail_url(theme, "run", &found.url));
 
     wait_for_run(ctx, &workflow, &found)?;
-
-    eprintln!("{}", logger::ok(theme, &format!("{workflow} succeeded")));
     Ok(())
 }

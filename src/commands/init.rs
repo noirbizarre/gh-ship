@@ -17,7 +17,7 @@ use demand::{Confirm, DemandOption, Select};
 use miette::{IntoDiagnostic, Result};
 
 use gh_ship::cli::{Cli, InitArgs};
-use gh_ship::config::{CONFIG_VERSION, DEFAULT_RELEASE_BRANCH};
+use gh_ship::config::{CONFIG_VERSION, DEFAULT_PR_TITLE, DEFAULT_RELEASE_BRANCH};
 use gh_ship::gh::workflow::{self, Workflow};
 use gh_ship::logger;
 use gh_ship::style::Theme;
@@ -366,9 +366,13 @@ pub fn render_config(prepare: &str, publish: Option<&str>) -> String {
          # {{ release.notes }}.\n\
          #\n\
          # The PR body is: header + the notes your workflow produced + footer.\n\
-         pull_request:\n\
-        \x20 title: \"Release {{ version }}\"\n\
-        \x20 # header: |\n\
+         pull_request:\n",
+    );
+    // The default lives in one place; echoing it as a literal here would
+    // silently drift the day it changes.
+    out.push_str(&format!("  title: \"{DEFAULT_PR_TITLE}\"\n"));
+    out.push_str(
+        "\x20 # header: |\n\
         \x20 #   This PR prepares the next release.\n\
         \x20 # footer: |\n\
         \x20 #   Generated automatically by gh-ship.\n\

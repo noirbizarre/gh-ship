@@ -272,13 +272,36 @@ pub struct Commit {
     pub oid: String,
 }
 
+/// Interpret a pull request `state` string.
+///
+/// GitHub returns it uppercase (`MERGED`), `gh` echoes it in mixed case,
+/// and the `status` command re-exposes it on its own struct — so the
+/// comparison lives here once instead of being re-derived per call site.
+pub mod state {
+    pub fn is_merged(state: &str) -> bool {
+        state.eq_ignore_ascii_case("merged")
+    }
+
+    pub fn is_open(state: &str) -> bool {
+        state.eq_ignore_ascii_case("open")
+    }
+
+    pub fn is_closed(state: &str) -> bool {
+        state.eq_ignore_ascii_case("closed")
+    }
+}
+
 impl PullRequest {
     pub fn is_merged(&self) -> bool {
-        self.state.eq_ignore_ascii_case("merged")
+        state::is_merged(&self.state)
     }
 
     pub fn is_open(&self) -> bool {
-        self.state.eq_ignore_ascii_case("open")
+        state::is_open(&self.state)
+    }
+
+    pub fn is_closed(&self) -> bool {
+        state::is_closed(&self.state)
     }
 
     /// The commit the PR landed as.

@@ -46,6 +46,16 @@ pub struct PullRequestStatus {
     pub merged_sha: Option<String>,
 }
 
+impl PullRequestStatus {
+    fn is_merged(&self) -> bool {
+        repo::state::is_merged(&self.state)
+    }
+
+    fn is_closed(&self) -> bool {
+        repo::state::is_closed(&self.state)
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct RunStatus {
     pub id: u64,
@@ -159,7 +169,7 @@ fn next_step(
         };
     };
 
-    if pr.state.eq_ignore_ascii_case("merged") {
+    if pr.is_merged() {
         return match artifact {
             Some(_) => "run `gh ship release` to tag and publish".into(),
             // Without the embedded artifact there is nothing to release
@@ -171,7 +181,7 @@ fn next_step(
         };
     }
 
-    if pr.state.eq_ignore_ascii_case("closed") {
+    if pr.is_closed() {
         return "the Release PR was closed — run `gh ship prepare` to start again".into();
     }
 
