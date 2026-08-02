@@ -9,7 +9,7 @@
 
   "properties": {
     "$schema": {
-      "description": "Editor metadata only. GH Ship uses `schemaVersion` to decide how to read this document; a mismatch between the two produces a warning, never an error.",
+      "description": "Editor metadata only. gh-ship reads `schemaVersion` to decide how to read this document and ignores this field entirely.",
       "type": "string",
       "format": "uri"
     },

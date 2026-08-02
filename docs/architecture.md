@@ -43,12 +43,17 @@ src/
     run.rs         #   dispatch, correlation, polling
     repo.rs        #   branches, PRs, releases
   commands/        # one module per subcommand
+    context.rs     #   the shared dispatch → wait → validate sequence
   config.rs        # .github/ship.yml
   render.rs        # PR templating and artifact embedding
-  error / style / logger / suggest
+  style / logger / suggest
 schemas/           # the published JSON Schema, embedded via include_str!
 templates/         # workflow templates emitted by `init`
 ```
+
+Errors are defined per module as `thiserror` enums rather than centrally, so
+each carries its own miette diagnostic payload — code, help text and source
+span — next to the code that can raise it.
 
 ## Key mechanisms
 

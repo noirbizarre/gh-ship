@@ -10,13 +10,15 @@ own. It is a [GitHub CLI](https://cli.github.com) extension, and it feels like o
 ```console
 $ gh ship prepare
 ▶ preparing acme/widgets
-  branch: release/next
-▶ dispatching prepare-release.yml on release/next
+▶ staging on ship/prepare-8f2c1a9e4b07 from main
+▶ dispatching prepare-release on ship/prepare-8f2c1a9e4b07
+  ship id: 8f2c1a9e4b07
   run: https://github.com/acme/widgets/actions/runs/42
-▶ waiting for prepare-release.yml
-✔ prepare-release.yml succeeded
+▶ waiting for prepare-release
+✔ prepare-release succeeded
 ▶ downloading ship-release
 ✔ artifact is valid
+▶ updating release/next to a1b2c3d
 ▶ opening Release PR
 ✔ Release PR opened
   pr: https://github.com/acme/widgets/pull/7

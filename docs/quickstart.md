@@ -32,7 +32,7 @@ upload.
 $ gh ship validate
 ✔ .github/ship.yml is valid
   release branch: release/next
-  prepare: prepare-release (prepare-release.yml)
+  prepare: prepare-release (🚀 Prepare Release)
 ✔ workflows satisfy the gh-ship contract
 ```
 

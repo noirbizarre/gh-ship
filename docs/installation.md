@@ -37,8 +37,9 @@ already have `gh` and a token, so installing is one line:
     authentication. The schema is embedded in the binary.
 
     So it is safe as the very first step of any job, and the check itself works
-    on any CI system. This is enforced by a test that runs it under `env -i` with
-    an empty `PATH`.
+    on any CI system. This is enforced by a test that runs it with an empty
+    `PATH`, no token variables, and a working directory that is not a git
+    repository.
 
 ## Requirements
 
