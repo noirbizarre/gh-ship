@@ -163,8 +163,7 @@ fn choose_workflow(
 
     let mut select = Select::new(prompt).description("gh-ship will dispatch this workflow");
     for w in conforming {
-        select =
-            select.option(DemandOption::new(w.id()).label(&format!("{} ({})", w.name, w.id())));
+        select = select.option(DemandOption::new(w.slug()).label(&option_label(w)));
     }
     select = select.option(
         DemandOption::new("__generate__".to_string()).label(&format!(
@@ -552,5 +551,32 @@ mod tests {
         )
         .unwrap();
         assert_eq!(option_label(&plain), "ci");
+    }
+
+    /// Both prompts key their options by slug, so `resolve` must find the
+    /// picked workflow. Keying by filename instead made every pick fall
+    /// through to `Choice::Skip` — and `Skip` is a panic for `prepare`.
+    #[test]
+    fn resolve_matches_the_value_the_prompt_offers() {
+        let w = workflow::parse(
+            Path::new(".github/workflows/prepare-release.yaml"),
+            "name: 🚀 Prepare Release\non: workflow_dispatch\n",
+        )
+        .unwrap();
+        let conforming = vec![w.clone()];
+
+        // What `DemandOption::new(...)` is built from must round-trip.
+        match resolve(w.slug(), &conforming) {
+            Choice::Existing(found) => assert_eq!(found.slug(), w.slug()),
+            _ => panic!("the offered value must resolve to the workflow it labels"),
+        }
+        assert!(matches!(
+            resolve("__generate__".into(), &conforming),
+            Choice::Generate
+        ));
+        assert!(matches!(
+            resolve("__skip__".into(), &conforming),
+            Choice::Skip
+        ));
     }
 }
