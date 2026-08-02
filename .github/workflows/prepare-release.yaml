@@ -107,7 +107,14 @@ jobs:
           # Release notes are scratch input for `jq --rawfile`, not a
           # source file. Keep them out of the worktree so `git add -A`
           # cannot commit them.
-          git cliff --unreleased --bump --strip header -o "$RUNNER_TEMP/ship-notes.md"
+          git cliff --unreleased --bump --strip all -o "$RUNNER_TEMP/ship-notes.md"
+
+          # The `## <version> - <date>` heading belongs to CHANGELOG.md. The
+          # Release PR and the GitHub Release both carry the version in their
+          # own title, so drop the first heading and the blank lines ahead of
+          # it. The `0,/^## /` range stops at the first match, leaving later
+          # `##` sections such as New Contributors alone.
+          sed -i -e '0,/^## /{/^## /d}' -e '/./,$!d' "$RUNNER_TEMP/ship-notes.md"
 
       - name: Apply the version
         if: steps.version.outputs.changed == 'true'
