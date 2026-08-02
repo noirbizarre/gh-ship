@@ -70,6 +70,11 @@
           "items": { "type": "string", "minLength": 1 },
           "uniqueItems": true,
           "default": []
+        },
+        "reuse": {
+          "description": "Reuse the existing Release PR instead of opening a new one on every prepare. A closed but unmerged PR is reopened; a merged one is left alone and a new PR is opened. Set to false to close any open Release PR and open a fresh one each time.",
+          "type": "boolean",
+          "default": true
         }
       },
       "additionalProperties": false

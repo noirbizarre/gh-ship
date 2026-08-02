@@ -102,6 +102,19 @@ and what `gh ship init` writes.
 | `header` | template | — | Markdown prepended to the release notes. |
 | `footer` | template | — | Markdown appended after the release notes. |
 | `labels` | list | `[]` | Labels applied to the Release PR. |
+| `reuse` | boolean | `true` | Reuse the existing Release PR instead of opening a new one each time. |
+
+### Reusing the Release PR
+
+By default a release keeps one pull request for its whole life, so its number,
+its comments and its review state survive repeated prepares. A closed but
+unmerged Release PR is reopened rather than replaced; a merged one is left alone
+and a new PR is opened, because that release has shipped.
+
+```yaml
+pull_request:
+  reuse: false   # close the open Release PR and open a fresh one each prepare
+```
 
 The body is assembled as:
 

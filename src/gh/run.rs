@@ -188,8 +188,21 @@ pub fn dispatch(
     branch: &str,
     inputs: &[(&str, String)],
 ) -> Result<ShipId, RunError> {
-    let ship_id = ShipId::generate();
+    dispatch_as(gh, workflow, branch, &ShipId::generate(), inputs)
+}
 
+/// Dispatch with a caller-supplied nonce.
+///
+/// `prepare` stages its work on a branch named after the nonce, so the branch,
+/// the dispatch and the resulting run all carry one identifier. That is what
+/// makes an abandoned staging branch traceable to the run that abandoned it.
+pub fn dispatch_as(
+    gh: &Gh,
+    workflow: &WorkflowRef,
+    branch: &str,
+    ship_id: &ShipId,
+    inputs: &[(&str, String)],
+) -> Result<ShipId, RunError> {
     let mut args: Vec<String> = vec![
         "workflow".into(),
         "run".into(),
@@ -207,7 +220,7 @@ pub fn dispatch(
     }
 
     gh.run_scoped(&args)?;
-    Ok(ship_id)
+    Ok(ship_id.clone())
 }
 
 /// Poll until a run carrying `ship_id` appears.

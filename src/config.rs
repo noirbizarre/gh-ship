@@ -116,6 +116,18 @@ pub struct PullRequestConfig {
     /// Labels applied to the Release PR.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub labels: Vec<String>,
+
+    /// Reuse the existing Release PR rather than opening a new one each time.
+    ///
+    /// On by default, so a release under review keeps its number, its comments
+    /// and its review state across repeated prepares. A closed-but-unmerged PR
+    /// is reopened; a merged one is left alone and a new PR is opened, since
+    /// that release has shipped.
+    ///
+    /// Set to `false` to close any open Release PR and open a fresh one on
+    /// every prepare.
+    #[serde(default = "default_true")]
+    pub reuse: bool,
 }
 
 /// GitHub Release behaviour.
@@ -151,6 +163,7 @@ impl Default for PullRequestConfig {
             header: None,
             footer: None,
             labels: Vec::new(),
+            reuse: true,
         }
     }
 }
@@ -387,6 +400,7 @@ release:
             Some("Heads up.\n")
         );
         assert_eq!(c.settings.pull_request.labels, ["release", "automated"]);
+        assert!(c.settings.pull_request.reuse, "reuse defaults to true");
         assert!(!c.settings.release.draft);
     }
 

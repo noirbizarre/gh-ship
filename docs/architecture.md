@@ -110,6 +110,31 @@ re-uploading it — which would push release payloads through whatever machine r
 `gh ship release`. The ordering below is the price of notes fidelity, not an
 accident.
 
+### Staging the release commit
+
+`prepare` does not build the release commit on the release branch. It cuts a
+throwaway branch from the base, dispatches the prepare workflow there, and then
+moves the release branch onto the resulting commit in a single update.
+
+The obvious alternative — reset the release branch to its base and let the
+workflow rebuild it in place — was tried, and closes the Release PR. GitHub
+closes a pull request whose head becomes contained in its base, and a branch
+reset to its base is exactly that. Every prepare closed the Release PR and
+opened a replacement.
+
+Staging avoids the empty state: the release branch moves from its previous
+release commit straight to the new one, and is never equal to the base.
+
+It also fixes a subtler problem. `workflow_dispatch` reads the workflow
+definition from the ref it is given, so dispatching on the release branch meant a
+stale branch ran a stale copy of the workflow — the sort of thing that produces
+"I fixed it, and it still fails". The staging branch is cut from the base, so the
+definition is always current.
+
+Staging branches are named `ship/prepare-<nonce>`, sharing the correlation nonce
+with the dispatch and the run, and are deleted once the release branch has moved.
+A run that fails part-way leaves one behind, so each prepare sweeps them first.
+
 ### Draft-first releases
 
 Tag the merge commit → create the release as a draft → dispatch the publish

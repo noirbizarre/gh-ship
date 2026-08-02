@@ -95,6 +95,20 @@ pub fn run_workflow(
     branch: &str,
     inputs: &[(&str, String)],
 ) -> Result<Artifact> {
+    run_workflow_as(ctx, workflow_name, branch, &ShipId::generate(), inputs)
+}
+
+/// As [`run_workflow`], with a caller-supplied nonce.
+///
+/// `prepare` names its staging branch after the nonce, so it has to choose the
+/// value before dispatching.
+pub fn run_workflow_as(
+    ctx: &Context,
+    workflow_name: &str,
+    branch: &str,
+    ship_id: &ShipId,
+    inputs: &[(&str, String)],
+) -> Result<Artifact> {
     let theme = &ctx.theme;
 
     let resolved = ctx.workflow(workflow_name);
@@ -104,7 +118,7 @@ pub fn run_workflow(
         logger::action(theme, "dispatching", &format!("{resolved} on {branch}"))
     );
 
-    let ship_id = run::dispatch(&ctx.gh, &resolved, branch, inputs)?;
+    let ship_id = run::dispatch_as(&ctx.gh, &resolved, branch, ship_id, inputs)?;
     eprintln!("{}", logger::detail(theme, "ship id", ship_id.as_str()));
 
     let found = find_run(ctx, &resolved, branch, &ship_id)?;

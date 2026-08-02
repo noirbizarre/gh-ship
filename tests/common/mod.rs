@@ -169,6 +169,8 @@ pub fn redactions() -> Vec<(&'static str, &'static str)> {
     vec![
         (r"ship id: [0-9a-f]{12}", "ship id: [nonce]"),
         (r"ship:[0-9a-f]{12}", "ship:[nonce]"),
+        // The staging branch is named after the nonce.
+        (r"ship/prepare-[0-9a-f]{12}", "ship/prepare-[nonce]"),
         (r"\d+m \d+s", "[dur]"),
         (r"\d+\.\d{2}s", "[dur]"),
         (r"\d+ms", "[dur]"),

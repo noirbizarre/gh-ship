@@ -285,59 +285,8 @@ fn prepare_creates_the_release_branch_when_missing() {
     );
 }
 
-/// The regression that made every prepare after the first a silent no-op: an
-/// existing release branch was reused untouched, so it drifted behind the base
-/// and the changelog was regenerated from stale history.
 #[test]
-fn prepare_resets_an_existing_release_branch_to_base() {
-    let repo = Repo::new(
-        CONFIG,
-        GhStub::new().branch_exists(true).artifact(CHANGED_ARTIFACT),
-    );
-    let out = repo.ship(&["prepare"]);
-
-    assert_eq!(out.code, 0, "{}", out.stderr);
-    assert!(
-        repo.stub
-            .called_with(&["git/refs/heads/release/next", "PATCH", "force=true"]),
-        "an existing branch must be forced back to the base: {:?}",
-        repo.stub.calls()
-    );
-    assert!(
-        !repo.stub.called_with(&["git/refs", "POST"]),
-        "it exists, so it must not be recreated"
-    );
-    assert!(
-        out.stderr.contains("resetting release/next to main"),
-        "{}",
-        out.stderr
-    );
-}
-
-/// The reset is worthless if it happens after the workflow has already read the
-/// branch.
-#[test]
-fn the_reset_happens_before_the_workflow_is_dispatched() {
-    let repo = Repo::new(
-        CONFIG,
-        GhStub::new().branch_exists(true).artifact(CHANGED_ARTIFACT),
-    );
-    repo.ship(&["prepare"]);
-
-    let calls = repo.stub.calls();
-    let reset = calls.iter().position(|c| c.contains("PATCH"));
-    let dispatch = calls.iter().position(|c| c.starts_with("workflow run"));
-
-    assert!(reset.is_some(), "no reset: {calls:?}");
-    assert!(dispatch.is_some(), "no dispatch: {calls:?}");
-    assert!(
-        reset < dispatch,
-        "the branch must be current before the workflow reads it: {calls:?}"
-    );
-}
-
-#[test]
-fn prepare_creates_rather_than_resets_a_missing_branch() {
+fn a_missing_release_branch_is_created_at_the_staged_commit() {
     let repo = Repo::new(
         CONFIG,
         GhStub::new()
@@ -347,10 +296,10 @@ fn prepare_creates_rather_than_resets_a_missing_branch() {
     let out = repo.ship(&["prepare"]);
 
     assert_eq!(out.code, 0, "{}", out.stderr);
-    assert!(repo.stub.called_with(&["git/refs", "POST"]));
     assert!(
-        !repo.stub.called_with(&["PATCH"]),
-        "nothing to reset when the branch did not exist: {:?}",
+        repo.stub
+            .called_with(&["git/refs", "POST", "refs/heads/release/next"]),
+        "{:?}",
         repo.stub.calls()
     );
 }
@@ -1108,4 +1057,120 @@ fn the_publish_workflow_is_dispatched_on_the_tag() {
         tagged < dispatched,
         "the ref must exist before it is dispatched on: {calls:?}"
     );
+}
+
+// --- pull_request.reuse ---------------------------------------------------
+
+const REUSE_OFF: &str = r#"
+version: 1
+workflows:
+  prepare: prepare-release
+pull_request:
+  reuse: false
+"#;
+
+#[test]
+fn reuse_updates_an_open_release_pr_in_place() {
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new().pr_state("OPEN").artifact(CHANGED_ARTIFACT),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        repo.stub.called_with(&["pr edit"]),
+        "{:?}",
+        repo.stub.calls()
+    );
+    assert!(!repo.stub.called_with(&["pr create"]));
+    assert!(
+        !repo.stub.called_with(&["pr reopen"]),
+        "it was never closed"
+    );
+}
+
+/// Three Release PRs were closed by the reset bug. The next prepare must
+/// recover the last one rather than open a fourth.
+#[test]
+fn reuse_reopens_a_closed_release_pr() {
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new().pr_state("CLOSED").artifact(CHANGED_ARTIFACT),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        repo.stub.called_with(&["pr reopen"]),
+        "a closed Release PR must be reopened, not replaced: {:?}",
+        repo.stub.calls()
+    );
+    assert!(repo.stub.called_with(&["pr edit"]));
+    assert!(
+        !repo.stub.called_with(&["pr create"]),
+        "no second PR: {:?}",
+        repo.stub.calls()
+    );
+    assert!(out.stderr.contains("reopening"), "{}", out.stderr);
+}
+
+/// A merged PR belongs to a release that already shipped; reopening it would
+/// resurrect it.
+#[test]
+fn reuse_never_touches_a_merged_release_pr() {
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new()
+            .pr_state("MERGED")
+            .merge_commit("abc1234")
+            .release_exists(true)
+            .artifact(CHANGED_ARTIFACT),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(!repo.stub.called_with(&["pr reopen"]));
+    assert!(!repo.stub.called_with(&["pr edit"]));
+    assert!(
+        repo.stub.called_with(&["pr create"]),
+        "a shipped release starts a new PR: {:?}",
+        repo.stub.calls()
+    );
+}
+
+#[test]
+fn reuse_false_closes_the_open_pr_and_opens_a_new_one() {
+    let repo = Repo::new(
+        REUSE_OFF,
+        GhStub::new().pr_state("OPEN").artifact(CHANGED_ARTIFACT),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    let calls = repo.stub.calls();
+    let closed = calls.iter().position(|c| c.starts_with("pr close"));
+    let created = calls.iter().position(|c| c.starts_with("pr create"));
+
+    assert!(closed.is_some(), "the old PR must be retired: {calls:?}");
+    assert!(created.is_some(), "{calls:?}");
+    assert!(
+        closed < created,
+        "close before opening its successor: {calls:?}"
+    );
+    assert!(!repo.stub.called_with(&["pr edit"]));
+}
+
+#[test]
+fn no_existing_pr_simply_opens_one() {
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new().pr_exists(false).artifact(CHANGED_ARTIFACT),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(repo.stub.called_with(&["pr create"]));
+    assert!(!repo.stub.called_with(&["pr reopen"]));
+    assert!(!repo.stub.called_with(&["pr close"]));
 }

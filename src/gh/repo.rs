@@ -129,6 +129,49 @@ pub fn reset_branch(gh: &Gh, repo: &str, branch: &str, sha: &str) -> Result<(), 
     .map(|_| ())
 }
 
+/// Delete a branch, ignoring one that is already gone.
+pub fn delete_branch(gh: &Gh, repo: &str, branch: &str) -> Result<(), GhError> {
+    match gh.run(&[
+        "api",
+        &format!("repos/{repo}/git/refs/heads/{branch}"),
+        "--method",
+        "DELETE",
+        "--silent",
+    ]) {
+        Ok(_) => Ok(()),
+        // Already deleted is the desired state, not a failure.
+        Err(GhError::Failed { stderr, .. })
+            if stderr.contains("404") || stderr.contains("Reference does not exist") =>
+        {
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Branch names starting with `prefix`.
+///
+/// Used to sweep abandoned staging branches. A failure to list is not fatal:
+/// housekeeping should never be the reason a release cannot proceed.
+pub fn matching_branches(gh: &Gh, repo: &str, prefix: &str) -> Vec<String> {
+    #[derive(Deserialize)]
+    struct Ref {
+        #[serde(rename = "ref")]
+        name: String,
+    }
+
+    gh.json::<Vec<Ref>, _>(&[
+        "api",
+        &format!("repos/{repo}/git/matching-refs/heads/{prefix}"),
+    ])
+    .map(|refs| {
+        refs.into_iter()
+            .filter_map(|r| r.name.strip_prefix("refs/heads/").map(str::to_string))
+            .collect()
+    })
+    .unwrap_or_default()
+}
+
 /// The commit SHA at the tip of a branch.
 pub fn branch_sha(gh: &Gh, repo: &str, branch: &str) -> Result<String, GhError> {
     let out = gh.run(&[
@@ -329,6 +372,22 @@ pub fn update_pull_request(
         args.push(label.clone());
     }
     gh.run_scoped(&args).map(|_| ())
+}
+
+/// Reopen a closed Release PR.
+///
+/// Reopening keeps the PR number, its comments and its review state, which is
+/// the whole point of reusing one: a release under review should not lose that
+/// review because the branch moved.
+pub fn reopen_pull_request(gh: &Gh, number: u64) -> Result<(), GhError> {
+    gh.run_scoped(&["pr", "reopen", &number.to_string()])
+        .map(|_| ())
+}
+
+/// Close a Release PR without merging it.
+pub fn close_pull_request(gh: &Gh, number: u64) -> Result<(), GhError> {
+    gh.run_scoped(&["pr", "close", &number.to_string()])
+        .map(|_| ())
 }
 
 /// Merge a Release PR.

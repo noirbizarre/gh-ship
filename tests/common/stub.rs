@@ -168,6 +168,12 @@ impl GhStub {
         self
     }
 
+    /// Report a leftover staging branch, as an abandoned run would.
+    pub fn stale_staging_branch(mut self, name: &str) -> Self {
+        self.env.insert("STUB_STALE_STAGING".into(), name.into());
+        self
+    }
+
     /// Simulate `gh` being unauthenticated.
     pub fn unauthenticated(mut self) -> Self {
         self.env.insert("STUB_UNAUTHENTICATED".into(), "1".into());
@@ -389,7 +395,7 @@ case "$1 ${2:-}" in
     printf 'https://github.com/%s/pull/7\n' "$REPO"
     ;;
 
-  "pr edit"|"pr merge")
+  "pr edit"|"pr merge"|"pr reopen"|"pr close")
     ;;
 
   "release view")
@@ -416,8 +422,16 @@ case "$1 ${2:-}" in
       *"/git/ref/"*)
         printf 'a1b2c3d4e5f6\n'
         ;;
+      # Staging-branch sweep. Reports one leftover when asked to.
+      *"/git/matching-refs/heads/ship/prepare-"*)
+        if [ -n "${STUB_STALE_STAGING:-}" ]; then
+          printf '[{"ref":"refs/heads/%s"}]\n' "$STUB_STALE_STAGING"
+        else
+          printf '[]\n'
+        fi
+        ;;
       # POST creates a ref (branch or tag); PATCH .../git/refs/heads/<branch>
-      # force-updates one.
+      # force-updates one; DELETE removes one.
       *"/git/refs"*)
         if [ "${STUB_TAG_EXISTS:-0}" = "1" ]; then
           case "$*" in
