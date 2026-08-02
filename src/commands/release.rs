@@ -55,7 +55,8 @@
 //! not on the base branch. gh-ship therefore always reads
 //! `mergeCommit.oid` from the merged PR.
 
-use miette::Result;
+use miette::{Diagnostic, Result};
+use thiserror::Error;
 
 use gh_ship::artifact::Artifact;
 use gh_ship::cli::{Cli, ReleaseArgs};
@@ -68,6 +69,68 @@ use gh_ship::style::Theme;
 use super::context::{Context, dispatch_and_wait, report_nothing_to_release};
 use super::short_sha;
 
+/// Everything that can stop a release before it starts.
+///
+/// These are enumerated rather than raised ad hoc so the whole
+/// `ship::release::*` code namespace is visible in one place.
+#[derive(Debug, Error, Diagnostic)]
+pub enum ReleaseError {
+    #[error("no Release PR found for `{release_branch}` → `{base_branch}`")]
+    #[diagnostic(
+        code(ship::release::no_pr),
+        help("run `gh ship prepare` first, or check `gh ship status`")
+    )]
+    NoPullRequest {
+        release_branch: String,
+        base_branch: String,
+    },
+
+    #[error("PR #{number} does not carry a release artifact")]
+    #[diagnostic(
+        code(ship::release::no_artifact),
+        help(
+            "gh-ship embeds the release artifact in the Release PR body as an HTML comment, and \
+             reads it back here. It is missing, which usually means the body was edited or the PR \
+             was not created by gh-ship. Re-run `gh ship prepare` to restore it."
+        )
+    )]
+    NoArtifact { number: u64 },
+
+    #[error("PR #{number} carries a release artifact with no tag")]
+    #[diagnostic(
+        code(ship::release::no_tag),
+        help(
+            "the artifact embedded in the Release PR body reports a change but names no tag, \
+             which usually means the body was edited. Re-run `gh ship prepare` to restore it."
+        )
+    )]
+    NoTag { number: u64 },
+
+    #[error("could not determine the commit PR #{number} merged as")]
+    #[diagnostic(
+        code(ship::release::no_merge_commit),
+        help(
+            "GitHub reported the PR as merged but returned no merge commit; retry in a moment, \
+             or check `gh ship status`"
+        )
+    )]
+    NoMergeCommit { number: u64 },
+
+    #[error("PR #{number} is `{state}` — it was closed without merging")]
+    #[diagnostic(
+        code(ship::release::pr_closed),
+        help("run `gh ship prepare` to start a new release")
+    )]
+    PullRequestClosed { number: u64, state: String },
+
+    #[error("PR #{number} is still open")]
+    #[diagnostic(
+        code(ship::release::pr_open),
+        help("merge it first, or pass `--merge` to have gh-ship merge it: {url}")
+    )]
+    PullRequestOpen { number: u64, url: String },
+}
+
 pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
     let ctx = Context::load(cli, theme)?;
 
@@ -78,11 +141,10 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
 
     // --- 1. Find the Release PR -----------------------------------------
     let pr = repo::find_pull_request(&ctx.gh, &release_branch, &base_branch)?.ok_or_else(|| {
-        miette::miette!(
-            code = "ship::release::no_pr",
-            help = "run `gh ship prepare` first, or check `gh ship status`",
-            "no Release PR found for `{release_branch}` → `{base_branch}`"
-        )
+        ReleaseError::NoPullRequest {
+            release_branch: release_branch.clone(),
+            base_branch: base_branch.clone(),
+        }
     })?;
 
     // --- 2. Recover the artifact ----------------------------------------
@@ -100,16 +162,9 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
     // The schema requires a tag when `changed` is true, but the artifact is
     // recovered from a PR body that a human can edit, so this is a diagnostic
     // rather than an assertion.
-    let tag = artifact.tag().ok_or_else(|| {
-        miette::miette!(
-            code = "ship::release::no_tag",
-            help = "the artifact embedded in the Release PR body reports a change but names \
-                    no tag, which usually means the body was edited. Re-run \
-                    `gh ship prepare` to restore it.",
-            "PR #{} carries a release artifact with no tag",
-            pr.number
-        )
-    })?;
+    let tag = artifact
+        .tag()
+        .ok_or(ReleaseError::NoTag { number: pr.number })?;
     let version = artifact.version().unwrap_or(tag);
 
     eprintln!("{}", logger::detail(theme, "version", version));
@@ -118,15 +173,9 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
     // --- 3. Ensure the PR is merged -------------------------------------
     let pr = ensure_merged(&ctx, pr, args.merge)?;
 
-    let target = pr.merged_sha().ok_or_else(|| {
-        miette::miette!(
-            code = "ship::release::no_merge_commit",
-            help = "GitHub reported the PR as merged but returned no merge commit; \
-                    retry in a moment, or check `gh ship status`",
-            "could not determine the commit PR #{} merged as",
-            pr.number
-        )
-    })?;
+    let target = pr
+        .merged_sha()
+        .ok_or(ReleaseError::NoMergeCommit { number: pr.number })?;
     eprintln!("{}", logger::detail(theme, "merged as", short_sha(target)));
 
     // --- 4. Tag the merge commit -----------------------------------------
@@ -190,17 +239,8 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
 
 /// Read the artifact back out of the Release PR body.
 fn recover_artifact(pr: &PullRequest) -> Result<Artifact> {
-    render::extract_artifact(&pr.body).ok_or_else(|| {
-        miette::miette!(
-            code = "ship::release::no_artifact",
-            help = "gh-ship embeds the release artifact in the Release PR body as an HTML \
-                    comment, and reads it back here. It is missing, which usually means the \
-                    body was edited or the PR was not created by gh-ship. Re-run \
-                    `gh ship prepare` to restore it.",
-            "PR #{} does not carry a release artifact",
-            pr.number
-        )
-    })
+    render::extract_artifact(&pr.body)
+        .ok_or_else(|| ReleaseError::NoArtifact { number: pr.number }.into())
 }
 
 /// Make sure the Release PR is merged, merging it if asked to.
@@ -212,25 +252,19 @@ fn ensure_merged(ctx: &Context, pr: PullRequest, merge: bool) -> Result<PullRequ
     }
 
     if !pr.is_open() {
-        return Err(miette::miette!(
-            code = "ship::release::pr_closed",
-            help = "run `gh ship prepare` to start a new release",
-            "PR #{} is `{}` — it was closed without merging",
-            pr.number,
-            pr.state
-        ));
+        return Err(ReleaseError::PullRequestClosed {
+            number: pr.number,
+            state: pr.state.clone(),
+        }
+        .into());
     }
 
     if !merge {
-        return Err(miette::miette!(
-            code = "ship::release::pr_open",
-            help = format!(
-                "merge it first, or pass `--merge` to have gh-ship merge it: {}",
-                pr.url
-            ),
-            "PR #{} is still open",
-            pr.number
-        ));
+        return Err(ReleaseError::PullRequestOpen {
+            number: pr.number,
+            url: pr.url.clone(),
+        }
+        .into());
     }
 
     eprintln!(

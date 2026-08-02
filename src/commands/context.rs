@@ -10,7 +10,8 @@ use std::path::PathBuf;
 
 use miette::Result;
 
-use gh_ship::artifact::{ARTIFACT_FILE, ARTIFACT_NAME, Artifact, validate};
+use gh_ship::artifact::validate::{self, ArtifactError};
+use gh_ship::artifact::{ARTIFACT_FILE, ARTIFACT_NAME, Artifact};
 use gh_ship::cli::Cli;
 use gh_ship::config::Config;
 use gh_ship::gh::repo::{self, Repository};
@@ -213,50 +214,38 @@ pub(crate) fn wait_for_run(ctx: &Context, workflow: &WorkflowRef, found: &Run) -
 /// Download and validate the release artifact produced by a run.
 fn fetch_artifact(ctx: &Context, finished: &Run) -> Result<Artifact> {
     let theme = ctx.theme;
-    let dir = tempfile::tempdir().map_err(|e| {
-        miette::miette!(
-            code = "ship::artifact::tempdir",
-            "could not create a temporary directory: {e}"
-        )
-    })?;
+    let dir = tempfile::tempdir().map_err(|source| ArtifactError::Tempdir { source })?;
 
     eprintln!("{}", logger::action(theme, "downloading", ARTIFACT_NAME));
 
     run::download_artifact(&ctx.gh, finished.id, ARTIFACT_NAME, dir.path()).map_err(|e| {
-        miette::miette!(
-            code = "ship::artifact::download",
-            help = format!(
+        ArtifactError::Download {
+            message: e.to_string(),
+            help: format!(
                 "the run succeeded but produced no `{ARTIFACT_NAME}` artifact. A conforming \
                  workflow must upload `{ARTIFACT_FILE}` under that name — see {}. Run: {}",
                 "https://noirbizarre.github.io/gh-ship/specifications/release-artifact/",
                 finished.url
             ),
-            "could not download the `{ARTIFACT_NAME}` artifact: {e}"
-        )
+        }
     })?;
 
     let path = dir.path().join(ARTIFACT_FILE);
     if !path.exists() {
-        return Err(miette::miette!(
-            code = "ship::artifact::missing_file",
-            help = format!(
+        return Err(ArtifactError::MissingFile {
+            help: format!(
                 "the `{ARTIFACT_NAME}` artifact does not contain `{ARTIFACT_FILE}`. \
                  The filename is part of the protocol. Run: {}",
                 finished.url
             ),
-            "`{ARTIFACT_FILE}` not found in the artifact"
-        ));
+        }
+        .into());
     }
 
     // Report the artifact under its protocol name rather than the
     // temporary path it happens to occupy: the user never chose that
     // path and it means nothing to them.
-    let text = std::fs::read_to_string(&path).map_err(|e| {
-        miette::miette!(
-            code = "ship::artifact::read",
-            "could not read the downloaded `{ARTIFACT_FILE}`: {e}"
-        )
-    })?;
+    let text = std::fs::read_to_string(&path).map_err(|source| ArtifactError::Read { source })?;
     let artifact = validate::validate_str(ARTIFACT_FILE, &text)?;
     eprintln!("{}", logger::ok(theme, "artifact is valid"));
     Ok(artifact)

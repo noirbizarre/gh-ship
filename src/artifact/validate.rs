@@ -11,13 +11,13 @@
 //! 4. **Deserialize** — cannot realistically fail after step 3, but is
 //!    reported honestly if it does.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use miette::{Diagnostic, NamedSource, SourceSpan};
 use thiserror::Error;
 
 use super::span::{self, Step};
-use super::{Artifact, SCHEMA_VERSION};
+use super::{ARTIFACT_FILE, ARTIFACT_NAME, Artifact, SCHEMA_VERSION};
 
 /// A single schema violation, rendered as its own miette snippet.
 #[derive(Debug, Error, Diagnostic)]
@@ -37,7 +37,7 @@ pub struct Issue {
 /// Everything that can go wrong reading a `ship.release.json`.
 #[derive(Debug, Error, Diagnostic)]
 pub enum ArtifactError {
-    #[error("failed to read `{path}`")]
+    #[error("failed to read `{}`", path.display())]
     #[diagnostic(
         code(ship::artifact::io),
         help(
@@ -45,12 +45,12 @@ pub enum ArtifactError {
         )
     )]
     Io {
-        path: String,
+        path: PathBuf,
         #[source]
         source: std::io::Error,
     },
 
-    #[error("invalid JSON in `{path}`: {message}")]
+    #[error("invalid JSON in `{name}`: {message}")]
     #[diagnostic(
         code(ship::artifact::json),
         help(
@@ -58,7 +58,7 @@ pub enum ArtifactError {
         )
     )]
     Json {
-        path: String,
+        name: String,
         message: String,
         #[source_code]
         src: NamedSource<String>,
@@ -78,15 +78,37 @@ pub enum ArtifactError {
         help: String,
     },
 
-    #[error("`{path}` is not a valid release artifact ({n} problem{s})", n = issues.len(), s = if issues.len() == 1 { "" } else { "s" })]
+    #[error("`{name}` is not a valid release artifact ({n} problem{s})", n = issues.len(), s = if issues.len() == 1 { "" } else { "s" })]
     #[diagnostic(
         code(ship::artifact::invalid),
         help("see https://noirbizarre.github.io/gh-ship/specifications/release-artifact/")
     )]
     Invalid {
-        path: String,
+        name: String,
         #[related]
         issues: Vec<Issue>,
+    },
+
+    #[error("could not create a temporary directory: {source}")]
+    #[diagnostic(code(ship::artifact::tempdir))]
+    Tempdir {
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("could not download the `{ARTIFACT_NAME}` artifact: {message}")]
+    #[diagnostic(code(ship::artifact::download), help("{help}"))]
+    Download { message: String, help: String },
+
+    #[error("`{ARTIFACT_FILE}` not found in the artifact")]
+    #[diagnostic(code(ship::artifact::missing_file), help("{help}"))]
+    MissingFile { help: String },
+
+    #[error("could not read the downloaded `{ARTIFACT_FILE}`: {source}")]
+    #[diagnostic(code(ship::artifact::read))]
+    Read {
+        #[source]
+        source: std::io::Error,
     },
 }
 
@@ -121,12 +143,11 @@ impl ArtifactError {
 
 /// Validate an artifact read from `path`.
 pub fn validate_file(path: &Path) -> Result<Artifact, ArtifactError> {
-    let display = path.display().to_string();
     let text = std::fs::read_to_string(path).map_err(|source| ArtifactError::Io {
-        path: display.clone(),
+        path: path.to_path_buf(),
         source,
     })?;
-    validate_str(&display, &text)
+    validate_str(&path.display().to_string(), &text)
 }
 
 /// Validate artifact text that came from somewhere other than a file
@@ -136,7 +157,7 @@ pub fn validate_str(name: &str, text: &str) -> Result<Artifact, ArtifactError> {
 
     // --- 1. Parse --------------------------------------------------------
     let value: serde_json::Value = serde_json::from_str(text).map_err(|e| ArtifactError::Json {
-        path: name.to_string(),
+        name: name.to_string(),
         message: e.to_string(),
         src: src(),
         span: line_col_to_span(text, e.line(), e.column()),
@@ -187,14 +208,14 @@ pub fn validate_str(name: &str, text: &str) -> Result<Artifact, ArtifactError> {
             });
         }
         return Err(ArtifactError::Invalid {
-            path: name.to_string(),
+            name: name.to_string(),
             issues,
         });
     }
 
     // --- 4. Deserialize --------------------------------------------------
     serde_json::from_value(value).map_err(|e| ArtifactError::Json {
-        path: name.to_string(),
+        name: name.to_string(),
         message: e.to_string(),
         src: src(),
         span: SourceSpan::from((0, 0)),

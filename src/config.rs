@@ -33,15 +33,19 @@ pub struct Config {
 }
 
 /// The raw configuration text and its origin, kept for diagnostics.
+///
+/// `name` is what the diagnostic shows, not necessarily a filesystem
+/// path: configuration is also parsed from strings in tests and from
+/// embedded sources.
 #[derive(Debug, Clone, Default)]
 pub struct Source {
-    pub path: String,
+    pub name: String,
     pub text: String,
 }
 
 impl Source {
     fn named(&self) -> NamedSource<String> {
-        NamedSource::new(&self.path, self.text.clone()).with_language("yaml")
+        NamedSource::new(&self.name, self.text.clone()).with_language("yaml")
     }
 
     fn locate(&self, needle: &str) -> SourceSpan {
@@ -192,10 +196,10 @@ pub enum ConfigError {
         source: std::io::Error,
     },
 
-    #[error("invalid YAML in `{path}`: {message}")]
+    #[error("invalid YAML in `{name}`: {message}")]
     #[diagnostic(code(ship::config::parse))]
     Parse {
-        path: String,
+        name: String,
         message: String,
         #[source_code]
         src: NamedSource<String>,
@@ -247,16 +251,16 @@ impl Config {
     }
 
     /// Parse configuration from text.
-    pub fn parse(path: &str, text: &str) -> Result<Self, ConfigError> {
+    pub fn parse(name: &str, text: &str) -> Result<Self, ConfigError> {
         let source = Source {
-            path: path.to_string(),
+            name: name.to_string(),
             text: text.to_string(),
         };
 
         let settings: Settings = serde_norway::from_str(text).map_err(|e| {
             let message = e.to_string();
             ConfigError::Parse {
-                path: path.to_string(),
+                name: name.to_string(),
                 help: parse_help(&message),
                 message,
                 src: source.named(),
