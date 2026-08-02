@@ -35,7 +35,7 @@ body = """
         ## [{{ version }}]\
           ({{ self::remote_url() }}/compare/{{ previous.version }}..{{ version }}) - {{ timestamp | date(format="%Y-%m-%d") }}
     {% else %}\
-        ## [{{ version }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+        ## {{ version }} - {{ timestamp | date(format="%Y-%m-%d") }}
     {% endif %}\
 {% else %}\
     ## [unreleased]
