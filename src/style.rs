@@ -41,15 +41,18 @@ impl Theme {
 
     /// Pick a theme automatically from the environment.
     ///
-    /// Returns [`Self::colored`] when stderr is a terminal and the
-    /// `NO_COLOR` environment variable is unset (or empty); otherwise
-    /// returns [`Self::plain`]. This honours the de-facto
-    /// <https://no-color.org/> convention.
+    /// See [`decide`] for the precedence, which this only feeds.
     pub fn auto() -> Self {
-        let no_color = std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
-        let is_tty = std::io::stderr().is_terminal();
+        let var = |name: &str| std::env::var(name).ok();
         Self {
-            colored: !no_color && is_tty,
+            colored: decide(
+                var("NO_COLOR").as_deref(),
+                var("CLICOLOR").as_deref(),
+                var("CLICOLOR_FORCE").as_deref(),
+                var("TERM").as_deref(),
+                var("GITHUB_ACTIONS").as_deref(),
+                std::io::stderr().is_terminal(),
+            ),
         }
     }
 
@@ -130,6 +133,68 @@ impl Theme {
     }
 }
 
+/// Decide whether to emit ANSI escapes.
+///
+/// Pure, and takes its inputs rather than reading them, so every rule below can
+/// be tested exhaustively. Environment variables are process-global and Rust
+/// runs tests in parallel, so a test that sets one races every other test in the
+/// binary — this keeps that hazard out of the suite entirely.
+///
+/// Precedence, highest first:
+///
+/// | # | Condition | Result |
+/// |---|---|---|
+/// | 1 | `NO_COLOR` set and non-empty | off |
+/// | 2 | `CLICOLOR=0` | off |
+/// | 3 | `CLICOLOR_FORCE` set and not `0` | on |
+/// | 4 | `TERM=dumb` | off |
+/// | 5 | `GITHUB_ACTIONS=true` | on |
+/// | 6 | stderr is a terminal | on |
+/// | 7 | otherwise | off |
+///
+/// `NO_COLOR` leads because <https://no-color.org> requires it to.
+///
+/// `CLICOLOR_FORCE` deliberately outranks `TERM=dumb`: overriding a terminal
+/// that claims it cannot render escapes is the entire purpose of a force switch.
+///
+/// Rule 5 exists because GitHub Actions renders ANSI in its logs while giving
+/// every process a pipe rather than a terminal, so rule 6 alone would leave
+/// every workflow monochrome. `GITHUB_ACTIONS` specifically, not a generic `CI`:
+/// plenty of CI systems capture output that no one will ever render.
+fn decide(
+    no_color: Option<&str>,
+    clicolor: Option<&str>,
+    clicolor_force: Option<&str>,
+    term: Option<&str>,
+    github_actions: Option<&str>,
+    is_tty: bool,
+) -> bool {
+    // An empty value means "not set" — that is how an unset variable usually
+    // reaches a child process through a shell.
+    fn set(v: Option<&str>) -> Option<&str> {
+        v.filter(|s| !s.is_empty())
+    }
+
+    if set(no_color).is_some() {
+        return false;
+    }
+    if set(clicolor) == Some("0") {
+        return false;
+    }
+    if let Some(force) = set(clicolor_force)
+        && force != "0"
+    {
+        return true;
+    }
+    if term == Some("dumb") {
+        return false;
+    }
+    if set(github_actions) == Some("true") {
+        return true;
+    }
+    is_tty
+}
+
 impl Default for Theme {
     fn default() -> Self {
         Self::plain()
@@ -175,13 +240,158 @@ mod tests {
         assert_ne!(t.dim("x"), t.subject("x"));
     }
 
+    // --- colour precedence -------------------------------------------------
+    //
+    // `decide` takes its inputs rather than reading the environment, so these
+    // exercise every rule without a single `set_var` — which would race the
+    // rest of the suite, since environment variables are process-global and
+    // tests run in parallel.
+
+    /// Argument order is easy to get wrong with six positional parameters.
+    #[derive(Default)]
+    struct Env<'a> {
+        no_color: Option<&'a str>,
+        clicolor: Option<&'a str>,
+        clicolor_force: Option<&'a str>,
+        term: Option<&'a str>,
+        github_actions: Option<&'a str>,
+        tty: bool,
+    }
+
+    fn colour(env: Env) -> bool {
+        decide(
+            env.no_color,
+            env.clicolor,
+            env.clicolor_force,
+            env.term,
+            env.github_actions,
+            env.tty,
+        )
+    }
+
+    /// The reported bug: Actions gives every process a pipe, so TTY detection
+    /// alone left every workflow log monochrome.
     #[test]
-    fn auto_respects_no_color() {
-        // `NO_COLOR` set to a non-empty value always disables colour,
-        // regardless of TTY state. We cannot portably fake a TTY here,
-        // so we assert the one direction that is deterministic.
-        unsafe { std::env::set_var("NO_COLOR", "1") };
-        assert!(!Theme::auto().is_colored());
-        unsafe { std::env::remove_var("NO_COLOR") };
+    fn github_actions_gets_colour_without_a_tty() {
+        assert!(colour(Env {
+            github_actions: Some("true"),
+            ..Default::default()
+        }));
+    }
+
+    #[test]
+    fn only_github_actions_set_to_true_counts() {
+        for value in ["false", "", "1", "yes"] {
+            assert!(
+                !colour(Env {
+                    github_actions: Some(value),
+                    ..Default::default()
+                }),
+                "GITHUB_ACTIONS={value:?} should not imply a rendering terminal"
+            );
+        }
+    }
+
+    /// <https://no-color.org> requires this to win over everything.
+    #[test]
+    fn no_color_beats_every_other_signal() {
+        assert!(!colour(Env {
+            no_color: Some("1"),
+            clicolor_force: Some("1"),
+            github_actions: Some("true"),
+            tty: true,
+            ..Default::default()
+        }));
+    }
+
+    #[test]
+    fn an_empty_no_color_is_not_set() {
+        // Unset variables commonly reach a child process as empty strings.
+        assert!(colour(Env {
+            no_color: Some(""),
+            tty: true,
+            ..Default::default()
+        }));
+    }
+
+    #[test]
+    fn clicolor_force_enables_colour_without_a_tty() {
+        assert!(colour(Env {
+            clicolor_force: Some("1"),
+            ..Default::default()
+        }));
+    }
+
+    /// Overriding a terminal that claims it cannot render escapes is the whole
+    /// point of a force switch.
+    #[test]
+    fn clicolor_force_overrides_a_dumb_terminal() {
+        assert!(colour(Env {
+            clicolor_force: Some("1"),
+            term: Some("dumb"),
+            ..Default::default()
+        }));
+    }
+
+    #[test]
+    fn clicolor_force_zero_does_not_force() {
+        assert!(!colour(Env {
+            clicolor_force: Some("0"),
+            ..Default::default()
+        }));
+    }
+
+    #[test]
+    fn clicolor_zero_disables_colour_even_on_a_terminal() {
+        assert!(!colour(Env {
+            clicolor: Some("0"),
+            tty: true,
+            ..Default::default()
+        }));
+    }
+
+    #[test]
+    fn a_dumb_terminal_gets_no_colour() {
+        assert!(!colour(Env {
+            term: Some("dumb"),
+            tty: true,
+            ..Default::default()
+        }));
+        assert!(!colour(Env {
+            term: Some("dumb"),
+            github_actions: Some("true"),
+            ..Default::default()
+        }));
+    }
+
+    #[test]
+    fn falls_back_to_terminal_detection() {
+        assert!(colour(Env {
+            tty: true,
+            ..Default::default()
+        }));
+        assert!(!colour(Env::default()), "a pipe with no hints stays plain");
+    }
+
+    #[test]
+    fn a_normal_terminal_is_unaffected_by_term() {
+        assert!(colour(Env {
+            term: Some("xterm-256color"),
+            tty: true,
+            ..Default::default()
+        }));
+    }
+
+    /// The integration harness sets `NO_COLOR=1`, and CI sets
+    /// `GITHUB_ACTIONS=true`. Without rule 1 outranking rule 5, every snapshot
+    /// would sprout escape codes the moment the suite ran in CI.
+    #[test]
+    fn snapshots_stay_plain_when_the_suite_runs_in_actions() {
+        assert!(!colour(Env {
+            no_color: Some("1"),
+            term: Some("dumb"),
+            github_actions: Some("true"),
+            ..Default::default()
+        }));
     }
 }

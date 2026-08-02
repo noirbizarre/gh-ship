@@ -12,6 +12,26 @@ gh ship <COMMAND>
 | `-R`, `--repo <OWNER/REPO>` | `SHIP_REPO` | Target repository. Defaults to the current one. |
 | `-v`, `--verbose` | | More detail. Repeat for more. |
 
+## Colour
+
+gh-ship colours its output when it believes something will render it, following
+the same variables as `gh` itself — there is no `--color` flag.
+
+| Variable | Effect |
+|---|---|
+| `NO_COLOR` | Set to anything non-empty, colour is off. Wins over everything else. |
+| `CLICOLOR=0` | Colour off. |
+| `CLICOLOR_FORCE` | Set to anything but `0`, colour on even without a terminal. |
+| `TERM=dumb` | Colour off, unless `CLICOLOR_FORCE` overrides it. |
+
+Otherwise gh-ship colours its output when stderr is a terminal, **or when
+`GITHUB_ACTIONS=true`**. Actions gives every process a pipe rather than a
+terminal but renders ANSI in its logs, so workflow output is coloured without
+any configuration.
+
+Only the human-readable output on stderr is ever coloured. `--json` goes to
+stdout and never is, so it stays safe to pipe.
+
 ## Exit codes
 
 | Code | Meaning |
