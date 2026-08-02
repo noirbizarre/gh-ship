@@ -4,6 +4,48 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0](https://github.com/noirbizarre/gh-ship/compare/0.1.0..0.2.0) - 2026-08-02
+
+### 💫 Features
+
+- **gh** Retry transient failures on read-only calls - ([93f547d](https://github.com/noirbizarre/gh-ship/commit/93f547d7bf4975abed0a90944206c33692e69567))
+- **init** Use the shorter `$schema:` modeline - ([8774edf](https://github.com/noirbizarre/gh-ship/commit/8774edf3aa786119a06d511261f2f98b4cc4ab3c))
+
+### 🐛 Bug Fixes
+
+- **init** Resolve the picked prepare workflow instead of panicking - ([3f06f1b](https://github.com/noirbizarre/gh-ship/commit/3f06f1bc9e60e69b43f04cb128fc189009fe5e2a))
+- **prepare** Skip when the published release is still the base tip - ([22e0b80](https://github.com/noirbizarre/gh-ship/commit/22e0b808989ba8e7dc749af2242208a572d4cad4))
+
+### 🔨 Refactor
+
+- **config** Reach settings through their sub-struct - ([5bb80b8](https://github.com/noirbizarre/gh-ship/commit/5bb80b826ef1660f992bdd3b9d8bef7b00d0e402))
+- **context** Route every dispatch through one helper - ([fdec880](https://github.com/noirbizarre/gh-ship/commit/fdec8809ede5ebaf4bb9aaf7e914781e5c64bc7e))
+- **errors** Enumerate the artifact and release failures - ([af68b78](https://github.com/noirbizarre/gh-ship/commit/af68b786220be095b3dafb35d2315153c2efd6a2))
+- **logger** Route every user-facing line through the logger - ([a3834c6](https://github.com/noirbizarre/gh-ship/commit/a3834c6382a2ad81915e880daea0dbefa26e6143))
+- **logger** Report the release identity from one place - ([bb27b00](https://github.com/noirbizarre/gh-ship/commit/bb27b001d9e1ea48fa8fffb25abc8d3c5a742a82))
+- **run** Name the run timeout after the env var it reads - ([328bc3a](https://github.com/noirbizarre/gh-ship/commit/328bc3ad8c4fd0e75b0445aa2ebdfc00b47e18d4))
+- **span** Name the span helpers after what they span - ([bc66a1d](https://github.com/noirbizarre/gh-ship/commit/bc66a1df73170badafb47256ca3409f99a5c3da9))
+- Share the workflow label, the plural and the Path import - ([fc7bec9](https://github.com/noirbizarre/gh-ship/commit/fc7bec9fbaf54539cc482b659355fdc1dbbb048b))
+- Single-source the duplicated defaults and PR state checks - ([51e6f2a](https://github.com/noirbizarre/gh-ship/commit/51e6f2a58034662d88be025a03767a4b4f6df573))
+
+### 📚 Documentation
+
+- **protocol** Make the artifact spec match what is enforced - ([8607027](https://github.com/noirbizarre/gh-ship/commit/860702710822e5865aacdc10b0117e76b9b44649))
+- Settle on one product name, one emoji and one toolchain story - ([8586f50](https://github.com/noirbizarre/gh-ship/commit/8586f50a46e5774961f56ca06a5882e1e0a8ecc7))
+- Correct the publish example, the prepare sequence and the tagline - ([f91c895](https://github.com/noirbizarre/gh-ship/commit/f91c89565be8010dd0a8ab2155e662a5be62e6ab))
+
+### 🧪 Tests
+
+- Cover the renderers the refactor introduced - ([6b9b02b](https://github.com/noirbizarre/gh-ship/commit/6b9b02be7a668d92de4bdbe52d1ba42538b39c52))
+- Assert what the tests claim to assert - ([3e48330](https://github.com/noirbizarre/gh-ship/commit/3e48330ac818db0798819a98a1b789202605a51e))
+
+### 🔧 CI
+
+- **changelog** Keep the version heading out of the release notes - ([42346fa](https://github.com/noirbizarre/gh-ship/commit/42346faad366e793b79bbea7587e570b0d5368db))
+- **github** Use Ship PAT when possible to avoid rate limiting - ([d388b2d](https://github.com/noirbizarre/gh-ship/commit/d388b2d507a0efcf6b8bed5175a87702463c3eb6))
+- **release** Name the GitHub Release by version alone - ([52a8ae1](https://github.com/noirbizarre/gh-ship/commit/52a8ae1ca6dec7a339f8697af936770d153acec9))
+- **ship** Run the published extension instead of building from source - ([74b4271](https://github.com/noirbizarre/gh-ship/commit/74b4271a60c87297c12a6a077f323e735b445f19))
+
 ## 0.1.0 - 2026-08-02
 
 ### 💫 Features
@@ -71,4 +113,4 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## ❤️ New Contributors
 
-* @noirbizarre made their first contribution
+* @noirbizarre made their first contribution in [#4](https://github.com/noirbizarre/gh-ship/pull/4)
