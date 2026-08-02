@@ -1,7 +1,8 @@
 //! Command implementations.
 //!
 //! Each module owns one subcommand end to end: argument interpretation,
-//! orchestration, and output. Nothing here holds state between runs —
+//! orchestration, and output — except `context`, which holds the
+//! orchestration `prepare`, `preview` and `release` share. Nothing here holds state between runs —
 //! gh-ship keeps zero local state, so every command reconstructs what it
 //! needs from the artifact it is given or from GitHub itself.
 

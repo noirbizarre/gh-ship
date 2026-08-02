@@ -8,7 +8,7 @@ license = "MIT"
 repository = "https://github.com/noirbizarre/gh-ship"
 homepage = "https://noirbizarre.github.io/gh-ship"
 documentation = "https://noirbizarre.github.io/gh-ship"
-keywords = ["github", "release", "gh-extension", "cli", "changelog"]
+keywords = ["github", "release", "gh-extension", "cli", "release-automation"]
 categories = ["command-line-utilities", "development-tools"]
 readme = "README.md"
 

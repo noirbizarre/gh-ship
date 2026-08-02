@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://noirbizarre.github.io/gh-ship/schema/config/v1.json",
-  "title": "GH Ship Configuration",
+  "title": "gh-ship Configuration",
   "description": "Configuration for gh-ship, the GitHub Release Orchestrator. Lives at .github/ship.yml. Only `version` and `workflows.prepare` are required — everything else has a sensible default.",
   "type": "object",
 

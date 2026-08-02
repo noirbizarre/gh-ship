@@ -110,8 +110,8 @@ nothing to ship should go green.
 gh-ship deliberately knows nothing about how your project versions itself:
 
 - **`version` is never parsed.** It is not required to be semver. CalVer, a date,
-  a build number, or `banana` are all accepted. gh-ship only requires a non-empty
-  string with no leading or trailing whitespace.
+  a build number, or `banana` are all accepted. gh-ship only requires a non-empty,
+  single-line string with no leading or trailing whitespace.
 - **`tag` is never derived from `version`.** If your convention is `v1.4.0`, or
   `release-1.4.0`, or `1.4.0`, that is your workflow's business. gh-ship only
   requires a non-empty string with no whitespace.

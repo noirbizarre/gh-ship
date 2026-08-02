@@ -46,7 +46,7 @@ Not by the `name:` in the workflow. That means the display name is yours to
 decorate:
 
 ```yaml
-name: 🚢 Prepare Release
+name: 🚀 Prepare Release
 ```
 
 and renaming it never breaks a release. `gh ship validate` prints the slug, with

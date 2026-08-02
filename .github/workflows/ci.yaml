@@ -23,7 +23,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # The channel and components come from rust-toolchain.toml.
+      # The channel comes from the action ref, not rust-toolchain.toml,
+      # and each job installs the components it needs.
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy

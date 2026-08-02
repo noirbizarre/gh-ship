@@ -86,7 +86,7 @@ Values are the workflow's **filename without the extension** — its slug:
 ```
 
 The `name:` inside the workflow is display only, so it is free to carry emoji
-(`🚢 Prepare Release`) and can be changed without touching this file. A full
+(`🚀 Prepare Release`) and can be changed without touching this file. A full
 filename or a display name is still accepted, but the slug is the stable identity
 and what `gh ship init` writes.
 

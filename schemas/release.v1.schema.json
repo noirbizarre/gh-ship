@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://noirbizarre.github.io/gh-ship/schema/release/v1.json",
-  "title": "GH Ship Release Artifact",
-  "description": "The public protocol between a GitHub Actions release workflow and GH Ship. A workflow uploads this document as `ship.release.json` inside the `ship-release` artifact; GH Ship reads it to render the Release PR and create the GitHub Release.",
+  "title": "gh-ship Release Artifact",
+  "description": "The public protocol between a GitHub Actions release workflow and gh-ship. A workflow uploads this document as `ship.release.json` inside the `ship-release` artifact; gh-ship reads it to render the Release PR and create the GitHub Release.",
   "type": "object",
 
   "required": ["schemaVersion", "changed"],
@@ -15,32 +15,32 @@
     },
 
     "schemaVersion": {
-      "description": "Authoritative protocol version. GH Ship refuses documents whose version it does not understand.",
+      "description": "Authoritative protocol version. gh-ship refuses documents whose version it does not understand.",
       "type": "integer",
       "const": 1
     },
 
     "changed": {
-      "description": "Whether there is anything to release. When false, GH Ship prints `nothing to release`, exits 0, and touches no branch, PR or release.",
+      "description": "Whether there is anything to release. When false, gh-ship prints `nothing to release`, exits 0, and touches no branch, PR or release.",
       "type": "boolean"
     },
 
     "version": {
-      "description": "The version being released, in whatever scheme the project uses. GH Ship never parses or validates this beyond requiring a non-empty single-line string — it does not know how your project versions itself.",
+      "description": "The version being released, in whatever scheme the project uses. gh-ship never parses or validates this beyond requiring a non-empty single-line string — it does not know how your project versions itself.",
       "type": "string",
       "minLength": 1,
       "pattern": "^\\S(.*\\S)?$"
     },
 
     "tag": {
-      "description": "The git tag to create. Must not contain whitespace. GH Ship does not derive this from `version`; the workflow owns the tag convention.",
+      "description": "The git tag to create. Must not contain whitespace. gh-ship does not derive this from `version`; the workflow owns the tag convention.",
       "type": "string",
       "minLength": 1,
       "pattern": "^[^\\s]+$"
     },
 
     "release": {
-      "description": "GitHub Release content. Every field is optional; GH Ship falls back to its configured templates.",
+      "description": "GitHub Release content. Every field is optional; gh-ship falls back to its configured templates.",
       "type": "object",
       "properties": {
         "name": {
@@ -48,7 +48,7 @@
           "type": "string"
         },
         "notes": {
-          "description": "Release body, in GitHub Flavored Markdown. GH Ship never generates this — use git-cliff, release-drafter, or whatever your project already uses.",
+          "description": "Release body, in GitHub Flavored Markdown. gh-ship never generates this — use git-cliff, release-drafter, or whatever your project already uses.",
           "type": "string"
         },
         "prerelease": {
@@ -67,7 +67,7 @@
     },
 
     "pull_request": {
-      "description": "Release PR overrides. Every field is optional; GH Ship falls back to its configured templates.",
+      "description": "Release PR overrides. Every field is optional; gh-ship falls back to its configured templates.",
       "type": "object",
       "properties": {
         "title": {
@@ -76,7 +76,7 @@
           "minLength": 1
         },
         "body": {
-          "description": "Complete PR body. When set, GH Ship uses it verbatim and skips header/notes/footer assembly.",
+          "description": "Complete PR body. When set, gh-ship uses it verbatim and skips header/notes/footer assembly.",
           "type": "string"
         },
         "labels": {

@@ -1,7 +1,8 @@
 # Pins the Rust channel and components for local development.
 #
-# CI installs the toolchain via `dtolnay/rust-toolchain`, which reads this
-# file, so contributors and CI build with the same compiler.
+# This pins the local channel only. CI selects its toolchain through the
+# `dtolnay/rust-toolchain@stable` action ref and installs its components
+# per job, because the coverage job needs `llvm-tools-preview` on top.
 #
 # The minimum supported version is declared separately as `rust-version` in
 # Cargo.toml; this file only chooses the channel to develop against.

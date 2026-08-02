@@ -6,7 +6,7 @@
 //! names.
 //!
 //! `locate` derives a [`miette::SourceSpan`] for a substring inside a
-//! YAML source. Since `serde_yaml::Value` does not retain positions,
+//! YAML source. Since `serde_norway::Value` does not retain positions,
 //! we fall back to a naïve substring search: it is good enough for
 //! the small, hand-written configs `gh ship` targets, and returns a
 //! zero-length span at offset `0` when the needle is missing (miette
