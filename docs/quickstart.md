@@ -83,7 +83,7 @@ $ gh ship status
   base branch: main
   release branch: release/next
   release pr: #7 Release 1.4.0 [open]
-  url: https://github.com/acme/widgets/pull/7
+  pr: https://github.com/acme/widgets/pull/7
   version: 1.4.0
   tag: v1.4.0
 

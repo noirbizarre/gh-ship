@@ -172,7 +172,13 @@ been notified about yet.
 It receives the `tag` as an input, and should check that out rather than a branch —
 you want to build exactly what is being released.
 
+Rules 1 and 2 apply here exactly as they do to the prepare workflow: it must be
+dispatchable, and it must stamp `ship_id` into its `run-name` or `gh ship release`
+will never find the run it started. Only rule 3 (`dry_run`) is prepare-only.
+
 ```yaml
+run-name: 📦 Publish Release (ship:${{ inputs.ship_id }})
+
 on:
   workflow_dispatch:
     inputs:
@@ -391,7 +397,7 @@ gh-ship never sees, stores, or manages this secret. It is between you and GitHub
     Without it, `gh ship prepare` fails at the very first step:
 
     ```
-    × `gh workflow run prepare-release.yaml --ref release/next` failed:
+    × `gh workflow run prepare-release.yaml --ref ship/prepare-8f2c1a9e4b07` failed:
       HTTP 403: Resource not accessible by personal access token
     ```
 
@@ -438,7 +444,7 @@ $ gh ship validate
 Rules 1 to 3 are checked, with an explanation of why each exists:
 
 ```
-× workflow `prepare-release.yml` does not declare `on: workflow_dispatch`
+× workflow `prepare-release.yaml` does not declare `on: workflow_dispatch`
   help: gh-ship starts workflows through the API, which can only start workflows
         declaring `on: workflow_dispatch`. A `workflow_call`-only workflow — what
         is usually called a reusable workflow — cannot be started this way.

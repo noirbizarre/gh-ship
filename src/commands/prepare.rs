@@ -2,21 +2,29 @@
 //!
 //! The sequence, and why it is this order:
 //!
-//! 1. **Ensure the release branch exists.** `workflow_dispatch` reads
-//!    the workflow definition from the ref it is given, so the ref must
-//!    exist *before* dispatching. gh-ship creates it from the base
-//!    branch when missing.
-//! 2. **Dispatch and wait.** The workflow bumps the version, writes the
-//!    changelog, commits and pushes to that branch. gh-ship does none of
-//!    this.
-//! 3. **Validate the artifact.** A workflow that reports nothing to
+//! 1. **Refuse to start** while a merged Release PR is still awaiting
+//!    `gh ship release`: a second run would bury the pending release.
+//! 2. **Sweep staging branches** left behind by earlier runs.
+//! 3. **Cut a throwaway staging branch**, `ship/prepare-<nonce>`, from
+//!    the base branch. `workflow_dispatch` reads the workflow definition
+//!    from the ref it is given, so the ref must exist *before*
+//!    dispatching — and cutting it fresh from the base guarantees the
+//!    dispatched copy is the current one, which dispatching on the
+//!    long-lived release branch did not.
+//! 4. **Dispatch on that staging branch and wait.** The workflow bumps
+//!    the version, writes the changelog, commits and pushes there.
+//!    gh-ship does none of this.
+//! 5. **Validate the artifact.** A workflow that reports nothing to
 //!    release stops here, successfully.
-//! 4. **Open or update the Release PR**, embedding the artifact in its
+//! 6. **Promote**: move the release branch onto the staged release
+//!    commit, then sweep the staging branch away.
+//! 7. **Open or update the Release PR**, embedding the artifact in its
 //!    body so `gh ship release` can recover it later without any local
 //!    state.
 //!
 //! Re-running `prepare` is safe and is the supported way to refresh a
-//! Release PR: it reuses the branch and updates the existing PR.
+//! Release PR: the release branch moves onto the new commit and the
+//! existing PR is updated in place.
 
 use miette::Result;
 

@@ -5,7 +5,7 @@
   Ship GitHub releases your way.
 </p>
 <p align="center">
-  A GitHub CLI extension that orchestrates Release PRs and reusable GitHub Actions workflows.
+  A GitHub CLI extension that orchestrates Release PRs and GitHub Actions release workflows.
 </p>
 <p align="center">
   <a href="https://github.com/noirbizarre/gh-ship/actions/workflows/ci.yaml">
