@@ -129,7 +129,7 @@ authentication**, so it works in any CI system.
 A trimmed `.github/ship.yml` — `gh ship init` writes a documented one for you:
 
 ```yaml
-# yaml-language-server: $schema=https://noirbizarre.github.io/gh-ship/schema/config/v1.json
+# $schema: https://noirbizarre.github.io/gh-ship/schema/config/v1.json
 version: 1
 
 release_branch: release/next

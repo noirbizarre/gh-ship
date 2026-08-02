@@ -312,10 +312,10 @@ pub fn render_config(prepare: &str, publish: Option<&str>) -> String {
     let mut out = String::new();
 
     // The modeline gives editors completion and inline validation for this
-    // file. It is a comment, so it costs nothing at parse time.
-    out.push_str(
-        "# yaml-language-server: $schema=https://noirbizarre.github.io/gh-ship/schema/config/v1.json\n",
-    );
+    // file. It is a comment, so it costs nothing at parse time, and the
+    // `$schema:` form is understood by both yaml-language-server (VS Code,
+    // Neovim) and JetBrains IDEs.
+    out.push_str("# $schema: https://noirbizarre.github.io/gh-ship/schema/config/v1.json\n");
 
     out.push_str(&format!(
         "# gh-ship configuration\n\
@@ -489,7 +489,7 @@ mod tests {
     fn generated_config_carries_the_schema_modeline() {
         let yaml = render_config("prepare-release", None);
         assert!(
-            yaml.starts_with("# yaml-language-server: $schema="),
+            yaml.starts_with("# $schema: "),
             "the modeline must be the first line to be picked up: {yaml}"
         );
         assert!(

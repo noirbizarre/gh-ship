@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://noirbizarre.github.io/gh-ship/schema/config/v1.json
+# $schema: https://noirbizarre.github.io/gh-ship/schema/config/v1.json
 # gh-ship configuration
 # Docs: https://noirbizarre.github.io/gh-ship/configuration/
 #

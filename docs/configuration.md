@@ -11,17 +11,19 @@ Add the modeline as the first line and your editor will offer completion and
 flag mistakes as you type. `gh ship init` writes it for you.
 
 ```yaml
-# yaml-language-server: $schema=https://noirbizarre.github.io/gh-ship/schema/config/v1.json
+# $schema: https://noirbizarre.github.io/gh-ship/schema/config/v1.json
 ```
 
 It is a comment, so it costs nothing at parse time and older gh-ship versions
-ignore it. The schema is for your editor; `gh ship validate` keeps its own
-checks, which explain problems in more detail than a schema error can.
+ignore it. This `$schema:` form is understood by both yaml-language-server
+(VS Code, Neovim) and JetBrains IDEs. The schema is for your editor;
+`gh ship validate` keeps its own checks, which explain problems in more detail
+than a schema error can.
 
 ## Minimal
 
 ```yaml
-# yaml-language-server: $schema=https://noirbizarre.github.io/gh-ship/schema/config/v1.json
+# $schema: https://noirbizarre.github.io/gh-ship/schema/config/v1.json
 version: 1
 workflows:
   prepare: prepare-release
@@ -30,7 +32,7 @@ workflows:
 ## Complete
 
 ```yaml
-# yaml-language-server: $schema=https://noirbizarre.github.io/gh-ship/schema/config/v1.json
+# $schema: https://noirbizarre.github.io/gh-ship/schema/config/v1.json
 version: 1
 
 # Branch on which the release is staged. gh-ship stages each release on a
