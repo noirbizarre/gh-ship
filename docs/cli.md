@@ -12,6 +12,25 @@ gh ship <COMMAND>
 | `-R`, `--repo <OWNER/REPO>` | `SHIP_REPO` | Target repository. Defaults to the current one. |
 | `-v`, `--verbose` | | More detail. Repeat for more. |
 
+## Waiting
+
+`preview`, `prepare` and `release` all block on a workflow run they dispatched.
+Two environment variables cap how long they wait:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SHIP_APPEAR_TIMEOUT` | `90` | Seconds to wait for a dispatched run to *appear*. |
+| `SHIP_RUN_TIMEOUT` | `3600` | Seconds to wait for a run to *finish*. |
+
+Both take a whole number of seconds. Raise `SHIP_RUN_TIMEOUT` if your publish
+workflow legitimately takes more than an hour; the appear timeout only covers
+the gap between dispatching and GitHub queueing the run, so it rarely needs
+touching.
+
+When a command runs inside a workflow of your own, set `timeout-minutes` on the
+job *below* these values, so a stuck run fails the job visibly rather than
+sitting until GitHub's own six-hour limit.
+
 ## Colour
 
 gh-ship colours its output when it believes something will render it, following
@@ -116,14 +135,33 @@ Run the prepare workflow and open or update the Release PR.
 $ gh ship prepare [--no-wait]
 ```
 
-1. Creates the release branch if missing (`workflow_dispatch` needs the ref to
-   exist).
-2. Dispatches the prepare workflow and waits.
-3. Downloads and validates the artifact.
-4. Stops with exit 0 if `changed: false`.
-5. Opens or updates the Release PR, embedding the artifact in its body.
+1. Stops if a merged Release PR is still awaiting `gh ship release`.
+2. Sweeps staging branches left behind by earlier runs.
+3. Cuts a throwaway staging branch, `ship/prepare-<nonce>`, from the base branch
+   (`workflow_dispatch` needs the ref to exist).
+4. Dispatches the prepare workflow **on that staging branch** and waits.
+5. Downloads and validates the artifact.
+6. Stops with exit 0 if `changed: false`.
+7. Moves the release branch onto the staged release commit, then sweeps again.
+8. Opens or updates the Release PR, embedding the artifact in its body.
 
-Re-running is safe, and is the supported way to refresh a Release PR.
+Re-running is safe, and is the supported way to refresh a Release PR: the
+release branch moves onto the new commit and the existing PR is updated in
+place.
+
+!!! warning "Run one at a time"
+
+    Step 2 deletes every `ship/prepare-*` branch, including one a concurrent
+    run is using. Serialise with `concurrency: group: ship` — the sample
+    workflow in [Workflows](workflows.md) does.
+
+!!! note "Why a staging branch"
+
+    The work used to happen on the release branch, reset to base first. That
+    left it momentarily identical to its base, and GitHub closes a pull request
+    whose head becomes contained in its base — so the Release PR was closed and
+    reopened on every prepare. Staging elsewhere and promoting afterwards means
+    the release branch is never equal to the base.
 
 | Option | Meaning |
 |---|---|
