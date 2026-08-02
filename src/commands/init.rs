@@ -87,6 +87,7 @@ pub fn run(cli: &Cli, args: &InitArgs, theme: Theme) -> Result<()> {
         "Which workflow publishes the release? (builds and uploads assets)",
         "publish-release",
         &publish_candidates,
+        theme,
     )?;
     let publish_name = match publish {
         Choice::Existing(w) => Some(w.slug()),
@@ -179,7 +180,15 @@ fn choose_optional_workflow(
     prompt: &str,
     template_name: &str,
     conforming: &[Workflow],
+    theme: Theme,
 ) -> Result<Choice> {
+    if conforming.is_empty() {
+        eprintln!(
+            "{}",
+            logger::skip(theme, "no conforming workflow found for this role")
+        );
+    }
+
     let mut select = Select::new(prompt)
         .description("optional — skip it if you have nothing to build or upload");
 
@@ -384,25 +393,62 @@ fn print_next_steps(theme: Theme, has_publish: bool) {
     eprintln!();
     eprintln!("{}", logger::rule(theme, "Next steps"));
     eprintln!();
-    eprintln!("  1. Edit the generated workflow: replace the placeholder steps");
-    eprintln!("     with your own versioning and changelog tooling.");
+    eprintln!(
+        "{}",
+        logger::step(
+            theme,
+            1,
+            &[
+                "Edit the generated workflow: replace the placeholder steps",
+                "with your own versioning and changelog tooling.",
+            ]
+        )
+    );
     eprintln!();
-    eprintln!("  2. Run `gh ship validate` to check the setup.");
+    eprintln!(
+        "{}",
+        logger::step(theme, 2, &["Run `gh ship validate` to check the setup."])
+    );
     eprintln!();
-    eprintln!("  3. Run `gh ship preview` to see the Release PR without");
-    eprintln!("     changing anything.");
+    eprintln!(
+        "{}",
+        logger::step(
+            theme,
+            3,
+            &[
+                "Run `gh ship preview` to see the Release PR without",
+                "changing anything.",
+            ]
+        )
+    );
     eprintln!();
-    eprintln!("{}", logger::warn(theme, "One thing to decide: the token."));
-    eprintln!("     GitHub's default GITHUB_TOKEN cannot trigger other workflows,");
-    eprintln!("     so a Release PR it authors will NOT run your CI. If the Release");
-    eprintln!("     PR must be tested before merging, add a PAT or GitHub App token");
-    eprintln!("     as the `SHIP_TOKEN` secret. The generated workflow already");
-    eprintln!("     prefers it when present.");
-    eprintln!("     https://noirbizarre.github.io/gh-ship/workflows/#tokens");
+    eprintln!("{}", logger::warn(theme, "one thing to decide: the token"));
+    eprintln!(
+        "{}",
+        logger::note(&[
+            "GitHub's default GITHUB_TOKEN cannot trigger other workflows,",
+            "so a Release PR it authors will NOT run your CI. If the Release",
+            "PR must be tested before merging, add a PAT or GitHub App token",
+            "as the `SHIP_TOKEN` secret. The generated workflow already",
+            "prefers it when present.",
+        ])
+    );
+    eprintln!(
+        "{}",
+        logger::note_url(
+            theme,
+            "https://noirbizarre.github.io/gh-ship/workflows/#tokens"
+        )
+    );
     if has_publish {
         eprintln!();
-        eprintln!("     Your publish workflow uploads assets to the DRAFT release;");
-        eprintln!("     gh-ship undrafts it only after that workflow succeeds.");
+        eprintln!(
+            "{}",
+            logger::note(&[
+                "Your publish workflow uploads assets to the DRAFT release;",
+                "gh-ship undrafts it only after that workflow succeeds.",
+            ])
+        );
     }
     eprintln!();
 }

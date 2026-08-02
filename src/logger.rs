@@ -7,6 +7,10 @@
 //!
 //! Failures are *not* rendered here: they go through miette, which owns the
 //! error report format along with its codes, help text and source spans.
+//!
+//! Message style: a lowercase sentence with no terminal period and no
+//! ellipsis, with proper nouns keeping their case (`Release PR`). The
+//! marker carries the emphasis, so the text does not need to.
 
 use crate::style::Theme;
 
@@ -50,6 +54,32 @@ pub fn release_identity(theme: Theme, version: Option<&str>, tag: Option<&str>) 
         detail(theme, "version", version.unwrap_or("?")),
         detail(theme, "tag", tag.unwrap_or("?"))
     )
+}
+
+/// A numbered step in a "next steps" list, with aligned continuations.
+///
+/// `  1. first line`
+/// `     continuation`
+pub fn step(theme: Theme, n: usize, lines: &[&str]) -> String {
+    let mut out = format!("  {} {}", theme.key(&format!("{n}.")), lines[0]);
+    for line in &lines[1..] {
+        out.push_str(&format!("\n     {line}"));
+    }
+    out
+}
+
+/// A note aligned under [`step`] continuations.
+pub fn note(lines: &[&str]) -> String {
+    lines
+        .iter()
+        .map(|l| format!("     {l}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// A note whose only content is a URL.
+pub fn note_url(theme: Theme, url: &str) -> String {
+    format!("     {}", theme.url(url))
 }
 
 /// The plural `s`, or nothing.

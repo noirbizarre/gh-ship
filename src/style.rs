@@ -57,11 +57,11 @@ impl Theme {
     }
 
     /// Whether this theme emits ANSI escapes.
-    pub fn is_colored(&self) -> bool {
+    pub fn is_colored(self) -> bool {
         self.colored
     }
 
-    fn paint(&self, s: &str, style: Style) -> String {
+    fn paint(self, s: &str, style: Style) -> String {
         if self.colored {
             s.style(style).to_string()
         } else {
@@ -72,47 +72,47 @@ impl Theme {
     // --- Palette ---------------------------------------------------------
 
     /// Dimmed text — separators and ancillary detail.
-    pub fn dim(&self, s: &str) -> String {
+    pub fn dim(self, s: &str) -> String {
         self.paint(s, Style::new().dimmed())
     }
 
     /// A subject being acted on (workflow name, branch, tag) — bold.
-    pub fn subject(&self, s: &str) -> String {
+    pub fn subject(self, s: &str) -> String {
         self.paint(s, Style::new().bold())
     }
 
     /// Success marker (`✔`) — green + bold.
-    pub fn success(&self, s: &str) -> String {
+    pub fn success(self, s: &str) -> String {
         self.paint(s, Style::new().green().bold())
     }
 
     /// Failure marker (`✘`) — red + bold.
-    pub fn failure(&self, s: &str) -> String {
+    pub fn failure(self, s: &str) -> String {
         self.paint(s, Style::new().red().bold())
     }
 
     /// In-progress marker (`▶`) — blue + bold.
-    pub fn running(&self, s: &str) -> String {
+    pub fn running(self, s: &str) -> String {
         self.paint(s, Style::new().blue().bold())
     }
 
     /// Warning text (`⚠`) — yellow.
-    pub fn warning(&self, s: &str) -> String {
+    pub fn warning(self, s: &str) -> String {
         self.paint(s, Style::new().yellow())
     }
 
     /// Skipped / no-op — dimmed.
-    pub fn skipped(&self, s: &str) -> String {
+    pub fn skipped(self, s: &str) -> String {
         self.paint(s, Style::new().dimmed())
     }
 
     /// A URL — underlined so it stands out as clickable.
-    pub fn url(&self, s: &str) -> String {
+    pub fn url(self, s: &str) -> String {
         self.paint(s, Style::new().blue().underline())
     }
 
     /// A field key in a key/value listing — dimmed.
-    pub fn key(&self, s: &str) -> String {
+    pub fn key(self, s: &str) -> String {
         self.paint(s, Style::new().dimmed())
     }
 }

@@ -159,7 +159,7 @@ pub(crate) fn find_run(
         run::appear_timeout(),
         |elapsed| {
             if !announced {
-                eprintln!("{}", logger::skip(theme, "waiting for the run to appear…"));
+                eprintln!("{}", logger::skip(theme, "waiting for the run to appear"));
                 announced = true;
             } else if elapsed.as_secs().is_multiple_of(15) {
                 eprintln!(
