@@ -307,7 +307,7 @@ fn a_missing_release_branch_is_created_at_the_staged_commit() {
 /// A merged-but-unpublished release must be protected before anything is
 /// staged or promoted.
 #[test]
-fn the_pending_release_guard_short_circuits_before_staging() {
+fn the_in_flight_release_guard_short_circuits_before_staging() {
     let body = format!("Notes\n\n<!-- ship:artifact\n{CHANGED_ARTIFACT}\n-->");
     let repo = Repo::new(
         CONFIG,
@@ -952,6 +952,52 @@ fn prepare_proceeds_once_the_merged_release_is_published() {
     assert!(
         repo.stub.called_with(&["workflow run"]),
         "a completed release must not block the next one: {:?}",
+        repo.stub.calls()
+    );
+}
+
+/// Merging the Release PR is also a push to base, so automation prepares on it.
+/// Once the release is published and its merge is still the tip, there is
+/// provably nothing to release: dispatching the prepare workflow only to be
+/// told `changed: false` is noise, not information.
+///
+/// The comparison is on the merge sha, not the commit message, so it holds for
+/// merge commits, squashes and rebases alike.
+#[test]
+fn prepare_skips_when_the_published_merge_is_still_the_base_tip() {
+    let body = format!("Notes\n\n<!-- ship:artifact\n{CHANGED_ARTIFACT}\n-->");
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new()
+            .pr_body(&body)
+            .pr_state("MERGED")
+            // What the stub reports as the tip of the base branch.
+            .merge_commit("a1b2c3d4e5f6")
+            .release_exists(true)
+            .artifact(CHANGED_ARTIFACT),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(
+        out.code, 0,
+        "having just released is an expected state, not a failure:\n{}",
+        out.stderr
+    );
+    assert!(out.stderr.contains("already published"), "{}", out.stderr);
+
+    assert!(
+        !repo.stub.called_with(&["workflow run"]),
+        "nothing should be dispatched: {:?}",
+        repo.stub.calls()
+    );
+    assert!(
+        !repo.stub.called_with(&["pr create"]) && !repo.stub.called_with(&["pr edit"]),
+        "no Release PR churn: {:?}",
+        repo.stub.calls()
+    );
+    assert!(
+        !repo.stub.called_with(&["PATCH"]),
+        "the guard must short-circuit before any branch is touched: {:?}",
         repo.stub.calls()
     );
 }

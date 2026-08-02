@@ -38,8 +38,13 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
     let release_branch = ctx.release_branch().to_string();
     let base_branch = ctx.base_branch().to_string();
 
-    // Refuse to start a second release on top of one already merged.
-    if pending_release(&ctx, &release_branch, &base_branch)? {
+    // Read the base tip once: the guard compares it against the merge commit of
+    // the last Release PR, and staging cuts its branch from it.
+    let base_sha = repo::branch_sha(&ctx.gh, ctx.repo_slug(), &base_branch)?;
+
+    // Refuse to start a release on top of one still in flight, or on top of one
+    // that just landed and left nothing behind it.
+    if release_in_flight(&ctx, &release_branch, &base_branch, &base_sha)? {
         return Ok(());
     }
 
@@ -50,7 +55,6 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
     // release branch in place. See `stage_branch` for why.
     let ship_id = ShipId::generate();
     let staging = stage_branch(&ship_id);
-    let base_sha = repo::branch_sha(&ctx.gh, ctx.repo_slug(), &base_branch)?;
 
     eprintln!(
         "{}",
@@ -153,25 +157,37 @@ fn ensure_labels(ctx: &Context, wanted: &[String]) -> Vec<String> {
     usable
 }
 
-/// Whether a merged Release PR is still waiting on `gh ship release`.
+/// Whether the last Release PR makes a new release cycle pointless right now.
 ///
-/// Between merging the Release PR and running `gh ship release` the tag does
-/// not exist yet, so a changelog tool still reports the same version as
-/// unreleased. Preparing again in that window starts a *second* release for a
-/// version already merged, quietly clobbering the first.
+/// Merging the Release PR is itself a push to base, so automation runs
+/// `prepare` on it. Both ends of that merge need guarding, and both are
+/// detected here:
 ///
-/// This matters most under automation — a push-triggered prepare hits this
-/// window on the very push that merges the Release PR — but the hole is real
-/// either way, so the guard lives here rather than in a workflow condition.
+/// **Merged, not yet published.** Between merging and `gh ship release` the tag
+/// does not exist, so a changelog tool still reports the same version as
+/// unreleased. Preparing in that window starts a *second* release for a version
+/// already merged, quietly clobbering the first.
 ///
-/// It is also why this cannot be a commit-message check: the Release PR lands
-/// as `Merge pull request #N…`, or as the PR title when squashed. Neither
-/// carries the release prefix.
+/// **Merged and published, with nothing after it.** Once the release is out,
+/// the merge commit is still the tip of base. There is provably no new commit
+/// to release, so dispatching the prepare workflow only to be told
+/// `changed: false` is noise.
+///
+/// The second case is a sha comparison rather than a commit-message check for
+/// the same reason the first cannot be one: the Release PR lands as
+/// `Merge pull request #N…`, or as the PR title when squashed, or — rebased —
+/// as the release commit itself. No message is common to all three, but the
+/// merge commit recorded on the pull request is.
 ///
 /// Returns `true` when the caller should stop. Stopping is a **success**:
-/// nothing is wrong, the release simply needs finishing, and an orchestrator
-/// workflow must not go red on every push until someone ships it.
-fn pending_release(ctx: &Context, release_branch: &str, base_branch: &str) -> Result<bool> {
+/// nothing is wrong, and an orchestrator workflow must not go red on every push
+/// because the release it just made is still the newest thing on the branch.
+fn release_in_flight(
+    ctx: &Context,
+    release_branch: &str,
+    base_branch: &str,
+    base_sha: &str,
+) -> Result<bool> {
     let theme = ctx.theme;
 
     let Some(pr) = repo::find_pull_request(&ctx.gh, release_branch, base_branch)? else {
@@ -191,8 +207,26 @@ fn pending_release(ctx: &Context, release_branch: &str, base_branch: &str) -> Re
     };
 
     if repo::release_exists(&ctx.gh, tag)? {
-        // Released already: that cycle is complete, so a new one may start.
-        return Ok(false);
+        // Released already. A new cycle may start — unless the merge that
+        // carried this release is still the tip of base, in which case there is
+        // nothing on top of it to release.
+        if pr.merged_sha() != Some(base_sha) {
+            return Ok(false);
+        }
+
+        eprintln!(
+            "{}",
+            logger::ok(theme, &format!("release {tag} is already published"))
+        );
+        eprintln!("{}", logger::detail_url(theme, "pr", &pr.url));
+        eprintln!(
+            "{}",
+            logger::skip(
+                theme,
+                &format!("nothing new on {base_branch} since it was merged")
+            )
+        );
+        return Ok(true);
     }
 
     eprintln!(

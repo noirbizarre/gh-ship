@@ -180,6 +180,18 @@ place.
     Exiting `0` is deliberate: this is an expected state, and a workflow that runs
     `prepare` on every push should not go red until someone ships.
 
+!!! note "It also skips right after a release"
+
+    Merging the Release PR is itself a push to your base branch, so a
+    push-triggered `prepare` runs on it. If the release is already published and
+    its merge commit is **still the tip** of the base branch, there is nothing on
+    top of it to release: `prepare` says so and exits `0` without dispatching the
+    prepare workflow.
+
+    The check compares the merge commit recorded on the pull request against the
+    branch tip, so it holds whether you merge, squash or rebase. The next commit
+    to land makes `prepare` proceed as usual.
+
 ---
 
 ## `gh ship status`
