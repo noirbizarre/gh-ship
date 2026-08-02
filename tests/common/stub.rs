@@ -174,6 +174,13 @@ impl GhStub {
         self
     }
 
+    /// Refuse branch deletions, as a protected ref or a missing scope does.
+    pub fn branch_delete_fails(mut self) -> Self {
+        self.env
+            .insert("STUB_BRANCH_DELETE_FAILS".into(), "1".into());
+        self
+    }
+
     /// Simulate `gh` being unauthenticated.
     pub fn unauthenticated(mut self) -> Self {
         self.env.insert("STUB_UNAUTHENTICATED".into(), "1".into());
@@ -441,6 +448,14 @@ case "$1 ${2:-}" in
       # POST creates a ref (branch or tag); PATCH .../git/refs/heads/<branch>
       # force-updates one; DELETE removes one.
       *"/git/refs"*)
+        if [ "${STUB_BRANCH_DELETE_FAILS:-0}" = "1" ]; then
+          case " $* " in
+            *" DELETE "*)
+              echo "HTTP 403: Resource not accessible by integration" >&2
+              exit 1
+              ;;
+          esac
+        fi
         if [ "${STUB_TAG_EXISTS:-0}" = "1" ]; then
           case "$*" in
             *refs/tags/*)

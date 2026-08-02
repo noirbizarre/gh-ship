@@ -304,9 +304,10 @@ fn a_missing_release_branch_is_created_at_the_staged_commit() {
     );
 }
 
-/// A merged-but-unpublished release must be protected before anything is reset.
+/// A merged-but-unpublished release must be protected before anything is
+/// staged or promoted.
 #[test]
-fn the_pending_release_guard_runs_before_any_reset() {
+fn the_pending_release_guard_short_circuits_before_staging() {
     let body = format!("Notes\n\n<!-- ship:artifact\n{CHANGED_ARTIFACT}\n-->");
     let repo = Repo::new(
         CONFIG,
@@ -327,9 +328,10 @@ fn the_pending_release_guard_runs_before_any_reset() {
     );
 }
 
-/// Preview must not dispatch on the release branch: `prepare` resets it to
-/// base, so base is what a real prepare runs against. Using a stale release
-/// branch would make preview report history that no longer matches reality.
+/// Preview must not dispatch on the release branch: `prepare` stages on a
+/// throwaway branch cut from base, so base is what a real prepare runs
+/// against. Using a stale release branch would make preview report history
+/// that no longer matches reality.
 #[test]
 fn preview_dispatches_on_the_base_branch() {
     let repo = Repo::new(
@@ -1214,6 +1216,54 @@ fn no_existing_pr_simply_opens_one() {
 }
 
 // --- Staging-branch sweep ------------------------------------------------
+
+/// Abandoned staging branches accumulate forever if the sweep does not run:
+/// every failure part-way through a prepare, and every `--no-wait`, leaves
+/// one behind.
+#[test]
+fn prepare_sweeps_abandoned_staging_branches() {
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new()
+            .artifact(CHANGED_ARTIFACT)
+            .stale_staging_branch("ship/prepare-deadbeef1234"),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        repo.stub
+            .called_with(&["api", "git/refs/heads/ship/prepare-deadbeef1234", "DELETE"]),
+        "the abandoned staging branch must be deleted: {:?}",
+        repo.stub.calls()
+    );
+}
+
+/// The sweep is housekeeping. A branch that cannot be deleted — a protected
+/// ref, a missing scope — must never be the reason a release fails.
+#[test]
+fn a_staging_branch_that_cannot_be_deleted_does_not_fail_the_release() {
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new()
+            .artifact(CHANGED_ARTIFACT)
+            .stale_staging_branch("ship/prepare-undeletable")
+            .branch_delete_fails(),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(
+        out.code, 0,
+        "housekeeping must not fail the release: {}",
+        out.stderr
+    );
+    assert!(
+        out.stderr.contains("could not delete the staging branch"),
+        "the failure must still be reported: {}",
+        out.stderr
+    );
+    assert!(repo.stub.called_with(&["pr create"]));
+}
 
 /// `gh api` has no `--repo` flag, so routing an API call through the scoped
 /// helper makes it fail — and the sweep swallows its errors, so it fails
