@@ -211,6 +211,84 @@ fn unauthenticated_gh_is_reported_actionably() {
     assert!(out.stderr.contains("gh auth login"), "{}", out.stderr);
 }
 
+// --- Transient API failures ----------------------------------------------
+
+/// A real release run died on a single 504 from GitHub's GraphQL endpoint,
+/// which was answering normally again seconds later. A blip on a read must
+/// cost a retry, not the release.
+#[test]
+fn a_transient_failure_on_a_read_is_absorbed() {
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new()
+            .pr_exists(false)
+            .artifact(CHANGED_ARTIFACT)
+            .flaky("pr list", 2),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        repo.stub.called_with(&["pr create"]),
+        "the release must proceed: {:?}",
+        repo.stub.calls()
+    );
+    // The retry must be invisible: no half-failure leaking into the output.
+    assert!(!out.stderr.contains("504"), "{}", out.stderr);
+}
+
+/// An outage is not a blip. Once the budget is spent the error surfaces,
+/// and it has to say it was already retried — otherwise the reader's first
+/// instinct is to do by hand what we just did four times.
+#[test]
+fn a_sustained_outage_gives_up_and_says_it_retried() {
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new()
+            .pr_exists(false)
+            .artifact(CHANGED_ARTIFACT)
+            .flaky("pr list", 99),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(out.code, 1, "{}", out.stderr);
+    assert!(out.stderr.contains("504"), "{}", out.stderr);
+    assert!(out.stderr.contains("retried"), "{}", out.stderr);
+
+    let attempts = repo
+        .stub
+        .calls()
+        .iter()
+        .filter(|c| c.starts_with("pr list"))
+        .count();
+    assert_eq!(attempts, 4, "3 retries on top of the first attempt");
+}
+
+/// The reason retries are gated on reads: a 504 means GitHub stopped
+/// answering, not that it stopped acting, so a retried `pr create` could
+/// open two Release PRs.
+#[test]
+fn a_transient_failure_on_a_write_is_not_retried() {
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new()
+            .pr_exists(false)
+            .artifact(CHANGED_ARTIFACT)
+            .flaky("pr create", 1),
+    );
+    let out = repo.ship(&["prepare"]);
+
+    assert_eq!(out.code, 1, "{}", out.stderr);
+
+    let attempts = repo
+        .stub
+        .calls()
+        .iter()
+        .filter(|c| c.starts_with("pr create"))
+        .count();
+    assert_eq!(attempts, 1, "a write must be attempted exactly once");
+}
+
 #[test]
 fn a_missing_config_suggests_init() {
     let repo = Repo::new(CONFIG, GhStub::new());

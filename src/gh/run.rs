@@ -219,6 +219,9 @@ pub fn dispatch_as(
 }
 
 /// Poll until a run carrying `ship_id` appears.
+///
+/// Transient API failures do not surface here: [`Gh`] retries read-only
+/// calls itself, so a 502 mid-poll costs a second rather than the release.
 pub fn find(
     gh: &Gh,
     workflow: &WorkflowRef,
@@ -253,6 +256,9 @@ pub fn find(
 }
 
 /// Poll a known run until it reaches a terminal state.
+///
+/// As with [`find`], a transient API blip is absorbed by [`Gh`] rather than
+/// aborting the wait.
 pub fn wait(
     gh: &Gh,
     workflow: &WorkflowRef,

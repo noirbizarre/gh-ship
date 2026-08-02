@@ -31,6 +31,27 @@ When a command runs inside a workflow of your own, set `timeout-minutes` on the
 job *below* these values, so a stuck run fails the job visibly rather than
 sitting until GitHub's own six-hour limit.
 
+## Transient failures
+
+GitHub occasionally answers a valid query with a 502 or 504 — most often on the
+GraphQL endpoint behind the `--json` flags — and is fine again seconds later.
+gh-ship retries those rather than failing the release:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SHIP_GH_RETRIES` | `3` | Extra attempts for a read-only `gh` call that fails transiently. `0` disables. |
+| `SHIP_GH_RETRY_DELAY` | `1` | Seconds before the first retry. Doubles per attempt, capped at 8. |
+
+Only **read-only** calls are retried — `list`, `view`, `status`, `download` and
+`GET` requests to `gh api`. A gateway timeout means GitHub stopped *answering*,
+not that it stopped *acting*: a timed-out `pr create` may well have created the
+pull request, so retrying it would open a second one. Writes still fail on the
+first error, and are safe to re-run by hand because every gh-ship command is
+idempotent.
+
+Rate limits are not retried either. They clear in minutes rather than seconds,
+so the error tells you to wait instead of spending the budget for nothing.
+
 ## Colour
 
 gh-ship colours its output when it believes something will render it, following

@@ -7,9 +7,45 @@
 
 use std::ffi::OsStr;
 use std::process::Command;
+use std::time::Duration;
 
 use miette::Diagnostic;
 use thiserror::Error;
+
+/// How many *extra* attempts a transient failure earns.
+///
+/// GitHub occasionally answers a perfectly valid query with a 502 or 504,
+/// especially on the GraphQL endpoint the `--json` flags use. Those clear
+/// within seconds, so failing the whole release for one of them wastes a
+/// human's afternoon on a problem that fixed itself.
+pub const RETRIES: u32 = 3;
+
+/// The delay before the first retry. Doubles per attempt, capped at
+/// [`RETRY_MAX_DELAY`].
+pub const RETRY_DELAY: Duration = Duration::from_secs(1);
+
+/// The ceiling on the retry backoff.
+const RETRY_MAX_DELAY: Duration = Duration::from_secs(8);
+
+/// The retry count, overridable via `SHIP_GH_RETRIES`. `0` disables retrying.
+fn retries() -> u32 {
+    std::env::var("SHIP_GH_RETRIES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(RETRIES)
+}
+
+/// The initial retry delay, overridable via `SHIP_GH_RETRY_DELAY` (seconds).
+///
+/// Mostly a test knob: the suite sets it to `0` so it never sleeps through a
+/// backoff it is not measuring.
+fn retry_delay() -> Duration {
+    std::env::var("SHIP_GH_RETRY_DELAY")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .map(Duration::from_secs)
+        .unwrap_or(RETRY_DELAY)
+}
 
 /// Errors from invoking the GitHub CLI.
 #[derive(Debug, Error, Diagnostic)]
@@ -87,25 +123,45 @@ impl Gh {
     }
 
     fn exec<S: AsRef<OsStr>>(&self, args: &[S], scoped: bool) -> Result<String, GhError> {
-        let mut cmd = Command::new("gh");
-        cmd.args(args);
-        if scoped && let Some(repo) = &self.repo {
-            cmd.arg("--repo").arg(repo);
+        let repo = scoped.then_some(self.repo.as_deref()).flatten();
+        let display = display_args(args, repo);
+
+        let attempts = retries();
+        let mut delay = retry_delay();
+
+        for attempt in 0..=attempts {
+            // A `Command` cannot be reused after `output()`, so it is built
+            // fresh per attempt. The arguments are identical every time: a
+            // retry must ask the same question, not a slightly different one.
+            let mut cmd = Command::new("gh");
+            cmd.args(args);
+            if let Some(repo) = repo {
+                cmd.arg("--repo").arg(repo);
+            }
+
+            // A spawn failure is never retried: `gh` being missing or
+            // unrunnable is not a condition that clears on its own.
+            let output = cmd.output().map_err(|e| spawn_error(&display, &e))?;
+
+            if output.status.success() {
+                return String::from_utf8(output.stdout).map_err(|e| GhError::Decode {
+                    args: display,
+                    message: e.to_string(),
+                });
+            }
+
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+            if attempt < attempts && is_retryable(args, &stderr) {
+                std::thread::sleep(delay);
+                delay = std::cmp::min(delay * 2, RETRY_MAX_DELAY);
+                continue;
+            }
+
+            return Err(retried(classify(&display, &stderr), attempt));
         }
 
-        let display = display_args(args, scoped.then_some(self.repo.as_deref()).flatten());
-
-        let output = cmd.output().map_err(|e| spawn_error(&display, &e))?;
-
-        if output.status.success() {
-            return String::from_utf8(output.stdout).map_err(|e| GhError::Decode {
-                args: display,
-                message: e.to_string(),
-            });
-        }
-
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        Err(classify(&display, &stderr))
+        unreachable!("the loop returns on its last iteration")
     }
 
     /// Run `gh` and parse stdout as JSON.
@@ -221,6 +277,126 @@ fn classify(display: &str, stderr: &str) -> GhError {
     }
 }
 
+/// Whether a failed invocation is worth attempting again.
+///
+/// Both halves must hold. Transience alone is not enough: a 504 says GitHub
+/// gave up on *answering*, not that it gave up on *acting*, so a timed-out
+/// `pr create` may well have created the pull request. Retrying reads is free;
+/// retrying writes invents duplicates.
+fn is_retryable<S: AsRef<OsStr>>(args: &[S], stderr: &str) -> bool {
+    is_read_only(args) && is_transient(stderr)
+}
+
+/// Whether the failure is GitHub having a bad moment rather than a real answer.
+///
+/// Rate limits are deliberately absent: they clear in minutes, not seconds, so
+/// hammering them is both useless and rude. They already carry their own help.
+fn is_transient(stderr: &str) -> bool {
+    let lower = stderr.to_lowercase();
+
+    if lower.contains("rate limit") {
+        return false;
+    }
+
+    const SIGNS: &[&str] = &[
+        "http 500",
+        "http 502",
+        "http 503",
+        "http 504",
+        "bad gateway",
+        "service unavailable",
+        "gateway timeout",
+        "we couldn't respond to your request in time",
+        "internal server error",
+        "server error",
+        "connection reset",
+        "connection refused",
+        "timeout awaiting",
+        "i/o timeout",
+        "tls handshake timeout",
+        "unexpected eof",
+        "temporary failure in name resolution",
+    ];
+
+    SIGNS.iter().any(|sign| lower.contains(sign))
+}
+
+/// Whether an invocation only *reads* from GitHub.
+///
+/// Fails closed: anything unrecognised counts as a mutation, so a new call
+/// site has to be added here deliberately rather than inheriting retries by
+/// accident.
+fn is_read_only<S: AsRef<OsStr>>(args: &[S]) -> bool {
+    let args: Vec<String> = args
+        .iter()
+        .map(|a| a.as_ref().to_string_lossy().into_owned())
+        .collect();
+
+    let Some(first) = args.first() else {
+        return false;
+    };
+
+    // `gh api` carries its verb in a flag rather than a subcommand.
+    if first == "api" {
+        let mut verb_is_get = true;
+        let mut iter = args.iter().skip(1);
+        while let Some(arg) = iter.next() {
+            match arg.as_str() {
+                // A body implies a write, whatever the method says.
+                "-f" | "-F" | "--field" | "--raw-field" | "--input" => return false,
+                "-X" | "--method" => {
+                    verb_is_get = iter.next().is_some_and(|m| m.eq_ignore_ascii_case("GET"));
+                }
+                other => {
+                    if let Some(method) = other.strip_prefix("--method=") {
+                        verb_is_get = method.eq_ignore_ascii_case("GET");
+                    }
+                }
+            }
+        }
+        return verb_is_get;
+    }
+
+    const READS: &[&str] = &["list", "view", "status", "download", "diff", "checks"];
+
+    // The subcommand, positionally. Scanning past flags instead would be
+    // worse, not better: a flag's *value* is indistinguishable from a
+    // subcommand, so `pr --repo o/r list` would read `o/r` as the verb.
+    // Every call site in gh-ship spells the verb second, and `--repo` is
+    // appended at the end by `exec`.
+    args.get(1)
+        .is_some_and(|verb| READS.contains(&verb.as_str()))
+}
+
+/// Note on an exhausted error that it was already retried.
+///
+/// Without this the log says "`gh pr list` failed", and the reader's first
+/// instinct is to retry by hand — which we already did, several times.
+fn retried(error: GhError, attempt: u32) -> GhError {
+    if attempt == 0 {
+        return error;
+    }
+
+    let GhError::Failed { args, stderr, help } = error else {
+        return error;
+    };
+
+    let note = format!(
+        "this looked transient, so it was retried {attempt} more \
+         time{} before giving up",
+        if attempt == 1 { "" } else { "s" }
+    );
+
+    GhError::Failed {
+        args,
+        stderr,
+        help: Some(match help {
+            Some(help) => format!("{help}\n{note}"),
+            None => note,
+        }),
+    }
+}
+
 fn display_args<S: AsRef<OsStr>>(args: &[S], repo: Option<&str>) -> String {
     let mut parts: Vec<String> = args
         .iter()
@@ -318,6 +494,121 @@ mod tests {
         };
         assert!(help.is_none());
         assert_eq!(stderr, "something weird happened");
+    }
+
+    /// The exact failure that killed a real release run: GitHub's GraphQL
+    /// endpoint gave up mid-query on a plain read.
+    #[test]
+    fn the_504_that_broke_a_release_is_retryable() {
+        let stderr = "HTTP 504: We couldn't respond to your request in time. Sorry about that. \
+                      Please try resubmitting your request and contact us if the problem \
+                      persists. (https://api.github.com/graphql)";
+        let args = [
+            "pr",
+            "list",
+            "--head",
+            "release/next",
+            "--base",
+            "main",
+            "--state",
+            "open",
+            "--limit",
+            "1",
+            "--json",
+            "number,url,title,body,state,mergeCommit",
+        ];
+        assert!(is_retryable(&args, stderr));
+    }
+
+    /// Rate limits are not a blip. Retrying them within seconds cannot
+    /// succeed, and the error already says to wait.
+    #[test]
+    fn rate_limits_are_not_retried() {
+        assert!(!is_transient("HTTP 403: API rate limit exceeded"));
+    }
+
+    /// A real answer is a real answer, however unwelcome.
+    #[test]
+    fn definite_failures_are_not_transient() {
+        assert!(!is_transient("HTTP 404: Not Found"));
+        assert!(!is_transient("HTTP 403: Resource not accessible"));
+        assert!(!is_transient("something weird happened"));
+    }
+
+    /// The whole point of gating on read-only: a 504 means GitHub stopped
+    /// *answering*, not that it stopped *acting*. Retrying a write invents
+    /// duplicate pull requests, tags and releases.
+    #[test]
+    fn mutations_are_never_retried_however_transient_the_failure() {
+        let stderr = "HTTP 502: Bad gateway";
+        for args in [
+            vec!["pr", "create", "--title", "x"],
+            vec!["release", "create", "v1.0.0"],
+            vec!["workflow", "run", "ship.yml"],
+            vec!["label", "create", "release"],
+            vec!["pr", "merge", "12", "--merge"],
+            vec!["api", "-X", "POST", "repos/o/r/git/refs"],
+            vec!["api", "repos/o/r/git/refs", "-f", "ref=x"],
+        ] {
+            assert!(!is_retryable(&args, stderr), "{args:?} must not be retried");
+        }
+    }
+
+    #[test]
+    fn reads_are_recognised() {
+        for args in [
+            vec!["pr", "list", "--json", "number"],
+            vec!["pr", "view", "12"],
+            vec!["run", "view", "42", "--json", "status"],
+            vec!["run", "download", "42"],
+            vec!["release", "view", "v1.0.0"],
+            vec!["repo", "view"],
+            vec!["auth", "status"],
+            vec!["api", "repos/o/r/git/matching-refs/tags"],
+            vec!["api", "--method", "GET", "repos/o/r"],
+        ] {
+            assert!(is_read_only(&args), "{args:?} must count as a read");
+        }
+    }
+
+    /// The verb is read positionally, so a flag sitting where the
+    /// subcommand belongs must not be mistaken for one.
+    #[test]
+    fn a_misplaced_flag_is_not_a_subcommand() {
+        assert!(!is_read_only(&["pr", "--repo", "o/r", "list"]));
+    }
+
+    /// An empty invocation cannot be proven safe, so it is not.
+    #[test]
+    fn unknown_shapes_fail_closed() {
+        assert!(!is_read_only::<&str>(&[]));
+        assert!(!is_read_only(&["pr"]));
+        assert!(!is_read_only(&["totally-new-command", "poke"]));
+    }
+
+    /// An exhausted retry has to say so, or the reader's first instinct is
+    /// to do by hand what we already did three times.
+    #[test]
+    fn an_exhausted_error_admits_it_was_retried() {
+        let e = retried(classify("pr list", "HTTP 504: gateway timeout"), 3);
+        let GhError::Failed { help, stderr, .. } = &e else {
+            panic!("expected Failed, got {e:?}")
+        };
+        assert!(stderr.contains("504"), "the original message must survive");
+        assert!(
+            help.as_ref().unwrap().contains("retried 3 more times"),
+            "{help:?}"
+        );
+    }
+
+    /// A first-attempt failure is not a retry, and must not claim to be.
+    #[test]
+    fn a_first_attempt_failure_is_left_alone() {
+        let e = retried(classify("pr list", "something weird happened"), 0);
+        let GhError::Failed { help, .. } = &e else {
+            panic!("expected Failed")
+        };
+        assert!(help.is_none(), "{help:?}");
     }
 
     #[test]

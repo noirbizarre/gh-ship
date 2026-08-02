@@ -187,6 +187,18 @@ impl GhStub {
         self
     }
 
+    /// Make the first `count` invocations of `cmd` fail with GitHub's 504.
+    ///
+    /// `cmd` is the subcommand pair as the stub sees it, e.g. `"pr list"`.
+    /// Use a count larger than the retry budget to model an outage rather
+    /// than a blip.
+    pub fn flaky(mut self, cmd: &str, count: u32) -> Self {
+        self.env.insert("STUB_FLAKY_CMD".into(), cmd.into());
+        self.env
+            .insert("STUB_FLAKY_COUNT".into(), count.to_string());
+        self
+    }
+
     /// Write the stub into `dir/bin/gh` and return that bin directory,
     /// plus the environment the stub needs.
     pub fn install(self, dir: &Path) -> Installed {
@@ -268,6 +280,20 @@ fi
 REPO="${STUB_REPO:-acme/widgets}"
 DEFAULT_BRANCH="${STUB_DEFAULT_BRANCH:-main}"
 LABEL_FILE="${STUB_LOG:-/tmp/stub}.labels"
+
+# Fail the first N invocations of a given subcommand with GitHub's 504,
+# byte for byte as it broke a real release run. The counter lives on disk
+# because each invocation is a fresh process.
+if [ -n "${STUB_FLAKY_CMD:-}" ] && [ "$1 ${2:-}" = "$STUB_FLAKY_CMD" ]; then
+  FLAKY_FILE="${STUB_LOG:-/tmp/stub}.flaky"
+  SEEN="$(cat "$FLAKY_FILE" 2>/dev/null || echo 0)"
+  SEEN=$((SEEN + 1))
+  printf '%s\n' "$SEEN" > "$FLAKY_FILE"
+  if [ "$SEEN" -le "${STUB_FLAKY_COUNT:-0}" ]; then
+    echo "HTTP 504: We couldn't respond to your request in time. Sorry about that. Please try resubmitting your request and contact us if the problem persists. (https://api.github.com/graphql)" >&2
+    exit 1
+  fi
+fi
 
 # Labels the repository "has": those seeded by the test, plus any created
 # by an earlier invocation in the same test.

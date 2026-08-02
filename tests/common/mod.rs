@@ -90,7 +90,10 @@ impl Repo {
             // Keep the "run never appeared" path fast: the production
             // default is 90s, which would dominate the suite.
             .env("SHIP_APPEAR_TIMEOUT", "3")
-            .env("SHIP_RUN_TIMEOUT", "10");
+            .env("SHIP_RUN_TIMEOUT", "10")
+            // Retries are exercised for their behaviour, not their timing:
+            // sleeping through the real backoff would add seconds per test.
+            .env("SHIP_GH_RETRY_DELAY", "0");
         for (k, v) in &self.stub.env {
             cmd.env(k, v);
         }
