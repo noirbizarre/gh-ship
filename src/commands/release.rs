@@ -200,7 +200,7 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
     }
 
     // --- 6. Publish workflow, then undraft -------------------------------
-    let draft = ctx.config.draft_release();
+    let draft = ctx.config.release().draft;
 
     match ctx.config.publish_workflow() {
         Some(publish) if draft => {
@@ -282,7 +282,7 @@ fn ensure_merged(ctx: &Context, pr: PullRequest, merge: bool) -> Result<PullRequ
 
 fn create_release(ctx: &Context, artifact: &Artifact, tag: &str, target: &str) -> Result<()> {
     let theme = ctx.theme;
-    let draft = ctx.config.draft_release();
+    let draft = ctx.config.release().draft;
 
     eprintln!(
         "{}",

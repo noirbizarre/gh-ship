@@ -30,7 +30,13 @@ pub const ARTIFACT_FILE: &str = "ship.release.json";
 /// Deserialization is deliberately permissive (`x-` extensions and
 /// forward-compatible fields are tolerated by the model); *strictness*
 /// lives in the JSON Schema, which runs first and produces far better
-/// diagnostics than serde ever could.
+/// diagnostics than serde ever could. This is why the artifact model
+/// carries no `deny_unknown_fields` while the config model does: the
+/// config is checked by serde, the artifact by its schema.
+///
+/// The field casing is mixed (`schemaVersion` next to `pull_request`)
+/// because it is a published v1 protocol, frozen as shipped. Renames are
+/// therefore per field rather than a blanket `rename_all`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Artifact {
     #[serde(rename = "schemaVersion")]

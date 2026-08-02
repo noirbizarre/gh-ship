@@ -332,7 +332,7 @@ fn upsert_pull_request(
     labels: &[String],
 ) -> Result<()> {
     let theme = ctx.theme;
-    let reuse = ctx.config.reuse_pull_request();
+    let reuse = ctx.config.pull_request().reuse;
     let existing = repo::find_pull_request(&ctx.gh, head, base)?;
 
     // A merged PR belongs to a release that already shipped; never touch it.

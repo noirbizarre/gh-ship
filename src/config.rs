@@ -54,6 +54,12 @@ impl Source {
 }
 
 /// The configuration model.
+///
+/// Every struct below denies unknown fields, mirroring
+/// `additionalProperties: false` in `schemas/config.v1.schema.json` — a
+/// typo in a config someone hand-wrote must be an error, not a silent
+/// no-op. The artifact model deliberately does the opposite; see
+/// [`crate::artifact::Artifact`].
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
@@ -335,12 +341,8 @@ impl Config {
         &self.settings.pull_request
     }
 
-    pub fn reuse_pull_request(&self) -> bool {
-        self.settings.pull_request.reuse
-    }
-
-    pub fn draft_release(&self) -> bool {
-        self.settings.release.draft
+    pub fn release(&self) -> &ReleaseConfig {
+        &self.settings.release
     }
 }
 
