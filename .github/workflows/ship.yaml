@@ -60,14 +60,13 @@ jobs:
           # `prepare-release` to a filename, and the dispatch fails.
           fetch-depth: 0
 
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-
-      # Built from source rather than `gh extension install`, because no
-      # release exists yet — the documented install path cannot bootstrap
-      # itself. Revisit once 0.1.0 is published.
-      - name: Build gh-ship
-        run: cargo build --release
+      # gh-ship releases gh-ship: the extension published by the previous
+      # release is what runs the next one. Building from source here was only
+      # ever the 0.1.0 bootstrap.
+      - name: Install gh-ship
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh extension install noirbizarre/gh-ship
 
       - name: Prepare the release
         env:
@@ -80,7 +79,7 @@ jobs:
           # Metadata: read. Actions: write is the one usually missing.
           # https://noirbizarre.github.io/gh-ship/workflows/#what-the-token-must-be-allowed-to-do
           GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
-        run: ./target/release/gh-ship prepare
+        run: gh ship prepare
 
   release:
     name: 🚢 Release
@@ -102,18 +101,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-
-      # Built from source for the same reason as prepare: no release exists yet
-      # for `gh extension install` to fetch. Once 0.1.0 ships, both jobs can
-      # install the extension instead.
-      - name: Build gh-ship
-        run: cargo build --release
+      - name: Install gh-ship
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh extension install noirbizarre/gh-ship
 
       # Tags the merge commit, creates the release as a draft, dispatches
       # 📦 Publish Release to attach the binaries, then makes it public.
       - name: Ship the release
         env:
           GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
-        run: ./target/release/gh-ship release
+        run: gh ship release
