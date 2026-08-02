@@ -52,6 +52,9 @@ jobs:
       name: release
       deployment: false
 
+    env:
+      GITHUB_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
+
     steps:
       - uses: actions/checkout@v7
         with:
@@ -64,21 +67,9 @@ jobs:
       # release is what runs the next one. Building from source here was only
       # ever the 0.1.0 bootstrap.
       - name: Install gh-ship
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: gh extension install noirbizarre/gh-ship
 
       - name: Prepare the release
-        env:
-          # Must be SHIP_TOKEN: a pull request authored by GITHUB_TOKEN does
-          # not trigger workflows, so the Release PR would show no CI checks.
-          #
-          # The token needs Actions: read and write (to dispatch the prepare
-          # workflow and download its artifact), Contents: read and write,
-          # Pull requests: read and write, Issues: read and write, and
-          # Metadata: read. Actions: write is the one usually missing.
-          # https://noirbizarre.github.io/gh-ship/workflows/#what-the-token-must-be-allowed-to-do
-          GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
         run: gh ship prepare
 
   release:
@@ -98,17 +89,16 @@ jobs:
       name: release
       deployment: false
 
+    env:
+      GITHUB_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
+
     steps:
       - uses: actions/checkout@v7
 
       - name: Install gh-ship
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: gh extension install noirbizarre/gh-ship
 
       # Tags the merge commit, creates the release as a draft, dispatches
       # 📦 Publish Release to attach the binaries, then makes it public.
       - name: Ship the release
-        env:
-          GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
         run: gh ship release

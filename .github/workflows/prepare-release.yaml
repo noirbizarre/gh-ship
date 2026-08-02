@@ -41,6 +41,9 @@ jobs:
       name: release
       deployment: false
 
+    env:
+      GITHUB_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
+
     steps:
       - uses: actions/checkout@v7
         with:
@@ -95,11 +98,6 @@ jobs:
 
       - name: Generate the changelog
         if: steps.version.outputs.changed == 'true'
-        env:
-          # git-cliff reads GITHUB_TOKEN, not GH_TOKEN. On a private repo a
-          # missing scope surfaces as 404 rather than 401, which is very
-          # confusing, so set it explicitly.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           git cliff --bump -o CHANGELOG.md
