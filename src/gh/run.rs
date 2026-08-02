@@ -46,9 +46,9 @@ pub fn appear_timeout() -> Duration {
     env_duration("SHIP_APPEAR_TIMEOUT").unwrap_or(APPEAR_TIMEOUT)
 }
 
-/// The completion timeout, overridable via `SHIP_RUN_TIMEOUT` (seconds).
-pub fn complete_timeout() -> Duration {
-    env_duration("SHIP_RUN_TIMEOUT").unwrap_or(COMPLETE_TIMEOUT)
+/// The run timeout, overridable via `SHIP_RUN_TIMEOUT` (seconds).
+pub fn run_timeout() -> Duration {
+    env_duration("SHIP_RUN_TIMEOUT").unwrap_or(RUN_TIMEOUT)
 }
 
 fn env_duration(key: &str) -> Option<Duration> {
@@ -60,7 +60,7 @@ fn env_duration(key: &str) -> Option<Duration> {
 }
 
 /// How long to wait for a run to *finish*, by default.
-pub const COMPLETE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
+pub const RUN_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 
 /// Polling interval bounds. Starts tight so short runs feel immediate,
 /// backs off so a long run does not hammer the API.

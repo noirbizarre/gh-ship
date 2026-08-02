@@ -187,7 +187,7 @@ pub(crate) fn wait_for_run(ctx: &Context, workflow: &WorkflowRef, found: &Run) -
         &ctx.gh,
         workflow,
         found,
-        run::complete_timeout(),
+        run::run_timeout(),
         |elapsed, current| {
             // Report on transitions rather than on every poll: a status
             // line per two seconds is noise, a line per state change is
