@@ -146,7 +146,12 @@ impl Workflow {
         self.inputs.iter().any(|i| i == DRY_RUN_INPUT)
     }
 
-    /// Every way this workflow violates the gh-ship contract.
+    /// Every way this workflow violates the role-agnostic part of the
+    /// gh-ship contract.
+    ///
+    /// Used where the role is not yet known — `gh ship init` weighing
+    /// candidate workflows, for instance. Prefer [`Self::contract_violations_as`]
+    /// once the role is settled.
     pub fn contract_violations(&self) -> Vec<Violation> {
         let mut v = Vec::new();
         if !self.dispatchable {
@@ -160,6 +165,43 @@ impl Workflow {
         }
         v
     }
+
+    /// Every way this workflow violates the contract *for a given role*.
+    ///
+    /// `dry_run` is only meaningful for the prepare workflow: `gh ship preview`
+    /// dispatches it with `dry_run=true`, and GitHub rejects a dispatch that
+    /// carries an input the workflow does not declare. Catching that here
+    /// turns a confusing mid-command failure into a `validate` diagnostic.
+    pub fn contract_violations_as(&self, role: Role) -> Vec<Violation> {
+        let mut v = self.contract_violations();
+        if role == Role::Prepare && !self.accepts_dry_run() {
+            v.push(Violation::MissingDryRunInput);
+        }
+        v
+    }
+}
+
+/// The role a workflow plays in a release.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Role {
+    Prepare,
+    Publish,
+}
+
+impl Role {
+    /// The `workflows.<key>` this role is configured under.
+    pub fn key(&self) -> &'static str {
+        match self {
+            Self::Prepare => "prepare",
+            Self::Publish => "publish",
+        }
+    }
+}
+
+impl std::fmt::Display for Role {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.key())
+    }
 }
 
 /// A way a workflow fails to satisfy the gh-ship contract.
@@ -168,6 +210,7 @@ pub enum Violation {
     NotDispatchable,
     MissingShipIdInput,
     MissingRunName,
+    MissingDryRunInput,
 }
 
 impl Violation {
@@ -176,6 +219,7 @@ impl Violation {
             Self::NotDispatchable => "does not declare `on: workflow_dispatch`",
             Self::MissingShipIdInput => "does not declare a `ship_id` input",
             Self::MissingRunName => "does not stamp `ship_id` into its `run-name`",
+            Self::MissingDryRunInput => "does not declare a `dry_run` input",
         }
     }
 
@@ -195,6 +239,11 @@ impl Violation {
                 "add `run-name: <name> (ship:${{ inputs.ship_id }})`. `gh workflow run` returns \
                  no run id, so the nonce in the run name is how gh-ship locates your run instead \
                  of guessing from timestamps."
+            }
+            Self::MissingDryRunInput => {
+                "add a boolean `dry_run` input under `workflow_dispatch.inputs` and skip pushing \
+                 when it is true. `gh ship preview` dispatches with `dry_run=true`, and GitHub \
+                 refuses a dispatch carrying an input the workflow does not declare."
             }
         }
     }

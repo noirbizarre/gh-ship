@@ -2,8 +2,9 @@
 
 gh-ship dispatches workflows you own. This page is the contract they must satisfy.
 
-`gh ship validate` checks every rule here, so you never have to discover a violation
-during a release.
+`gh ship validate` checks rules 1 to 3 below, so you never have to discover those
+violations during a release. Rule 4 — uploading the artifact — is the one thing it
+cannot check, because it depends on what your job steps actually do at runtime.
 
 ## The contract
 
@@ -85,7 +86,32 @@ and often enough to corrupt a release.
 So gh-ship generates a nonce, passes it as `ship_id`, and finds its run by looking
 for `ship:<nonce>` in the run title. Explicit beats guessing.
 
-### 3. It must upload the artifact
+### 3. It must accept and respect `dry_run`
+
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run: { required: false, type: boolean, default: false }
+```
+
+When `dry_run` is `true`, the workflow must produce the artifact but **not** commit
+or push. This is what makes `gh ship preview` safe.
+
+Declaring the input is checked; *respecting* it is up to you. The declaration
+matters on its own, because GitHub refuses a dispatch carrying an input the
+workflow does not declare — so without it `gh ship preview` fails mid-command.
+
+This rule applies to the prepare workflow only, which is the one `preview`
+dispatches.
+
+### 4. It must upload the artifact
+
+!!! warning "Not checked by `gh ship validate`"
+
+    This is the one rule gh-ship cannot verify statically: whether an artifact is
+    produced depends on what your steps do, not on what the workflow declares.
+    A missing upload surfaces during `gh ship prepare` instead.
 
 ```yaml
 - uses: actions/upload-artifact@v4
@@ -96,11 +122,6 @@ for `ship:<nonce>` in the run title. Explicit beats guessing.
 ```
 
 Both names are part of the [protocol](specifications/release-artifact.md).
-
-### 4. It must respect `dry_run`
-
-When `dry_run` is `true`, the workflow must produce the artifact but **not** commit
-or push. This is what makes `gh ship preview` safe.
 
 ## The prepare workflow
 
@@ -405,7 +426,7 @@ permissions:
 $ gh ship validate
 ```
 
-Every rule above is checked, with an explanation of why it exists:
+Rules 1 to 3 are checked, with an explanation of why each exists:
 
 ```
 × workflow `prepare-release.yml` does not declare `on: workflow_dispatch`

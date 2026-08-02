@@ -6,7 +6,7 @@ expression: stderr
   release branch: release/next
 ship::validate::setup
 
-  × the gh-ship setup has 3 problems
+  × the gh-ship setup has 4 problems
   help: see https://noirbizarre.github.io/gh-ship/workflows/ for the workflow
         contract
 
@@ -32,3 +32,11 @@ Error: ship::validate::workflow
   help: add `run-name: <name> (ship:${{ inputs.ship_id }})`. `gh workflow run`
         returns no run id, so the nonce in the run name is how gh-ship locates
         your run instead of guessing from timestamps.
+
+Error: ship::validate::workflow
+
+  × workflow `prepare-release` does not declare a `dry_run` input
+  help: add a boolean `dry_run` input under `workflow_dispatch.inputs` and
+        skip pushing when it is true. `gh ship preview` dispatches with
+        `dry_run=true`, and GitHub refuses a dispatch carrying an input the
+        workflow does not declare.

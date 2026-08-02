@@ -21,7 +21,7 @@ use thiserror::Error;
 use gh_ship::artifact::validate;
 use gh_ship::cli::{Cli, ValidateArgs};
 use gh_ship::config::Config;
-use gh_ship::gh::workflow::{self, Workflow};
+use gh_ship::gh::workflow::{self, Role, Workflow};
 use gh_ship::logger;
 use gh_ship::style::Theme;
 use gh_ship::suggest;
@@ -114,13 +114,13 @@ fn validate_setup(cli: &Cli, theme: Theme) -> Result<()> {
     check_workflow(
         &available,
         config.prepare_workflow(),
-        "prepare",
+        Role::Prepare,
         &mut issues,
         theme,
     );
 
     if let Some(publish) = config.publish_workflow() {
-        check_workflow(&available, publish, "publish", &mut issues, theme);
+        check_workflow(&available, publish, Role::Publish, &mut issues, theme);
     }
 
     if issues.is_empty() {
@@ -137,7 +137,7 @@ fn validate_setup(cli: &Cli, theme: Theme) -> Result<()> {
 fn check_workflow(
     available: &[Workflow],
     name: &str,
-    role: &str,
+    role: Role,
     issues: &mut Vec<WorkflowIssue>,
     theme: Theme,
 ) {
@@ -156,13 +156,13 @@ fn check_workflow(
         };
         issues.push(WorkflowIssue {
             workflow: name.to_string(),
-            problem: format!("(configured as `workflows.{role}`) was not found"),
+            problem: format!("(configured as `workflows.{}`) was not found", role.key()),
             help,
         });
         return;
     };
 
-    let violations = found.contract_violations();
+    let violations = found.contract_violations_as(role);
     if violations.is_empty() {
         // Slug first: it is what the config refers to. The display name
         // is shown only when it says something the slug does not.
@@ -171,7 +171,7 @@ fn check_workflow(
         } else {
             found.slug()
         };
-        eprintln!("{}", logger::detail(theme, role, &described));
+        eprintln!("{}", logger::detail(theme, role.key(), &described));
         return;
     }
 
