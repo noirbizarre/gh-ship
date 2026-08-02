@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/logo.svg" alt="GH Ship logo" />
+  <img src="docs/images/logo.svg" alt="gh-ship logo" />
 </p>
 <p align="center">
   Ship GitHub releases your way.
@@ -157,7 +157,7 @@ Only `version` and `workflows.prepare` are required.
 | `gh ship preview` | Dry-run the prepare workflow and render the PR. Mutates nothing. |
 | `gh ship prepare` | Run the prepare workflow, open or update the Release PR. |
 | `gh ship status` | Where the release stands. A pure query. |
-| `gh ship release` | Merge, tag, draft the release, publish assets, then make it visible. |
+| `gh ship release` | Tag the merge commit, draft the release, publish assets, then make it visible. Requires the Release PR to be merged, or pass `--merge`. |
 
 ## Two things worth knowing
 

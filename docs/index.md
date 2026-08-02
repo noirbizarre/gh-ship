@@ -74,10 +74,10 @@ produce it.
 
 <div class="grid cards" markdown>
 
-- :material-download: **[Installation](installation.md)** — get the extension.
-- :material-rocket-launch: **[Quick Start](quickstart.md)** — shipping in a minute.
-- :material-cog: **[Configuration](configuration.md)** — `.github/ship.yml`.
-- :material-source-branch: **[Workflows](workflows.md)** — the contract your
+- **[Installation](installation.md)** — get the extension.
+- **[Quick Start](quickstart.md)** — shipping in a minute.
+- **[Configuration](configuration.md)** — `.github/ship.yml`.
+- **[Workflows](workflows.md)** — the contract your
   workflows must satisfy.
 
 </div>

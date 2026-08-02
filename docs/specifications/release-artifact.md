@@ -3,9 +3,9 @@
 **Version 1** · Schema: <https://noirbizarre.github.io/gh-ship/schema/release/v1.json>
 
 The release artifact is the public protocol between a GitHub Actions workflow and
-GH Ship. It is the *only* channel between them.
+gh-ship. It is the *only* channel between them.
 
-GH Ship owns this protocol. Any tool may produce a conforming artifact.
+gh-ship owns this protocol. Any tool may produce a conforming artifact.
 
 ---
 
@@ -18,7 +18,7 @@ corrupt Markdown.
 
 An artifact is a plain file. It can be written with `jq`, checked into a test
 fixture, validated locally, diffed in a PR, and produced by a tool that has never
-heard of GH Ship.
+heard of gh-ship.
 
 ## Transport
 
@@ -36,7 +36,7 @@ named **`ship.release.json`**.
 ```
 
 Validating before uploading turns a protocol mistake into a red workflow with a
-precise error, instead of a confusing failure in GH Ship minutes later.
+precise error, instead of a confusing failure in gh-ship minutes later.
 
 ---
 
@@ -66,7 +66,7 @@ precise error, instead of a confusing failure in GH Ship minutes later.
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `$schema` | string | no | Editor metadata. Enables autocompletion in VS Code and JetBrains IDEs. Ignored by GH Ship. |
+| `$schema` | string | no | Editor metadata. Enables autocompletion in VS Code and JetBrains IDEs. Ignored by gh-ship. |
 | `schemaVersion` | integer | **yes** | Protocol version. Must be `1`. Authoritative — see [Versioning](#versioning). |
 | `changed` | boolean | **yes** | Whether there is anything to release. |
 | `version` | string | when `changed` | The version being released. |
@@ -97,7 +97,7 @@ precise error, instead of a confusing failure in GH Ship minutes later.
 
 `changed` is the workflow's answer to "is there anything to release?".
 
-- **`changed: false`** — `version` and `tag` must be omitted. GH Ship prints
+- **`changed: false`** — `version` and `tag` must be omitted. gh-ship prints
   `nothing to release`, **exits 0**, and touches no branch, PR, tag or release.
 - **`changed: true`** — `version` and `tag` are required. Promising a release
   without identifying it is a schema error.
@@ -105,15 +105,15 @@ precise error, instead of a confusing failure in GH Ship minutes later.
 `changed: false` is a success, not a failure. A scheduled release job that finds
 nothing to ship should go green.
 
-## What GH Ship does *not* do with these values
+## What gh-ship does *not* do with these values
 
-GH Ship deliberately knows nothing about how your project versions itself:
+gh-ship deliberately knows nothing about how your project versions itself:
 
 - **`version` is never parsed.** It is not required to be semver. CalVer, a date,
-  a build number, or `banana` are all accepted. GH Ship only requires a non-empty
+  a build number, or `banana` are all accepted. gh-ship only requires a non-empty
   string with no leading or trailing whitespace.
 - **`tag` is never derived from `version`.** If your convention is `v1.4.0`, or
-  `release-1.4.0`, or `1.4.0`, that is your workflow's business. GH Ship only
+  `release-1.4.0`, or `1.4.0`, that is your workflow's business. gh-ship only
   requires a non-empty string with no whitespace.
 - **`notes` are never generated.** Use git-cliff, release-drafter, Changesets,
   `gh api` — whatever you already use.
@@ -123,7 +123,7 @@ GH Ship deliberately knows nothing about how your project versions itself:
 ## Extensions
 
 Any property whose name begins with `x-` is permitted at every level and ignored
-by GH Ship:
+by gh-ship:
 
 ```json
 {
@@ -154,9 +154,9 @@ third-party tools a sanctioned place to put their own metadata.
 ## Versioning
 
 `schemaVersion` is **authoritative**. `$schema` is editor metadata; if the two
-disagree, GH Ship follows `schemaVersion` and ignores `$schema`.
+disagree, gh-ship follows `schemaVersion` and ignores `$schema`.
 
-A GH Ship build refuses any `schemaVersion` it does not implement, and says which
+A gh-ship build refuses any `schemaVersion` it does not implement, and says which
 direction to move:
 
 ```
