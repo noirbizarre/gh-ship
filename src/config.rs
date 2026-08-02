@@ -322,6 +322,22 @@ impl Config {
     pub fn publish_workflow(&self) -> Option<&str> {
         self.settings.workflows.publish.as_deref()
     }
+
+    pub fn base_branch(&self) -> Option<&str> {
+        self.settings.base_branch.as_deref()
+    }
+
+    pub fn pull_request(&self) -> &PullRequestConfig {
+        &self.settings.pull_request
+    }
+
+    pub fn reuse_pull_request(&self) -> bool {
+        self.settings.pull_request.reuse
+    }
+
+    pub fn draft_release(&self) -> bool {
+        self.settings.release.draft
+    }
 }
 
 /// Turn serde_norway's terse messages into something actionable.

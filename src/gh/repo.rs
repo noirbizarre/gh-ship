@@ -71,12 +71,6 @@ pub fn create_branch_at(gh: &Gh, repo: &str, branch: &str, sha: &str) -> Result<
     .map(|_| ())
 }
 
-/// Create `branch` pointing at the tip of `from`.
-pub fn create_branch(gh: &Gh, repo: &str, branch: &str, from: &str) -> Result<(), GhError> {
-    let sha = branch_sha(gh, repo, from)?;
-    create_branch_at(gh, repo, branch, &sha)
-}
-
 /// Create `refs/tags/{tag}` at `sha`.
 ///
 /// gh-ship tags explicitly rather than letting `gh release create` do it as a
@@ -271,8 +265,6 @@ pub struct PullRequest {
     pub state: String,
     #[serde(default, rename = "mergeCommit")]
     pub merge_commit: Option<Commit>,
-    #[serde(default, rename = "isDraft")]
-    pub is_draft: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -300,7 +292,7 @@ impl PullRequest {
     }
 }
 
-const PR_FIELDS: &str = "number,url,title,body,state,mergeCommit,isDraft";
+const PR_FIELDS: &str = "number,url,title,body,state,mergeCommit";
 
 /// Find the Release PR for a branch, if any.
 ///
@@ -402,6 +394,7 @@ pub fn merge_pull_request(gh: &Gh, number: u64) -> Result<(), GhError> {
 // --- Releases ------------------------------------------------------------
 
 /// Create a GitHub Release.
+#[allow(clippy::too_many_arguments)]
 pub fn create_release(
     gh: &Gh,
     tag: &str,

@@ -39,8 +39,9 @@ pub const APPEAR_TIMEOUT: Duration = Duration::from_secs(90);
 /// The appearance timeout, overridable via `SHIP_APPEAR_TIMEOUT`
 /// (seconds).
 ///
-/// This exists for the test suite, which must exercise the
-/// "run never appeared" path without waiting 90 seconds for it.
+/// Documented as a user-facing knob, and relied on by the test suite, which
+/// must exercise the "run never appeared" path without waiting 90 seconds
+/// for it.
 pub fn appear_timeout() -> Duration {
     env_duration("SHIP_APPEAR_TIMEOUT").unwrap_or(APPEAR_TIMEOUT)
 }
@@ -65,6 +66,12 @@ pub const COMPLETE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 /// backs off so a long run does not hammer the API.
 const POLL_MIN: Duration = Duration::from_secs(2);
 const POLL_MAX: Duration = Duration::from_secs(15);
+
+/// The projection `gh run` is asked for.
+///
+/// One constant rather than a literal per call site: `list` and `view` must
+/// agree, since both deserialize into [`Run`].
+const RUN_FIELDS: &str = "databaseId,displayTitle,status,conclusion,url,headBranch";
 
 /// A workflow run as reported by `gh run list`.
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -318,19 +325,13 @@ pub fn list(gh: &Gh, workflow: &WorkflowRef, branch: &str) -> Result<Vec<Run>, G
         "--limit",
         "50",
         "--json",
-        "databaseId,displayTitle,status,conclusion,url,headBranch",
+        RUN_FIELDS,
     ])
 }
 
 /// Fetch a single run's current state.
 pub fn view(gh: &Gh, id: u64) -> Result<Run, GhError> {
-    gh.json_scoped(&[
-        "run",
-        "view",
-        &id.to_string(),
-        "--json",
-        "databaseId,displayTitle,status,conclusion,url,headBranch",
-    ])
+    gh.json_scoped(&["run", "view", &id.to_string(), "--json", RUN_FIELDS])
 }
 
 /// Download a run's artifact into `dest`.

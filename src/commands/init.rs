@@ -11,7 +11,7 @@
 //! So `init` only ever offers workflows that satisfy the contract, and
 //! explains — rather than silently hides — the ones that do not.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use demand::{Confirm, DemandOption, Select};
 use miette::{IntoDiagnostic, Result, WrapErr};
@@ -22,11 +22,13 @@ use gh_ship::gh::workflow::{self, Workflow};
 use gh_ship::logger;
 use gh_ship::style::Theme;
 
+use super::repo_root;
+
 /// Templates shipped in the binary, offered when a workflow is missing.
 const PREPARE_TEMPLATE: &str = include_str!("../../templates/prepare-release.yml");
 const PUBLISH_TEMPLATE: &str = include_str!("../../templates/publish-release.yml");
 
-pub fn run(cli: &Cli, args: &InitArgs, theme: &Theme) -> Result<()> {
+pub fn run(cli: &Cli, args: &InitArgs, theme: Theme) -> Result<()> {
     let config_path = &cli.config;
     let root = repo_root(config_path);
 
@@ -85,7 +87,6 @@ pub fn run(cli: &Cli, args: &InitArgs, theme: &Theme) -> Result<()> {
         "Which workflow publishes the release? (builds and uploads assets)",
         "publish-release",
         &publish_candidates,
-        theme,
     )?;
     let publish_name = match publish {
         Choice::Existing(w) => Some(w.slug()),
@@ -151,7 +152,7 @@ fn choose_workflow(
     prompt: &str,
     template_name: &str,
     conforming: &[Workflow],
-    theme: &Theme,
+    theme: Theme,
 ) -> Result<Choice> {
     if conforming.is_empty() {
         eprintln!(
@@ -183,7 +184,6 @@ fn choose_optional_workflow(
     prompt: &str,
     template_name: &str,
     conforming: &[Workflow],
-    _theme: &Theme,
 ) -> Result<Choice> {
     let mut select = Select::new(prompt)
         .description("optional — skip it if you have nothing to build or upload");
@@ -248,7 +248,7 @@ fn resolve(picked: String, conforming: &[Workflow]) -> Choice {
 ///
 /// Hiding them would be worse than useless: the user knows the workflow
 /// exists, and would conclude gh-ship is broken.
-fn report_nonconforming(workflows: &[Workflow], theme: &Theme) {
+fn report_nonconforming(workflows: &[Workflow], theme: Theme) {
     let relevant: Vec<&Workflow> = workflows
         .iter()
         .filter(|w| w.dispatchable || w.callable)
@@ -284,7 +284,7 @@ fn report_nonconforming(workflows: &[Workflow], theme: &Theme) {
     eprintln!();
 }
 
-fn write_template(root: &Path, filename: &str, body: &str, theme: &Theme) -> Result<()> {
+fn write_template(root: &Path, filename: &str, body: &str, theme: Theme) -> Result<()> {
     let dir = root.join(workflow::WORKFLOW_DIR);
     std::fs::create_dir_all(&dir)
         .into_diagnostic()
@@ -395,7 +395,7 @@ pub fn render_config(prepare: &str, publish: Option<&str>) -> String {
     out
 }
 
-fn print_next_steps(theme: &Theme, has_publish: bool) {
+fn print_next_steps(theme: Theme, has_publish: bool) {
     eprintln!();
     eprintln!("{}", logger::rule(theme, "Next steps"));
     eprintln!();
@@ -420,16 +420,6 @@ fn print_next_steps(theme: &Theme, has_publish: bool) {
         eprintln!("     gh-ship undrafts it only after that workflow succeeds.");
     }
     eprintln!();
-}
-
-fn repo_root(config: &Path) -> PathBuf {
-    config
-        .parent()
-        .filter(|p| p.file_name().is_some_and(|n| n == ".github"))
-        .and_then(|p| p.parent())
-        .filter(|p| !p.as_os_str().is_empty())
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("."))
 }
 
 #[cfg(test)]
@@ -555,15 +545,5 @@ mod tests {
         )
         .unwrap();
         assert_eq!(option_label(&plain), "ci");
-    }
-
-    #[test]
-    fn repo_root_handles_dot_github_configs() {
-        assert_eq!(repo_root(Path::new(".github/ship.yml")), PathBuf::from("."));
-        assert_eq!(
-            repo_root(Path::new("/a/b/.github/ship.yml")),
-            PathBuf::from("/a/b")
-        );
-        assert_eq!(repo_root(Path::new("other.yml")), PathBuf::from("."));
     }
 }

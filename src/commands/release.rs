@@ -65,9 +65,10 @@ use gh_ship::logger;
 use gh_ship::render;
 use gh_ship::style::Theme;
 
-use super::context::Context;
+use super::context::{Context, report_nothing_to_release};
+use super::short_sha;
 
-pub fn run(cli: &Cli, args: &ReleaseArgs, theme: &Theme) -> Result<()> {
+pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
     let ctx = Context::load(cli, theme)?;
 
     eprintln!("{}", logger::action(theme, "releasing", ctx.repo_slug()));
@@ -92,7 +93,7 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: &Theme) -> Result<()> {
     let artifact = recover_artifact(&pr)?;
 
     if !artifact.changed {
-        eprintln!("{}", logger::nothing_to_release(theme));
+        report_nothing_to_release(theme);
         return Ok(());
     }
 
@@ -116,10 +117,7 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: &Theme) -> Result<()> {
             pr.number
         )
     })?;
-    eprintln!(
-        "{}",
-        logger::detail(theme, "merged as", &target[..target.len().min(7)])
-    );
+    eprintln!("{}", logger::detail(theme, "merged as", short_sha(target)));
 
     // --- 4. Tag the merge commit -----------------------------------------
     //
@@ -143,7 +141,7 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: &Theme) -> Result<()> {
     }
 
     // --- 6. Publish workflow, then undraft -------------------------------
-    let draft = ctx.config.settings.release.draft;
+    let draft = ctx.config.draft_release();
 
     match ctx.config.publish_workflow() {
         Some(publish) if draft => {
@@ -197,7 +195,7 @@ fn recover_artifact(pr: &PullRequest) -> Result<Artifact> {
 
 /// Make sure the Release PR is merged, merging it if asked to.
 fn ensure_merged(ctx: &Context, pr: PullRequest, merge: bool) -> Result<PullRequest> {
-    let theme = &ctx.theme;
+    let theme = ctx.theme;
 
     if pr.is_merged() {
         return Ok(pr);
@@ -239,8 +237,8 @@ fn ensure_merged(ctx: &Context, pr: PullRequest, merge: bool) -> Result<PullRequ
 }
 
 fn create_release(ctx: &Context, artifact: &Artifact, tag: &str, target: &str) -> Result<()> {
-    let theme = &ctx.theme;
-    let draft = ctx.config.settings.release.draft;
+    let theme = ctx.theme;
+    let draft = ctx.config.draft_release();
 
     eprintln!(
         "{}",
@@ -278,7 +276,7 @@ fn create_release(ctx: &Context, artifact: &Artifact, tag: &str, target: &str) -
 /// should build exactly what is being released, not whatever the branch
 /// has drifted to since.
 fn run_publish(ctx: &Context, workflow_name: &str, tag: &str) -> Result<()> {
-    let theme = &ctx.theme;
+    let theme = ctx.theme;
     let workflow = ctx.workflow(workflow_name);
     eprintln!(
         "{}",

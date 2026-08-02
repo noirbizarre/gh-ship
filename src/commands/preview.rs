@@ -9,7 +9,9 @@
 //! GitHub is mutated: no branch, no PR, no tag, no release.
 
 use miette::Result;
+use serde::Serialize;
 
+use gh_ship::artifact::Artifact;
 use gh_ship::cli::{Cli, PreviewArgs};
 use gh_ship::gh::workflow::DRY_RUN_INPUT;
 use gh_ship::logger;
@@ -18,7 +20,7 @@ use gh_ship::style::Theme;
 
 use super::context::{Context, print_rendered, report_nothing_to_release, run_workflow};
 
-pub fn run(cli: &Cli, args: &PreviewArgs, theme: &Theme) -> Result<()> {
+pub fn run(cli: &Cli, args: &PreviewArgs, theme: Theme) -> Result<()> {
     let ctx = Context::load(cli, theme)?;
 
     eprintln!("{}", logger::action(theme, "previewing", ctx.repo_slug()));
@@ -27,10 +29,13 @@ pub fn run(cli: &Cli, args: &PreviewArgs, theme: &Theme) -> Result<()> {
         logger::skip(theme, "dry run — nothing on GitHub will be modified")
     );
 
-    // Preview runs on a branch that already exists so it never creates
-    // one. The release branch is preferred when present, because that is
-    // where a real prepare would run and the result should match.
-    let branch = preview_branch(&ctx);
+    // Preview runs on a branch that already exists so it never creates one:
+    // the base branch, always. `prepare` stages on a throwaway branch cut from
+    // the base, so the base *is* what a real prepare runs against. Preferring
+    // a stale release branch would make preview report a history that no
+    // longer matches reality — the same silent-staleness bug, in the one
+    // command whose whole job is to tell the truth without changing anything.
+    let branch = ctx.base_branch().to_string();
 
     let artifact = run_workflow(
         &ctx,
@@ -44,18 +49,21 @@ pub fn run(cli: &Cli, args: &PreviewArgs, theme: &Theme) -> Result<()> {
         return Ok(());
     }
 
-    let rendered = render::render(&ctx.config.settings.pull_request, &artifact)?;
+    let rendered = render::render(ctx.config.pull_request(), &artifact)?;
 
     if args.json {
-        let out = serde_json::json!({
-            "artifact": artifact,
-            "pull_request": {
-                "title": rendered.title,
-                "body": rendered.body,
-                "labels": rendered.labels,
+        let out = Preview {
+            pull_request: PreviewPullRequest {
+                title: &rendered.title,
+                body: &rendered.body,
+                labels: &rendered.labels,
             },
-        });
-        println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
+            artifact: &artifact,
+        };
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&out).expect("preview output is always serialisable")
+        );
         return Ok(());
     }
 
@@ -77,18 +85,19 @@ pub fn run(cli: &Cli, args: &PreviewArgs, theme: &Theme) -> Result<()> {
     Ok(())
 }
 
-/// Choose a branch to dispatch the preview on.
+/// `gh ship preview --json`.
 ///
-/// The base branch, always.
-///
-/// This used to prefer the release branch when it existed, reasoning that a
-/// preview should reflect what a real prepare would produce. That reasoning no
-/// longer holds: `prepare` now resets the release branch to the base before
-/// dispatching, so the base *is* what a real prepare runs against.
-///
-/// Preferring a stale release branch would make preview report a history that
-/// no longer matches reality — the same silent-staleness bug, in the one command
-/// whose whole job is to tell you the truth without changing anything.
-fn preview_branch(ctx: &Context) -> String {
-    ctx.base_branch().to_string()
+/// Typed rather than an ad-hoc `json!` literal so the shape is tied to what
+/// `render` actually produces and cannot drift when a field is renamed.
+#[derive(Serialize)]
+struct Preview<'a> {
+    artifact: &'a Artifact,
+    pull_request: PreviewPullRequest<'a>,
+}
+
+#[derive(Serialize)]
+struct PreviewPullRequest<'a> {
+    title: &'a str,
+    body: &'a str,
+    labels: &'a [String],
 }

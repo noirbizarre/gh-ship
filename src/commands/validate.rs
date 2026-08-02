@@ -26,7 +26,9 @@ use gh_ship::logger;
 use gh_ship::style::Theme;
 use gh_ship::suggest;
 
-pub fn run(cli: &Cli, args: &ValidateArgs, theme: &Theme) -> Result<()> {
+use super::repo_root;
+
+pub fn run(cli: &Cli, args: &ValidateArgs, theme: Theme) -> Result<()> {
     match &args.artifact {
         Some(path) => validate_artifact(path, theme),
         None => validate_setup(cli, theme),
@@ -35,7 +37,7 @@ pub fn run(cli: &Cli, args: &ValidateArgs, theme: &Theme) -> Result<()> {
 
 // --- Artifact mode -------------------------------------------------------
 
-fn validate_artifact(path: &Path, theme: &Theme) -> Result<()> {
+fn validate_artifact(path: &Path, theme: Theme) -> Result<()> {
     let artifact = validate::validate_file(path)?;
     let name = path.display().to_string();
 
@@ -91,7 +93,7 @@ pub struct SetupInvalid {
     issues: Vec<WorkflowIssue>,
 }
 
-fn validate_setup(cli: &Cli, theme: &Theme) -> Result<()> {
+fn validate_setup(cli: &Cli, theme: Theme) -> Result<()> {
     let config = Config::load(&cli.config)?;
     eprintln!(
         "{}",
@@ -110,7 +112,6 @@ fn validate_setup(cli: &Cli, theme: &Theme) -> Result<()> {
     let mut issues = Vec::new();
 
     check_workflow(
-        &config,
         &available,
         config.prepare_workflow(),
         "prepare",
@@ -119,7 +120,7 @@ fn validate_setup(cli: &Cli, theme: &Theme) -> Result<()> {
     );
 
     if let Some(publish) = config.publish_workflow() {
-        check_workflow(&config, &available, publish, "publish", &mut issues, theme);
+        check_workflow(&available, publish, "publish", &mut issues, theme);
     }
 
     if issues.is_empty() {
@@ -134,12 +135,11 @@ fn validate_setup(cli: &Cli, theme: &Theme) -> Result<()> {
 }
 
 fn check_workflow(
-    _config: &Config,
     available: &[Workflow],
     name: &str,
     role: &str,
     issues: &mut Vec<WorkflowIssue>,
-    theme: &Theme,
+    theme: Theme,
 ) {
     let Some(found) = workflow::find(available, name) else {
         let names: Vec<String> = available.iter().map(|w| w.slug()).collect();
@@ -181,45 +181,5 @@ fn check_workflow(
             problem: v.message().to_string(),
             help: Some(v.help().to_string()),
         });
-    }
-}
-
-/// Infer the repository root from the config path.
-///
-/// `.github/ship.yml` → the directory containing `.github`. A config
-/// passed with `--config` from elsewhere falls back to the current
-/// directory, which is the best guess available.
-fn repo_root(config: &Path) -> std::path::PathBuf {
-    config
-        .parent()
-        .filter(|p| p.file_name().is_some_and(|n| n == ".github"))
-        .and_then(|p| p.parent())
-        .map(|p| {
-            if p.as_os_str().is_empty() {
-                Path::new(".").to_path_buf()
-            } else {
-                p.to_path_buf()
-            }
-        })
-        .unwrap_or_else(|| Path::new(".").to_path_buf())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn repo_root_is_the_grandparent_of_a_dot_github_config() {
-        assert_eq!(repo_root(Path::new(".github/ship.yml")), Path::new("."));
-        assert_eq!(
-            repo_root(Path::new("/src/proj/.github/ship.yml")),
-            Path::new("/src/proj")
-        );
-    }
-
-    #[test]
-    fn repo_root_falls_back_to_cwd_for_unusual_paths() {
-        assert_eq!(repo_root(Path::new("ship.yml")), Path::new("."));
-        assert_eq!(repo_root(Path::new("/tmp/custom.yml")), Path::new("."));
     }
 }

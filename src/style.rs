@@ -76,11 +76,6 @@ impl Theme {
         self.paint(s, Style::new().dimmed())
     }
 
-    /// The product name (`gh ship`) — cyan + bold to anchor banners.
-    pub fn tool(&self, s: &str) -> String {
-        self.paint(s, Style::new().cyan().bold())
-    }
-
     /// A subject being acted on (workflow name, branch, tag) — bold.
     pub fn subject(&self, s: &str) -> String {
         self.paint(s, Style::new().bold())
@@ -118,17 +113,6 @@ impl Theme {
 
     /// A field key in a key/value listing — dimmed.
     pub fn key(&self, s: &str) -> String {
-        self.paint(s, Style::new().dimmed())
-    }
-
-    /// A JSON pointer / config path in a diagnostic — magenta.
-    pub fn pointer(&self, s: &str) -> String {
-        self.paint(s, Style::new().magenta().bold())
-    }
-
-    /// Elapsed time — dimmed so it never competes with the marker it
-    /// accompanies.
-    pub fn duration(&self, s: &str) -> String {
         self.paint(s, Style::new().dimmed())
     }
 }
@@ -213,11 +197,8 @@ mod tests {
         assert_eq!(t.failure("nope"), "nope");
         assert_eq!(t.warning("careful"), "careful");
         assert_eq!(t.skipped("zzz"), "zzz");
-        assert_eq!(t.tool("gh ship"), "gh ship");
         assert_eq!(t.subject("release/next"), "release/next");
         assert_eq!(t.url("https://example.com"), "https://example.com");
-        assert_eq!(t.pointer("/release/notes"), "/release/notes");
-        assert_eq!(t.duration("1.23s"), "1.23s");
         assert!(!t.is_colored());
     }
 

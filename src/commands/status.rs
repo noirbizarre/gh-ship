@@ -20,6 +20,7 @@ use gh_ship::render;
 use gh_ship::style::Theme;
 
 use super::context::Context;
+use super::short_sha;
 
 /// The reconstructed state of a release.
 #[derive(Debug, Serialize)]
@@ -54,14 +55,14 @@ pub struct RunStatus {
     pub url: String,
 }
 
-pub fn run(cli: &Cli, args: &StatusArgs, theme: &Theme) -> Result<()> {
+pub fn run(cli: &Cli, args: &StatusArgs, theme: Theme) -> Result<()> {
     let ctx = Context::load(cli, theme)?;
     let status = collect(&ctx)?;
 
     if args.json {
         println!(
             "{}",
-            serde_json::to_string_pretty(&status).unwrap_or_default()
+            serde_json::to_string_pretty(&status).expect("status output is always serialisable")
         );
         return Ok(());
     }
@@ -177,7 +178,7 @@ fn next_step(
     "review and merge the Release PR, then run `gh ship release`".into()
 }
 
-fn report(status: &Status, theme: &Theme) {
+fn report(status: &Status, theme: Theme) {
     eprintln!("{}", logger::action(theme, "status of", &status.repository));
     eprintln!();
 
@@ -203,9 +204,9 @@ fn report(status: &Status, theme: &Theme) {
                     &format!("#{} {} [{}]", pr.number, pr.title, pr.state.to_lowercase())
                 )
             );
-            eprintln!("{}", logger::detail_url(theme, "url", &pr.url));
+            eprintln!("{}", logger::detail_url(theme, "pr", &pr.url));
             if let Some(sha) = &pr.merged_sha {
-                eprintln!("{}", logger::detail(theme, "merged as", short(sha)));
+                eprintln!("{}", logger::detail(theme, "merged as", short_sha(sha)));
             }
         }
         None => eprintln!("{}", logger::detail(theme, "release pr", "none")),
@@ -242,11 +243,6 @@ fn report(status: &Status, theme: &Theme) {
 
     eprintln!();
     eprintln!("{}", logger::skip(theme, &format!("next: {}", status.next)));
-}
-
-/// Abbreviate a SHA the way git does.
-fn short(sha: &str) -> &str {
-    &sha[..sha.len().min(7)]
 }
 
 #[cfg(test)]
@@ -317,12 +313,5 @@ mod tests {
     fn reports_completion_once_the_release_exists() {
         let s = next_step(true, Some(&pr("MERGED")), Some(&artifact()), true);
         assert!(s.contains("nothing to do"), "{s}");
-    }
-
-    #[test]
-    fn shortens_shas_like_git() {
-        assert_eq!(short("a1b2c3d4e5f6a7b8"), "a1b2c3d");
-        assert_eq!(short("abc"), "abc", "short input must not panic");
-        assert_eq!(short(""), "");
     }
 }

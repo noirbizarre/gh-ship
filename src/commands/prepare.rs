@@ -28,8 +28,9 @@ use gh_ship::render;
 use gh_ship::style::Theme;
 
 use super::context::{Context, report_nothing_to_release, run_workflow_as};
+use super::short_sha;
 
-pub fn run(cli: &Cli, args: &PrepareArgs, theme: &Theme) -> Result<()> {
+pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
     let ctx = Context::load(cli, theme)?;
 
     eprintln!("{}", logger::action(theme, "preparing", ctx.repo_slug()));
@@ -43,7 +44,7 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: &Theme) -> Result<()> {
     }
 
     // Clean up after any run that was abandoned before it could tidy up.
-    sweep_staging_branches(&ctx, None);
+    sweep_staging_branches(&ctx);
 
     // Stage on a throwaway branch cut from the base, rather than resetting the
     // release branch in place. See `stage_branch` for why.
@@ -70,7 +71,7 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: &Theme) -> Result<()> {
     if !artifact.changed {
         // Nothing was committed, so there is nothing to promote and no reason
         // to leave a release branch behind.
-        sweep_staging_branches(&ctx, None);
+        sweep_staging_branches(&ctx);
         report_nothing_to_release(theme);
         return Ok(());
     }
@@ -78,9 +79,9 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: &Theme) -> Result<()> {
     // Promote: move the release branch straight from its previous release
     // commit to the new one, in a single update.
     promote(&ctx, &staging, &release_branch)?;
-    sweep_staging_branches(&ctx, None);
+    sweep_staging_branches(&ctx);
 
-    let rendered = render::render(&ctx.config.settings.pull_request, &artifact)?;
+    let rendered = render::render(ctx.config.pull_request(), &artifact)?;
 
     // The artifact rides along in the PR body. This is what makes
     // gh-ship stateless: `release` can run days later, on another
@@ -123,7 +124,7 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: &Theme) -> Result<()> {
 /// Resolve configured labels to ones that actually exist, creating what
 /// is missing and warning about anything that could not be created.
 fn ensure_labels(ctx: &Context, wanted: &[String]) -> Vec<String> {
-    let theme = &ctx.theme;
+    let theme = ctx.theme;
     let (usable, dropped) = repo::ensure_labels(&ctx.gh, wanted);
 
     for label in &dropped {
@@ -171,7 +172,7 @@ fn ensure_labels(ctx: &Context, wanted: &[String]) -> Vec<String> {
 /// nothing is wrong, the release simply needs finishing, and an orchestrator
 /// workflow must not go red on every push until someone ships it.
 fn pending_release(ctx: &Context, release_branch: &str, base_branch: &str) -> Result<bool> {
-    let theme = &ctx.theme;
+    let theme = ctx.theme;
 
     let Some(pr) = repo::find_pull_request(&ctx.gh, release_branch, base_branch)? else {
         return Ok(false);
@@ -238,7 +239,7 @@ fn stage_branch(ship_id: &ShipId) -> String {
 /// to the new one, in a single update. It is never equal to the base, so the PR
 /// is never emptied and never closed.
 fn promote(ctx: &Context, staging: &str, release: &str) -> Result<()> {
-    let theme = &ctx.theme;
+    let theme = ctx.theme;
     let staged_sha = repo::branch_sha(&ctx.gh, ctx.repo_slug(), staging)?;
 
     if repo::branch_exists(&ctx.gh, ctx.repo_slug(), release)? {
@@ -258,23 +259,20 @@ fn promote(ctx: &Context, staging: &str, release: &str) -> Result<()> {
     Ok(())
 }
 
-/// Delete staging branches, optionally keeping one.
+/// Delete every staging branch.
 ///
 /// Housekeeping, so it never fails a release: a branch that cannot be deleted
 /// is reported and otherwise ignored. Sweeping on every run is what stops
 /// abandoned runs — a failure part-way, or `--no-wait` — from accumulating
 /// branches, and is safe because gh-ship releases one at a time: the Release PR
 /// is the lock.
-fn sweep_staging_branches(ctx: &Context, keep: Option<&str>) {
+fn sweep_staging_branches(ctx: &Context) {
     for branch in repo::matching_branches(&ctx.gh, ctx.repo_slug(), STAGING_PREFIX) {
-        if Some(branch.as_str()) == keep {
-            continue;
-        }
         if repo::delete_branch(&ctx.gh, ctx.repo_slug(), &branch).is_err() {
             eprintln!(
                 "{}",
                 logger::warn(
-                    &ctx.theme,
+                    ctx.theme,
                     &format!("could not delete the staging branch `{branch}`")
                 )
             );
@@ -295,8 +293,8 @@ fn upsert_pull_request(
     body: &str,
     labels: &[String],
 ) -> Result<()> {
-    let theme = &ctx.theme;
-    let reuse = ctx.config.settings.pull_request.reuse;
+    let theme = ctx.theme;
+    let reuse = ctx.config.reuse_pull_request();
     let existing = repo::find_pull_request(&ctx.gh, head, base)?;
 
     // A merged PR belongs to a release that already shipped; never touch it.
@@ -341,17 +339,12 @@ fn open_pull_request(
     body: &str,
     labels: &[String],
 ) -> Result<()> {
-    let theme = &ctx.theme;
+    let theme = ctx.theme;
     eprintln!("{}", logger::action(theme, "opening", "Release PR"));
     let url = repo::create_pull_request(&ctx.gh, head, base, title, body, labels)?;
     eprintln!("{}", logger::ok(theme, "Release PR opened"));
     eprintln!("{}", logger::detail_url(theme, "pr", &url));
     Ok(())
-}
-
-/// Abbreviate a SHA the way git does.
-fn short_sha(sha: &str) -> &str {
-    &sha[..sha.len().min(7)]
 }
 
 /// Dispatch without waiting.
@@ -361,7 +354,7 @@ fn short_sha(sha: &str) -> &str {
 /// because the artifact it needs does not exist yet — re-running
 /// `gh ship prepare` afterwards completes the job.
 fn dispatch_only(ctx: &Context, branch: &str, ship_id: &ShipId) -> Result<()> {
-    let theme = &ctx.theme;
+    let theme = ctx.theme;
     let workflow = ctx.workflow(ctx.config.prepare_workflow());
 
     eprintln!(

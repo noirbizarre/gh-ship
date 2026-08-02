@@ -6,7 +6,7 @@
 //! cannot drift in how they wait, how they report, or how strictly they
 //! validate.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use miette::Result;
 
@@ -19,6 +19,8 @@ use gh_ship::gh::workflow::WorkflowRef;
 use gh_ship::gh::{Gh, workflow};
 use gh_ship::logger;
 use gh_ship::style::Theme;
+
+use super::repo_root;
 
 /// Everything the lifecycle commands resolve up front.
 pub struct Context {
@@ -37,7 +39,7 @@ pub struct Context {
 
 impl Context {
     /// Resolve configuration and repository.
-    pub fn load(cli: &Cli, theme: &Theme) -> Result<Self> {
+    pub fn load(cli: &Cli, theme: Theme) -> Result<Self> {
         let config = Config::load(&cli.config)?;
         let gh = Gh::new(cli.repo.clone());
         let repository = repo::repository(&gh)?;
@@ -45,7 +47,7 @@ impl Context {
             gh,
             config,
             repository,
-            theme: *theme,
+            theme,
             root: repo_root(&cli.config),
         })
     }
@@ -69,9 +71,7 @@ impl Context {
     /// `main` in the config model.
     pub fn base_branch(&self) -> &str {
         self.config
-            .settings
-            .base_branch
-            .as_deref()
+            .base_branch()
             .unwrap_or(&self.repository.default_branch.name)
     }
 
@@ -109,7 +109,7 @@ pub fn run_workflow_as(
     ship_id: &ShipId,
     inputs: &[(&str, String)],
 ) -> Result<Artifact> {
-    let theme = &ctx.theme;
+    let theme = ctx.theme;
 
     let resolved = ctx.workflow(workflow_name);
 
@@ -129,21 +129,13 @@ pub fn run_workflow_as(
     fetch_artifact(ctx, &finished)
 }
 
-/// Infer the repository root from the config path.
-///
-/// `.github/ship.yml` -> the directory containing `.github`.
-fn repo_root(config: &Path) -> PathBuf {
-    config
-        .parent()
-        .filter(|p| p.file_name().is_some_and(|n| n == ".github"))
-        .and_then(|p| p.parent())
-        .filter(|p| !p.as_os_str().is_empty())
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("."))
-}
-
-fn find_run(ctx: &Context, workflow: &WorkflowRef, branch: &str, ship_id: &ShipId) -> Result<Run> {
-    let theme = &ctx.theme;
+pub(crate) fn find_run(
+    ctx: &Context,
+    workflow: &WorkflowRef,
+    branch: &str,
+    ship_id: &ShipId,
+) -> Result<Run> {
+    let theme = ctx.theme;
     let mut announced = false;
     let found = run::find(
         &ctx.gh,
@@ -169,8 +161,8 @@ fn find_run(ctx: &Context, workflow: &WorkflowRef, branch: &str, ship_id: &ShipI
     Ok(found)
 }
 
-fn wait_for_run(ctx: &Context, workflow: &WorkflowRef, found: &Run) -> Result<Run> {
-    let theme = &ctx.theme;
+pub(crate) fn wait_for_run(ctx: &Context, workflow: &WorkflowRef, found: &Run) -> Result<Run> {
+    let theme = ctx.theme;
     eprintln!(
         "{}",
         logger::action(theme, "waiting for", &workflow.to_string())
@@ -207,7 +199,7 @@ fn wait_for_run(ctx: &Context, workflow: &WorkflowRef, found: &Run) -> Result<Ru
 
 /// Download and validate the release artifact produced by a run.
 fn fetch_artifact(ctx: &Context, finished: &Run) -> Result<Artifact> {
-    let theme = &ctx.theme;
+    let theme = ctx.theme;
     let dir = tempfile::tempdir().map_err(|e| {
         miette::miette!(
             code = "ship::artifact::tempdir",
@@ -261,13 +253,13 @@ fn fetch_artifact(ctx: &Context, finished: &Run) -> Result<Artifact> {
 ///
 /// A workflow finding nothing to release is the system working. It gets
 /// a success marker and exit 0, never a warning.
-pub fn report_nothing_to_release(theme: &Theme) {
+pub fn report_nothing_to_release(theme: Theme) {
     eprintln!();
     eprintln!("{}", logger::nothing_to_release(theme));
 }
 
 /// Print a rendered Release PR for human review.
-pub fn print_rendered(theme: &Theme, title: &str, body: &str, labels: &[String]) {
+pub fn print_rendered(theme: Theme, title: &str, body: &str, labels: &[String]) {
     eprintln!();
     eprintln!("{}", logger::rule(theme, "Pull Request"));
     eprintln!();
