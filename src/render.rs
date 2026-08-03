@@ -173,7 +173,20 @@ fn template_help(err: &minijinja::Error) -> String {
 
 /// Embed an artifact into a PR body, replacing any previous copy.
 pub fn embed_artifact(body: &str, artifact: &Artifact) -> String {
-    let json = serde_json::to_string(artifact).unwrap_or_else(|_| "{}".to_string());
+    // HTML comments cannot nest, so a `-->` anywhere in the payload would close
+    // the block early: the rest of the JSON would render as visible text, and
+    // `extract_artifact` -- which searches for the first `-->` -- would recover
+    // a truncated prefix that fails to parse. A changelog is exactly the kind
+    // of payload that quotes commit subjects, and those can mention HTML
+    // comments.
+    //
+    // `\u003e` is the JSON escape for `>`, so `serde_json::from_str` decodes it
+    // back transparently and the read side needs no matching change. `-->` can
+    // only ever occur inside a JSON string literal, never in the structure, so
+    // replacing it unconditionally is safe.
+    let json = serde_json::to_string(artifact)
+        .unwrap_or_else(|_| "{}".to_string())
+        .replace("-->", "--\\u003e");
     let block = format!("{ARTIFACT_MARKER_START}\n{json}\n{ARTIFACT_MARKER_END}");
     let stripped = strip_artifact(body);
     if stripped.trim().is_empty() {
@@ -378,6 +391,29 @@ mod tests {
             body.contains("<!--") && body.contains("-->"),
             "the artifact must live in an HTML comment: {body}"
         );
+    }
+
+    #[test]
+    fn notes_containing_a_comment_terminator_survive_the_round_trip() {
+        // A changelog quotes commit subjects, and a subject can mention an
+        // HTML comment. Unescaped, that `-->` closes the block the artifact
+        // lives in: the JSON spills into the rendered body and comes back
+        // truncated, which surfaces as a bogus "does not carry a release
+        // artifact".
+        let mut a = artifact();
+        a.release.as_mut().unwrap().notes = Some("- Extract <!-- more --> summary".into());
+
+        let body = embed_artifact("Visible.", &a);
+
+        let block = &body[body.find(ARTIFACT_MARKER_START).unwrap()..];
+        assert_eq!(
+            block.matches(ARTIFACT_MARKER_END).count(),
+            1,
+            "the payload must not be able to close the comment it lives in: {block}"
+        );
+
+        assert_eq!(extract_artifact(&body).unwrap(), a);
+        assert_eq!(strip_artifact(&body).trim(), "Visible.");
     }
 
     #[test]
