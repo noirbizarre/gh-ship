@@ -14,7 +14,8 @@
 use std::path::Path;
 
 use demand::{Confirm, DemandOption, Select};
-use miette::{IntoDiagnostic, Result};
+use miette::{Diagnostic, IntoDiagnostic, Result};
+use thiserror::Error;
 
 use gh_ship::cli::{Cli, InitArgs};
 use gh_ship::config::{CONFIG_VERSION, DEFAULT_PR_TITLE, DEFAULT_RELEASE_BRANCH};
@@ -28,17 +29,69 @@ use super::repo_root;
 const PREPARE_TEMPLATE: &str = include_str!("../../templates/prepare-release.yml");
 const PUBLISH_TEMPLATE: &str = include_str!("../../templates/publish-release.yml");
 
+/// Everything that can stop `init`.
+///
+/// Enumerated rather than raised ad hoc, so the whole `ship::init::*` code
+/// namespace is visible in one place — the same reason [`super::release::
+/// ReleaseError`] exists.
+#[derive(Debug, Error, Diagnostic)]
+pub enum InitError {
+    #[error("{path} already exists")]
+    #[diagnostic(
+        code(ship::init::exists),
+        help("pass `--force` to overwrite it, or edit it directly")
+    )]
+    Exists { path: String },
+
+    /// `gh ship init` is the one interactive command. Every other command is
+    /// scriptable, so this never blocks automation — and a CI job that
+    /// reaches it has a configuration bug, not a terminal problem.
+    #[error("`gh ship init` requires an interactive terminal")]
+    #[diagnostic(
+        code(ship::init::not_interactive),
+        help(
+            "`init` asks which workflows to use, so it needs a terminal. In automation, write \
+             .github/ship.yml directly — see https://noirbizarre.github.io/gh-ship/configuration/"
+        )
+    )]
+    NotInteractive,
+
+    /// A filesystem failure, as a diagnostic rather than a bare `io::Error`.
+    ///
+    /// `init` is the command a newcomer meets first, so its failures carry
+    /// the same code and help as everything else gh-ship reports.
+    #[error("could not {verb} {path}: {source}")]
+    #[diagnostic(
+        code(ship::init::io),
+        help("check the path exists and is writable, then re-run `gh ship init`")
+    )]
+    Io {
+        verb: &'static str,
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+}
+
+impl InitError {
+    fn io<'a>(verb: &'static str, path: &'a Path) -> impl FnOnce(std::io::Error) -> Self + 'a {
+        move |source| Self::Io {
+            verb,
+            path: path.display().to_string(),
+            source,
+        }
+    }
+}
+
 pub fn run(cli: &Cli, args: &InitArgs, theme: Theme) -> Result<()> {
     let config_path = &cli.config;
     let root = repo_root(config_path);
 
     if config_path.exists() && !args.force {
-        return Err(miette::miette!(
-            code = "ship::init::exists",
-            help = "pass `--force` to overwrite it, or edit it directly",
-            "{} already exists",
-            config_path.display()
-        ));
+        return Err(InitError::Exists {
+            path: config_path.display().to_string(),
+        }
+        .into());
     }
 
     eprintln!("{}", logger::action(theme, "setting up", "gh ship"));
@@ -104,9 +157,9 @@ pub fn run(cli: &Cli, args: &InitArgs, theme: Theme) -> Result<()> {
     if let Some(parent) = config_path.parent()
         && !parent.as_os_str().is_empty()
     {
-        std::fs::create_dir_all(parent).map_err(|e| write_error("create", parent, &e))?;
+        std::fs::create_dir_all(parent).map_err(InitError::io("create", parent))?;
     }
-    std::fs::write(config_path, &yaml).map_err(|e| write_error("write", config_path, &e))?;
+    std::fs::write(config_path, &yaml).map_err(InitError::io("write", config_path))?;
 
     eprintln!();
     eprintln!(
@@ -127,22 +180,13 @@ enum Choice {
 
 /// Refuse to run without a terminal.
 ///
-/// `gh ship init` is the one interactive command. Every other command is
-/// scriptable, so this restriction never blocks automation — and a
-/// CI job that reaches this has a configuration bug, not a terminal
-/// problem, so it should be told so.
+/// See [`InitError::NotInteractive`] for why this restriction exists.
 fn require_interactive() -> Result<()> {
     use std::io::IsTerminal;
     if std::io::stdin().is_terminal() {
         return Ok(());
     }
-    Err(miette::miette!(
-        code = "ship::init::not_interactive",
-        help = "`init` asks which workflows to use, so it needs a terminal. \
-                In automation, write .github/ship.yml directly — see \
-                https://noirbizarre.github.io/gh-ship/configuration/",
-        "`gh ship init` requires an interactive terminal"
-    ))
+    Err(InitError::NotInteractive.into())
 }
 
 fn choose_workflow(
@@ -278,7 +322,7 @@ fn report_nonconforming(workflows: &[Workflow], theme: Theme) {
 
 fn write_template(root: &Path, filename: &str, body: &str, theme: Theme) -> Result<()> {
     let dir = root.join(workflow::WORKFLOW_DIR);
-    std::fs::create_dir_all(&dir).map_err(|e| write_error("create", &dir, &e))?;
+    std::fs::create_dir_all(&dir).map_err(InitError::io("create", &dir))?;
 
     let path = dir.join(filename);
     if path.exists() {
@@ -296,7 +340,7 @@ fn write_template(root: &Path, filename: &str, body: &str, theme: Theme) -> Resu
         }
     }
 
-    std::fs::write(&path, body).map_err(|e| write_error("write", &path, &e))?;
+    std::fs::write(&path, body).map_err(InitError::io("write", &path))?;
     eprintln!(
         "{}",
         logger::ok(theme, &format!("wrote {}", path.display()))
@@ -443,19 +487,6 @@ fn next_steps(theme: Theme, has_publish: bool) -> String {
     out.push(String::new());
 
     out.join("\n")
-}
-
-/// A filesystem failure, as a diagnostic rather than a bare `io::Error`.
-///
-/// `init` is the command a newcomer meets first, so its failures carry the
-/// same code and help as everything else gh-ship reports.
-fn write_error(verb: &str, path: &Path, source: &std::io::Error) -> miette::Report {
-    miette::miette!(
-        code = "ship::init::io",
-        help = "check the path exists and is writable, then re-run `gh ship init`",
-        "could not {verb} {}: {source}",
-        path.display()
-    )
 }
 
 #[cfg(test)]
