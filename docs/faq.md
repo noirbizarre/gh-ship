@@ -122,6 +122,21 @@ The tag is created explicitly, before the draft. A draft release does **not**
 create its git ref — the tag appears only when the release is published — and the
 publish workflow is dispatched on that tag and checks it out.
 
+## My publish workflow failed. I re-ran it and it succeeded — now what?
+
+Re-run the job that runs `gh ship release`. It will notice the successful run
+and just make the release visible.
+
+Correlation between a dispatch and its run is by a nonce gh-ship generates per
+invocation, and a re-run keeps the *original* run name — so matching on the
+nonce alone would miss it. gh-ship therefore also looks for runs of the publish
+workflow on the **tag**, which is unique to the release: a run that succeeded
+means the assets are attached, whoever started it. A run still in flight is
+waited on. Only if every run failed does gh-ship dispatch a new one.
+
+Everything else `release` does is already idempotent — the tag is not
+re-created, and neither is the release — so the whole command is safe to re-run.
+
 ## Why tag the merge commit rather than the branch tip?
 
 Because a squash or rebase merge creates a **new** commit. The release branch tip

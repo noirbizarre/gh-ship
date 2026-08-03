@@ -71,6 +71,27 @@ impl GhStub {
         self
     }
 
+    /// A run that already exists before the command runs — a previous
+    /// dispatch, or one a human started or re-ran from the GitHub UI.
+    ///
+    /// Without this, `gh run list` only reports runs on a ref this test
+    /// actually dispatched on, which is what makes "is there already a
+    /// publish run for this tag?" a meaningful question.
+    pub fn existing_run(mut self, status: &str, conclusion: &str) -> Self {
+        self.env.insert("STUB_EXISTING_RUN".into(), "1".into());
+        self.env
+            .insert("STUB_EXISTING_RUN_STATUS".into(), status.into());
+        self.env
+            .insert("STUB_EXISTING_RUN_CONCLUSION".into(), conclusion.into());
+        self
+    }
+
+    /// The last run `gh ship status` reports. Same mechanism as
+    /// [`Self::existing_run`], named for how `status` reads it.
+    pub fn last_run(self, status: &str, conclusion: &str) -> Self {
+        self.existing_run(status, conclusion)
+    }
+
     /// The contents of `ship.release.json` the run "uploaded".
     pub fn artifact(mut self, json: &str) -> Self {
         self.env.insert("STUB_ARTIFACT".into(), json.into());
@@ -320,11 +341,17 @@ case "$1 ${2:-}" in
 
   "workflow run")
     # Dispatch returns nothing, exactly like the real thing. Capture the
-    # nonce so `run list` can echo it back in the run title.
+    # nonce so `run list` can echo it back in the run title, and the ref so
+    # it only echoes it back on the ref that was actually dispatched.
+    prev=""
     for arg in "$@"; do
       case "$arg" in
         ship_id=*) echo "${arg#ship_id=}" > "${STUB_LOG:-/tmp/stub}.shipid" ;;
       esac
+      if [ "$prev" = "--ref" ]; then
+        echo "$arg" > "${STUB_LOG:-/tmp/stub}.dispatchref"
+      fi
+      prev="$arg"
     done
     ;;
 
@@ -337,15 +364,32 @@ case "$1 ${2:-}" in
       printf '[]\n'
       exit 0
     fi
-    SHIP_ID="$(cat "${STUB_LOG:-/tmp/stub}.shipid" 2>/dev/null || echo unknown)"
-    printf '[{"databaseId":42,"displayTitle":"prepare-release (ship:%s)","status":"%s","conclusion":"%s","url":"https://github.com/%s/actions/runs/42","headBranch":"release/next"}]\n' \
-      "$SHIP_ID" "${STUB_RUN_STATUS:-completed}" "${STUB_RUN_CONCLUSION:-success}" "$REPO"
+    BRANCH=""
+    prev=""
+    for arg in "$@"; do
+      if [ "$prev" = "--branch" ]; then BRANCH="$arg"; fi
+      prev="$arg"
+    done
+    REF="$(cat "${STUB_LOG:-/tmp/stub}.dispatchref" 2>/dev/null || echo '')"
+    if [ -n "$REF" ] && [ "$REF" = "$BRANCH" ]; then
+      # The run this test dispatched, on the ref it was dispatched on.
+      SHIP_ID="$(cat "${STUB_LOG:-/tmp/stub}.shipid" 2>/dev/null || echo unknown)"
+      printf '[{"databaseId":42,"displayTitle":"prepare-release (ship:%s)","status":"%s","conclusion":"%s","url":"https://github.com/%s/actions/runs/42","headBranch":"%s"}]\n' \
+        "$SHIP_ID" "${STUB_RUN_STATUS:-completed}" "${STUB_RUN_CONCLUSION:-success}" "$REPO" "$BRANCH"
+    elif [ "${STUB_EXISTING_RUN:-0}" = "1" ]; then
+      # A run that was already there before this invocation: a previous
+      # dispatch, or one a human started.
+      printf '[{"databaseId":41,"displayTitle":"publish-release (ship:preexisting)","status":"%s","conclusion":"%s","url":"https://github.com/%s/actions/runs/41","headBranch":"%s"}]\n' \
+        "${STUB_EXISTING_RUN_STATUS:-completed}" "${STUB_EXISTING_RUN_CONCLUSION:-success}" "$REPO" "$BRANCH"
+    else
+      printf '[]\n'
+    fi
     ;;
 
   "run view")
     SHIP_ID="$(cat "${STUB_LOG:-/tmp/stub}.shipid" 2>/dev/null || echo unknown)"
-    printf '{"databaseId":42,"displayTitle":"prepare-release (ship:%s)","status":"%s","conclusion":"%s","url":"https://github.com/%s/actions/runs/42","headBranch":"release/next"}\n' \
-      "$SHIP_ID" "${STUB_RUN_STATUS:-completed}" "${STUB_RUN_CONCLUSION:-success}" "$REPO"
+    printf '{"databaseId":%s,"displayTitle":"prepare-release (ship:%s)","status":"%s","conclusion":"%s","url":"https://github.com/%s/actions/runs/%s","headBranch":"release/next"}\n' \
+      "${3:-42}" "$SHIP_ID" "${STUB_RUN_STATUS:-completed}" "${STUB_RUN_CONCLUSION:-success}" "$REPO" "${3:-42}"
     ;;
 
   "run download")

@@ -61,12 +61,12 @@ use thiserror::Error;
 use gh_ship::artifact::Artifact;
 use gh_ship::cli::{Cli, ReleaseArgs};
 use gh_ship::gh::repo::{self, PullRequest};
-use gh_ship::gh::run::ShipId;
+use gh_ship::gh::run::{self, ShipId};
 use gh_ship::logger;
 use gh_ship::render;
 use gh_ship::style::Theme;
 
-use super::context::{Context, dispatch_and_wait, report_nothing_to_release};
+use super::context::{Context, dispatch_and_wait, report_nothing_to_release, wait_for_run};
 use super::short_sha;
 
 /// Everything that can stop a release before it starts.
@@ -317,14 +317,41 @@ fn create_release(ctx: &Context, artifact: &Artifact, tag: &str, target: &str) -
     Ok(())
 }
 
-/// Dispatch the publish workflow and wait for it.
+/// Dispatch the publish workflow and wait for it — unless one already ran.
 ///
 /// Dispatched on the tag rather than a branch: the publish workflow
 /// should build exactly what is being released, not whatever the branch
 /// has drifted to since.
+///
+/// # Why this looks before it dispatches
+///
+/// Correlation is by nonce, and the nonce is generated per invocation and
+/// never persisted. A publish run that failed and was then re-run from the
+/// GitHub UI keeps its original `run-name`, and so its original nonce: a
+/// re-run of the calling job would match nothing, dispatch a second full
+/// build, and re-upload assets that are already there.
+///
+/// The tag ref makes that unnecessary. It is unique to this release, so
+/// every run of the publish workflow on it belongs to this release — no
+/// matter who started it or which nonce it carries.
 fn run_publish(ctx: &Context, workflow_name: &str, tag: &str) -> Result<()> {
     let theme = ctx.theme;
     let workflow = ctx.workflow(workflow_name);
+
+    let existing = run::list(&ctx.gh, &workflow, tag)?;
+
+    // A success anywhere in the history wins, including the second attempt
+    // of a re-run: `gh run view` reports the latest attempt, so there is
+    // nothing left to build.
+    if let Some(done) = existing.iter().find(|r| r.succeeded()) {
+        eprintln!(
+            "{}",
+            logger::skip(theme, &format!("{workflow} already succeeded for {tag}"))
+        );
+        eprintln!("{}", logger::detail_url(theme, "run", &done.url));
+        return Ok(());
+    }
+
     eprintln!(
         "{}",
         logger::skip(
@@ -332,6 +359,16 @@ fn run_publish(ctx: &Context, workflow_name: &str, tag: &str) -> Result<()> {
             "assets are uploaded to the draft before it becomes visible"
         )
     );
+
+    if let Some(running) = existing.iter().find(|r| !r.is_finished()) {
+        eprintln!(
+            "{}",
+            logger::skip(theme, &format!("{workflow} is already running for {tag}"))
+        );
+        eprintln!("{}", logger::detail_url(theme, "run", &running.url));
+        wait_for_run(ctx, &workflow, running)?;
+        return Ok(());
+    }
 
     // The shared dispatch/find/wait helper does the reporting: a publish
     // that cross-compiles for an hour must look alive throughout, and it

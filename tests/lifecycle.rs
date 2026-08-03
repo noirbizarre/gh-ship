@@ -604,6 +604,25 @@ fn status_tells_a_merged_pr_to_release() {
     );
 }
 
+/// `status` reports the last prepare run whether or not gh-ship started
+/// it, so the stub must be able to have one without a dispatch.
+#[test]
+fn status_reports_the_last_prepare_run() {
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new()
+            .pr_exists(true)
+            .last_run("completed", "failure"),
+    );
+    let out = repo.ship(&["status", "--json"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    let v: serde_json::Value = serde_json::from_str(&out.stdout)
+        .unwrap_or_else(|e| panic!("stdout must be JSON ({e}): {}", out.stdout));
+    assert_eq!(v["last_run"]["id"], 41);
+    assert_eq!(v["last_run"]["conclusion"], "failure");
+}
+
 #[test]
 fn status_json_is_machine_readable() {
     let body = format!("Notes\n\n<!-- ship:artifact\n{CHANGED_ARTIFACT}\n-->");
@@ -627,6 +646,19 @@ fn merged_repo(stub: GhStub) -> Repo {
     let body = format!("Notes\n\n<!-- ship:artifact\n{CHANGED_ARTIFACT}\n-->");
     Repo::new(
         CONFIG,
+        stub.pr_body(&body)
+            .pr_state("MERGED")
+            .merge_commit("abc1234def5678"),
+    )
+}
+
+/// As [`merged_repo`], with a publish workflow configured — the only
+/// configuration in which `release` dispatches anything.
+fn publishing_repo(stub: GhStub) -> Repo {
+    let config = "version: 1\nworkflows:\n  prepare: prepare-release\n  publish: prepare-release\n";
+    let body = format!("Notes\n\n<!-- ship:artifact\n{CHANGED_ARTIFACT}\n-->");
+    Repo::new(
+        config,
         stub.pr_body(&body)
             .pr_state("MERGED")
             .merge_commit("abc1234def5678"),
@@ -665,15 +697,7 @@ fn release_creates_a_draft_first() {
 /// Ordering is the whole point of draft-first: upload, then publish.
 #[test]
 fn release_undrafts_only_after_the_publish_workflow() {
-    let config = "version: 1\nworkflows:\n  prepare: prepare-release\n  publish: prepare-release\n";
-    let body = format!("Notes\n\n<!-- ship:artifact\n{CHANGED_ARTIFACT}\n-->");
-    let repo = Repo::new(
-        config,
-        GhStub::new()
-            .pr_body(&body)
-            .pr_state("MERGED")
-            .merge_commit("abc1234def5678"),
-    );
+    let repo = publishing_repo(GhStub::new());
     let out = repo.ship(&["release"]);
     assert_eq!(out.code, 0, "{}", out.stderr);
 
@@ -692,6 +716,82 @@ fn release_undrafts_only_after_the_publish_workflow() {
     assert!(
         dispatch < undraft,
         "assets must be uploaded before the release becomes visible: {calls:?}"
+    );
+}
+
+/// A re-run of a failed publish keeps its original `run-name`, and so its
+/// original nonce. Correlating on the nonce alone would miss it, and
+/// re-running the calling job would rebuild and re-upload everything.
+#[test]
+fn release_skips_the_publish_dispatch_when_a_run_already_succeeded() {
+    let repo = publishing_repo(GhStub::new().existing_run("completed", "success"));
+    let out = repo.ship(&["release"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        !repo.stub.called_with(&["workflow run"]),
+        "a publish run already succeeded for this tag — rebuilding it is waste: {:?}",
+        repo.stub.calls()
+    );
+    assert!(out.stderr.contains("already succeeded"), "{}", out.stderr);
+    assert!(
+        out.stderr.contains("/actions/runs/41"),
+        "the run that did the work must be named: {}",
+        out.stderr
+    );
+    assert!(
+        repo.stub.called_with(&["release edit", "--draft=false"]),
+        "the release must still be published: {:?}",
+        repo.stub.calls()
+    );
+}
+
+/// Two jobs racing on the same tag would upload the same assets twice.
+#[test]
+fn release_adopts_a_publish_run_that_is_still_going() {
+    let repo = publishing_repo(GhStub::new().existing_run("in_progress", ""));
+    let out = repo.ship(&["release"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        !repo.stub.called_with(&["workflow run"]),
+        "a publish run is already in flight for this tag: {:?}",
+        repo.stub.calls()
+    );
+    assert!(out.stderr.contains("already running"), "{}", out.stderr);
+    assert!(
+        repo.stub.called_with(&["run view", "41"]),
+        "the adopted run must be polled to completion: {:?}",
+        repo.stub.calls()
+    );
+    assert!(repo.stub.called_with(&["release edit", "--draft=false"]));
+}
+
+/// Reuse must not become refusal: a publish that only ever failed leaves
+/// the assets unbuilt, so a new run is exactly what is wanted.
+#[test]
+fn release_dispatches_again_when_the_previous_publish_run_failed() {
+    let repo = publishing_repo(GhStub::new().existing_run("completed", "failure"));
+    let out = repo.ship(&["release"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        repo.stub.called_with(&["workflow run"]),
+        "a failed run published nothing: {:?}",
+        repo.stub.calls()
+    );
+}
+
+#[test]
+fn release_dispatches_the_publish_workflow_when_nothing_ran_yet() {
+    let repo = publishing_repo(GhStub::new());
+    let out = repo.ship(&["release"]);
+
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(
+        repo.stub.called_with(&["workflow run", "tag=v1.4.0"]),
+        "{:?}",
+        repo.stub.calls()
     );
 }
 

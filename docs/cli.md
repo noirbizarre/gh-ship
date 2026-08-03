@@ -247,7 +247,8 @@ $ gh ship release [--merge]
 3. Tags the **merge commit** — never a remembered SHA, because a squash merge
    creates a new one.
 4. Creates the GitHub Release as a **draft**.
-5. Dispatches the publish workflow so it can attach assets.
+5. Dispatches the publish workflow so it can attach assets — unless a run of it
+   already exists for the tag.
 6. Makes the release visible.
 
 !!! note "The tag is created before the release, deliberately"
@@ -258,6 +259,21 @@ $ gh ship release [--merge]
 
     The step is idempotent, so re-running after a failure part-way through is
     safe.
+
+!!! tip "Re-running is cheap"
+
+    Before dispatching, gh-ship lists the runs of the publish workflow on the
+    tag. The tag is unique to the release, so any run on it belongs to this
+    release — whoever started it.
+
+    - A run that **succeeded** means the assets are up: gh-ship skips the
+      dispatch and only makes the release visible.
+    - A run still **in flight** is adopted and waited on, rather than raced.
+    - Only when every run **failed** — or none exists — is a new one dispatched.
+
+    So if a publish run fails and you re-run it from the GitHub UI, re-running
+    the job that calls `gh ship release` finishes the release instead of
+    rebuilding it.
 
 | Option | Meaning |
 |---|---|
