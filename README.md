@@ -175,14 +175,19 @@ run-name: prepare-release (ship:${{ inputs.ship_id }})
 ```
 
 `gh workflow run` returns no run id, so this is how gh-ship finds the run it
-started, rather than guessing from timestamps. `gh ship validate` checks both.
+started, rather than guessing from timestamps.
+
+Your prepare workflow must also declare a `dry_run` boolean input — it is what
+`gh ship preview` sets to produce the artifact without committing anything.
+
+`gh ship validate` checks all three.
 
 ### The token
 
 GitHub's default `GITHUB_TOKEN` **cannot trigger other workflows**. A Release PR it
 authors will not run your CI. If the Release PR must be tested before merging,
-supply a PAT or GitHub App token as the `SHIP_TOKEN` secret; the generated workflow
-prefers it when present.
+supply a GitHub App token or a fine-grained PAT; the generated workflow prefers
+the `SHIP_TOKEN` secret when present.
 
 ## Design notes
 

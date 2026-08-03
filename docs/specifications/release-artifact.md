@@ -27,12 +27,15 @@ named **`ship.release.json`**.
 
 ```yaml
 - name: Validate the artifact before uploading
-  run: gh ship validate ship.release.json
+  run: |
+    gh extension install noirbizarre/gh-ship
+    gh ship validate ship.release.json
 
 - uses: actions/upload-artifact@v7
   with:
     name: ship-release
     path: ship.release.json
+    if-no-files-found: error
 ```
 
 Validating before uploading turns a protocol mistake into a red workflow with a

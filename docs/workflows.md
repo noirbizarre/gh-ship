@@ -39,8 +39,12 @@ on:
 `.github/ship.yml` names workflows by their **filename without the extension**:
 
 ```
+.github/workflows/prepare-release.yml    ->   prepare: prepare-release
 .github/workflows/prepare-release.yaml   ->   prepare: prepare-release
 ```
+
+Either extension works, and both resolve to the same slug — which is why
+`gh ship init` writing `.yml` costs you nothing if your repository uses `.yaml`.
 
 Not by the `name:` in the workflow. That means the display name is yours to
 decorate:
@@ -444,7 +448,7 @@ $ gh ship validate
 Rules 1 to 3 are checked, with an explanation of why each exists:
 
 ```
-× workflow `prepare-release.yaml` does not declare `on: workflow_dispatch`
+× workflow `prepare-release` does not declare `on: workflow_dispatch`
   help: gh-ship starts workflows through the API, which can only start workflows
         declaring `on: workflow_dispatch`. A `workflow_call`-only workflow — what
         is usually called a reusable workflow — cannot be started this way.

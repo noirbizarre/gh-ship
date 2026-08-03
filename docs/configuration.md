@@ -84,8 +84,11 @@ release:
 Values are the workflow's **filename without the extension** — its slug:
 
 ```
+.github/workflows/prepare-release.yml    ->   prepare-release
 .github/workflows/prepare-release.yaml   ->   prepare-release
 ```
+
+Either extension is discovered, and both yield the same slug.
 
 The `name:` inside the workflow is display only, so it is free to carry emoji
 (`🚀 Prepare Release`) and can be changed without touching this file. A full

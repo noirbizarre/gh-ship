@@ -69,8 +69,9 @@ Otherwise gh-ship colours its output when stderr is a terminal, **or when
 terminal but renders ANSI in its logs, so workflow output is coloured without
 any configuration.
 
-Only the human-readable output on stderr is ever coloured. `--json` goes to
-stdout and never is, so it stays safe to pipe.
+Only the human-readable output on stderr is ever coloured. Stdout carries the
+machine-readable payloads — `--json`, and the rendered PR body from
+`gh ship preview` — and is never coloured, so it stays safe to pipe.
 
 ## Exit codes
 
@@ -94,14 +95,18 @@ Make a repository gh-ship enabled.
 $ gh ship init [--force]
 ```
 
-Detects your repository, lists workflows gh-ship can dispatch, explains the ones it
-cannot, offers to generate templates, and writes a documented `.github/ship.yml`.
+Scans `.github/workflows/`, lists the workflows gh-ship can dispatch, explains the
+ones it cannot, offers to generate templates, and writes a documented
+`.github/ship.yml`.
 
 | Option | Meaning |
 |---|---|
 | `--force` | Overwrite an existing configuration. |
 
 Requires an interactive terminal. In automation, write the config directly.
+
+`init` is entirely local: it never contacts GitHub, so it needs no authentication
+and ignores `--repo`.
 
 ---
 
@@ -138,7 +143,8 @@ $ gh ship preview [--json]
 ```
 
 Dispatches the prepare workflow with `dry_run: true`, waits, downloads the artifact,
-and renders the PR to stdout.
+and renders the PR: the body on stdout, the title, labels and rules on stderr. So
+`gh ship preview > body.md` captures exactly the PR body.
 
 **Nothing on GitHub is modified**: no branch, no PR, no tag, no release.
 
@@ -248,7 +254,8 @@ $ gh ship release [--merge]
    creates a new one.
 4. Creates the GitHub Release as a **draft**.
 5. Dispatches the publish workflow so it can attach assets — unless a run of it
-   already exists for the tag.
+   already succeeded for the tag, in which case it is skipped, or one is still in
+   flight, in which case that run is adopted and waited on.
 6. Makes the release visible.
 
 !!! note "The tag is created before the release, deliberately"

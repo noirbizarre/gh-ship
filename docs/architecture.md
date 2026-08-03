@@ -47,7 +47,8 @@ src/
   config.rs        # .github/ship.yml
   render.rs        # PR templating and artifact embedding
   style / logger / suggest
-schemas/           # the published JSON Schema, embedded via include_str!
+schemas/           # the published JSON Schemas — release artifact and config —
+                   # embedded via include_str!
 templates/         # workflow templates emitted by `init`
 ```
 

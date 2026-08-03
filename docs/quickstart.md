@@ -10,11 +10,13 @@ $ gh ship init
 
 `init` will:
 
-- detect your repository,
+- scan `.github/workflows/`,
 - list workflows that gh-ship can actually dispatch,
 - explain the ones it cannot use, and why,
 - offer to generate templates for anything missing,
 - write a documented `.github/ship.yml`.
+
+It runs entirely locally and never contacts GitHub.
 
 ## 2. Make the workflow yours
 

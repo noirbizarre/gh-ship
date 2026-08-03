@@ -58,11 +58,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-        with:
-          # `gh ship prepare` reads .github/ship.yml and discovers workflows
-          # from .github/workflows. Without them it cannot resolve
-          # `prepare-release` to a filename, and the dispatch fails.
-          fetch-depth: 0
+        # A plain shallow checkout is enough: `gh ship prepare` reads
+        # .github/ship.yml and discovers workflows from .github/workflows,
+        # both of which are in the tree. gh-ship never shells out to git.
 
       # gh-ship releases gh-ship: the extension published by the previous
       # release is what runs the next one. Building from source here was only
