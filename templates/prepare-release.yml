@@ -83,7 +83,12 @@ jobs:
         if: steps.version.outputs.changed == 'true'
         run: |
           # Replace with your own changelog tool.
-          printf '## What'"'"'s Changed\n\n* ...\n' > NOTES.md
+          #
+          # Write the notes outside the worktree. They are scratch input
+          # for `jq --rawfile` below, not a source file, so keeping them
+          # in $RUNNER_TEMP is what stops `git add -A` from committing
+          # them to the release branch.
+          printf '## What'"'"'s Changed\n\n* ...\n' > "$RUNNER_TEMP/ship-notes.md"
 
       - name: Apply the version and commit
         if: steps.version.outputs.changed == 'true' && !inputs.dry_run
@@ -112,7 +117,7 @@ jobs:
             jq -n \
               --arg version "${{ steps.version.outputs.version }}" \
               --arg tag     "v${{ steps.version.outputs.version }}" \
-              --rawfile notes NOTES.md \
+              --rawfile notes "$RUNNER_TEMP/ship-notes.md" \
               '{
                 "$schema": "https://noirbizarre.github.io/gh-ship/schema/release/v1.json",
                 schemaVersion: 1,
