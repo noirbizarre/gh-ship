@@ -108,11 +108,14 @@ pub struct Workflows {
 }
 
 /// Release PR rendering.
+///
+/// `#[serde(default)]` sits on the container rather than on each field so
+/// that [`PullRequestConfig::default`] is the single source of truth: an
+/// omitted key and an explicitly-defaulted struct cannot drift apart.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct PullRequestConfig {
     /// MiniJinja template for the PR title.
-    #[serde(default = "default_pr_title")]
     pub title: String,
 
     /// Markdown prepended to the release notes.
@@ -136,13 +139,14 @@ pub struct PullRequestConfig {
     ///
     /// Set to `false` to close any open Release PR and open a fresh one on
     /// every prepare.
-    #[serde(default = "default_true")]
     pub reuse: bool,
 }
 
 /// GitHub Release behaviour.
+///
+/// See [`PullRequestConfig`] for why the default lives on the container.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct ReleaseConfig {
     /// Create the release as a draft first, then undraft after the
     /// publish workflow succeeds.
@@ -150,7 +154,6 @@ pub struct ReleaseConfig {
     /// This is the default because it is the only ordering that lets a
     /// publish workflow upload assets to the release *before* anyone
     /// subscribed to the repository is notified about it.
-    #[serde(default = "default_true")]
     pub draft: bool,
 }
 
@@ -158,18 +161,10 @@ fn default_release_branch() -> String {
     DEFAULT_RELEASE_BRANCH.to_string()
 }
 
-fn default_pr_title() -> String {
-    DEFAULT_PR_TITLE.to_string()
-}
-
-fn default_true() -> bool {
-    true
-}
-
 impl Default for PullRequestConfig {
     fn default() -> Self {
         Self {
-            title: default_pr_title(),
+            title: DEFAULT_PR_TITLE.to_string(),
             header: None,
             footer: None,
             labels: Vec::new(),
