@@ -40,11 +40,7 @@ fn retries() -> u32 {
 /// Mostly a test knob: the suite sets it to `0` so it never sleeps through a
 /// backoff it is not measuring.
 fn retry_delay() -> Duration {
-    std::env::var("SHIP_GH_RETRY_DELAY")
-        .ok()
-        .and_then(|v| v.parse::<u64>().ok())
-        .map(Duration::from_secs)
-        .unwrap_or(RETRY_DELAY)
+    super::env_duration("SHIP_GH_RETRY_DELAY").unwrap_or(RETRY_DELAY)
 }
 
 /// Errors from invoking the GitHub CLI.
@@ -319,6 +315,35 @@ fn is_transient(stderr: &str) -> bool {
     ];
 
     SIGNS.iter().any(|sign| lower.contains(sign))
+}
+
+/// Whether the failure means "this does not exist" rather than "this went
+/// wrong".
+///
+/// A missing branch, tag or release is an ordinary answer to a question,
+/// not an error, so several helpers turn it into `Ok(false)` / `Ok(None)`.
+/// The vocabulary is centralised here for the same reason [`is_transient`]
+/// is: GitHub rewords its messages, and one table is one place to fix.
+pub(super) fn is_not_found(error: &GhError) -> bool {
+    const SIGNS: &[&str] = &["404", "not found", "reference does not exist"];
+    matches_stderr(error, SIGNS)
+}
+
+/// Whether the failure means the thing we asked to create is already there.
+///
+/// The creations gh-ship performs are idempotent by intent — re-running a
+/// release must not fail because the branch it wanted already exists.
+pub(super) fn is_already_exists(error: &GhError) -> bool {
+    const SIGNS: &[&str] = &["already exists", "422", "reference already exists"];
+    matches_stderr(error, SIGNS)
+}
+
+fn matches_stderr(error: &GhError, signs: &[&str]) -> bool {
+    let GhError::Failed { stderr, .. } = error else {
+        return false;
+    };
+    let lower = stderr.to_lowercase();
+    signs.iter().any(|sign| lower.contains(sign))
 }
 
 /// Whether an invocation only *reads* from GitHub.

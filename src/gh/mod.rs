@@ -15,3 +15,17 @@ pub mod run;
 pub mod workflow;
 
 pub use cli::{Gh, GhError};
+
+/// Read a `SHIP_*` knob expressed in whole seconds.
+///
+/// Every duration knob gh-ship exposes is seconds-as-integer, so the parsing
+/// lives here rather than being re-derived per module. `None` covers both
+/// "unset" and "unparseable": a typo falls back to the documented default
+/// rather than failing a release over an environment variable.
+pub(crate) fn env_duration(key: &str) -> Option<std::time::Duration> {
+    std::env::var(key)
+        .ok()?
+        .parse::<u64>()
+        .ok()
+        .map(std::time::Duration::from_secs)
+}

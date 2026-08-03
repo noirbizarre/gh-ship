@@ -5,7 +5,7 @@
 
 use serde::Deserialize;
 
-use super::cli::{Gh, GhError};
+use super::cli::{self, Gh, GhError};
 
 // --- Repository ----------------------------------------------------------
 
@@ -50,7 +50,7 @@ pub fn branch_exists(gh: &Gh, repo: &str, branch: &str) -> Result<bool, GhError>
         Ok(_) => Ok(true),
         // A missing branch is a 404, which is an expected answer here
         // rather than an error worth surfacing.
-        Err(GhError::Failed { stderr, .. }) if stderr.contains("404") => Ok(false),
+        Err(e) if cli::is_not_found(&e) => Ok(false),
         Err(e) => Err(e),
     }
 }
@@ -94,11 +94,9 @@ pub fn create_tag(gh: &Gh, repo: &str, tag: &str, sha: &str) -> Result<(), GhErr
         "--silent",
     ]) {
         Ok(_) => Ok(()),
-        Err(GhError::Failed { stderr, .. })
-            if stderr.contains("already exists") || stderr.contains("422") =>
-        {
-            Ok(())
-        }
+        // Creating a tag that is already there is the desired state: a
+        // re-run of `gh ship release` must not fail on its own first pass.
+        Err(e) if cli::is_already_exists(&e) => Ok(()),
         Err(e) => Err(e),
     }
 }
@@ -134,11 +132,7 @@ pub fn delete_branch(gh: &Gh, repo: &str, branch: &str) -> Result<(), GhError> {
     ]) {
         Ok(_) => Ok(()),
         // Already deleted is the desired state, not a failure.
-        Err(GhError::Failed { stderr, .. })
-            if stderr.contains("404") || stderr.contains("Reference does not exist") =>
-        {
-            Ok(())
-        }
+        Err(e) if cli::is_not_found(&e) => Ok(()),
         Err(e) => Err(e),
     }
 }
@@ -466,11 +460,7 @@ pub fn publish_release(gh: &Gh, tag: &str) -> Result<(), GhError> {
 pub fn release_exists(gh: &Gh, tag: &str) -> Result<bool, GhError> {
     match gh.run_scoped(&["release", "view", tag, "--json", "tagName"]) {
         Ok(_) => Ok(true),
-        Err(GhError::Failed { stderr, .. })
-            if stderr.contains("release not found") || stderr.contains("404") =>
-        {
-            Ok(false)
-        }
+        Err(e) if cli::is_not_found(&e) => Ok(false),
         Err(e) => Err(e),
     }
 }

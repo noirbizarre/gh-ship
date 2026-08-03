@@ -44,20 +44,12 @@ pub const APPEAR_TIMEOUT: Duration = Duration::from_secs(90);
 /// must exercise the "run never appeared" path without waiting 90 seconds
 /// for it.
 pub fn appear_timeout() -> Duration {
-    env_duration("SHIP_APPEAR_TIMEOUT").unwrap_or(APPEAR_TIMEOUT)
+    super::env_duration("SHIP_APPEAR_TIMEOUT").unwrap_or(APPEAR_TIMEOUT)
 }
 
 /// The run timeout, overridable via `SHIP_RUN_TIMEOUT` (seconds).
 pub fn run_timeout() -> Duration {
-    env_duration("SHIP_RUN_TIMEOUT").unwrap_or(RUN_TIMEOUT)
-}
-
-fn env_duration(key: &str) -> Option<Duration> {
-    std::env::var(key)
-        .ok()?
-        .parse::<u64>()
-        .ok()
-        .map(Duration::from_secs)
+    super::env_duration("SHIP_RUN_TIMEOUT").unwrap_or(RUN_TIMEOUT)
 }
 
 /// How long to wait for a run to *finish*, by default.
