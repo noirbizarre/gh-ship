@@ -97,12 +97,7 @@ impl Repo {
         for (k, v) in &self.stub.env {
             cmd.env(k, v);
         }
-        let output = cmd.args(args).output().expect("gh-ship runs");
-        Outcome {
-            code: output.status.code().unwrap_or(-1),
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        }
+        Outcome::run(cmd.args(args))
     }
 }
 
@@ -129,18 +124,7 @@ pub fn validate_fixture(relative: &str) -> Outcome {
     let dir = path.parent().expect("fixture has a parent").to_path_buf();
     let file = path.file_name().expect("fixture has a name").to_owned();
 
-    let output = ship()
-        .current_dir(&dir)
-        .arg("validate")
-        .arg(&file)
-        .output()
-        .expect("gh-ship runs");
-
-    Outcome {
-        code: output.status.code().unwrap_or(-1),
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-    }
+    Outcome::run(ship().current_dir(&dir).arg("validate").arg(&file))
 }
 
 /// Absolute path to a file under `tests/fixtures`.
@@ -165,13 +149,32 @@ pub fn fixtures_in(relative: &str) -> Vec<std::path::PathBuf> {
 }
 
 /// The result of running the binary.
+///
+/// `stderr` is deliberately private: every human-facing line goes there, so
+/// [`Outcome::diagnostics`] is the single accessor the suite reads it
+/// through. Moving where diagnostics go should be one edit, not forty.
 pub struct Outcome {
     pub code: i32,
     pub stdout: String,
-    pub stderr: String,
+    stderr: String,
+}
+
+impl From<std::process::Output> for Outcome {
+    fn from(output: std::process::Output) -> Self {
+        Self {
+            code: output.status.code().unwrap_or(-1),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        }
+    }
 }
 
 impl Outcome {
+    /// Run a prepared command and capture what it said.
+    pub fn run(cmd: &mut Command) -> Self {
+        cmd.output().expect("gh-ship runs").into()
+    }
+
     /// Stderr, which is where all human-facing output goes.
     pub fn diagnostics(&self) -> &str {
         &self.stderr

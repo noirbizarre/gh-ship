@@ -24,9 +24,13 @@ fn preview_renders_the_pull_request_without_mutating_anything() {
     let repo = Repo::new(CONFIG, GhStub::new().artifact(CHANGED_ARTIFACT));
     let out = repo.ship(&["preview"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(out.stdout.contains("## Changes"), "{}", out.stdout);
-    assert!(out.stderr.contains("Release 1.4.0"), "{}", out.stderr);
+    assert!(
+        out.diagnostics().contains("Release 1.4.0"),
+        "{}",
+        out.diagnostics()
+    );
 
     // The whole point of preview: nothing is created.
     assert!(
@@ -75,11 +79,16 @@ fn preview_reports_nothing_to_release_and_exits_zero() {
     let out = repo.ship(&["preview"]);
 
     assert_eq!(
-        out.code, 0,
+        out.code,
+        0,
         "nothing to release is a success: {}",
-        out.stderr
+        out.diagnostics()
     );
-    assert!(out.stderr.contains("nothing to release"), "{}", out.stderr);
+    assert!(
+        out.diagnostics().contains("nothing to release"),
+        "{}",
+        out.diagnostics()
+    );
     assert!(
         !repo.stub.called_with(&["pr create"]),
         "an unchanged release must not open a PR"
@@ -91,7 +100,7 @@ fn preview_json_is_machine_readable() {
     let repo = Repo::new(CONFIG, GhStub::new().artifact(CHANGED_ARTIFACT));
     let out = repo.ship(&["preview", "--json"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     let v: serde_json::Value = serde_json::from_str(&out.stdout)
         .unwrap_or_else(|e| panic!("stdout must be valid JSON ({e}): {}", out.stdout));
     assert_eq!(v["artifact"]["version"], "1.4.0");
@@ -114,11 +123,15 @@ fn a_run_that_never_appears_explains_the_run_name_contract() {
     let out = repo.ship(&["preview"]);
 
     assert_eq!(out.code, 1);
-    assert!(out.stderr.contains("run-name"), "{}", out.stderr);
     assert!(
-        out.stderr.contains("no run id"),
+        out.diagnostics().contains("run-name"),
+        "{}",
+        out.diagnostics()
+    );
+    assert!(
+        out.diagnostics().contains("no run id"),
         "the help must explain why correlation needs run-name: {}",
-        out.stderr
+        out.diagnostics()
     );
 }
 
@@ -128,11 +141,15 @@ fn a_failed_run_reports_the_conclusion_and_a_link() {
     let out = repo.ship(&["preview"]);
 
     assert_eq!(out.code, 1);
-    assert!(out.stderr.contains("failure"), "{}", out.stderr);
     assert!(
-        out.stderr.contains("actions/runs/42"),
+        out.diagnostics().contains("failure"),
+        "{}",
+        out.diagnostics()
+    );
+    assert!(
+        out.diagnostics().contains("actions/runs/42"),
         "a failure must link to the run: {}",
-        out.stderr
+        out.diagnostics()
     );
 }
 
@@ -141,7 +158,11 @@ fn a_cancelled_run_is_treated_as_a_failure() {
     let repo = Repo::new(CONFIG, GhStub::new().run_status("completed", "cancelled"));
     let out = repo.ship(&["preview"]);
     assert_eq!(out.code, 1);
-    assert!(out.stderr.contains("cancelled"), "{}", out.stderr);
+    assert!(
+        out.diagnostics().contains("cancelled"),
+        "{}",
+        out.diagnostics()
+    );
 }
 
 // --- Protocol failures ---------------------------------------------------
@@ -152,12 +173,16 @@ fn a_run_without_an_artifact_names_the_protocol() {
     let out = repo.ship(&["preview"]);
 
     assert_eq!(out.code, 1);
-    assert!(out.stderr.contains("ship-release"), "{}", out.stderr);
+    assert!(
+        out.diagnostics().contains("ship-release"),
+        "{}",
+        out.diagnostics()
+    );
     // miette hard-wraps, so match on a fragment that survives wrapping.
     assert!(
-        out.stderr.contains("specifications/release-"),
+        out.diagnostics().contains("specifications/release-"),
         "the help must link to the specification: {}",
-        out.stderr
+        out.diagnostics()
     );
 }
 
@@ -172,11 +197,15 @@ fn an_artifact_with_the_wrong_filename_is_rejected() {
     let out = repo.ship(&["preview"]);
 
     assert_eq!(out.code, 1);
-    assert!(out.stderr.contains("ship.release.json"), "{}", out.stderr);
     assert!(
-        out.stderr.contains("part of the protocol"),
+        out.diagnostics().contains("ship.release.json"),
         "{}",
-        out.stderr
+        out.diagnostics()
+    );
+    assert!(
+        out.diagnostics().contains("part of the protocol"),
+        "{}",
+        out.diagnostics()
     );
 }
 
@@ -191,12 +220,16 @@ fn an_invalid_artifact_gets_the_full_diagnostic() {
     let out = repo.ship(&["preview"]);
 
     assert_eq!(out.code, 1);
-    assert!(out.stderr.contains("version"), "{}", out.stderr);
-    assert!(out.stderr.contains("tag"), "{}", out.stderr);
     assert!(
-        out.stderr.contains("changed:") && out.stderr.contains("false`"),
+        out.diagnostics().contains("version"),
+        "{}",
+        out.diagnostics()
+    );
+    assert!(out.diagnostics().contains("tag"), "{}", out.diagnostics());
+    assert!(
+        out.diagnostics().contains("changed:") && out.diagnostics().contains("false`"),
         "the contextual help must survive into lifecycle commands: {}",
-        out.stderr
+        out.diagnostics()
     );
 }
 
@@ -208,7 +241,11 @@ fn unauthenticated_gh_is_reported_actionably() {
     let out = repo.ship(&["preview"]);
 
     assert_eq!(out.code, 1);
-    assert!(out.stderr.contains("gh auth login"), "{}", out.stderr);
+    assert!(
+        out.diagnostics().contains("gh auth login"),
+        "{}",
+        out.diagnostics()
+    );
 }
 
 // --- Transient API failures ----------------------------------------------
@@ -227,14 +264,14 @@ fn a_transient_failure_on_a_read_is_absorbed() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub.called_with(&["pr create"]),
         "the release must proceed: {:?}",
         repo.stub.calls()
     );
     // The retry must be invisible: no half-failure leaking into the output.
-    assert!(!out.stderr.contains("504"), "{}", out.stderr);
+    assert!(!out.diagnostics().contains("504"), "{}", out.diagnostics());
 }
 
 /// An outage is not a blip. Once the budget is spent the error surfaces,
@@ -251,9 +288,13 @@ fn a_sustained_outage_gives_up_and_says_it_retried() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 1, "{}", out.stderr);
-    assert!(out.stderr.contains("504"), "{}", out.stderr);
-    assert!(out.stderr.contains("retried"), "{}", out.stderr);
+    assert_eq!(out.code, 1, "{}", out.diagnostics());
+    assert!(out.diagnostics().contains("504"), "{}", out.diagnostics());
+    assert!(
+        out.diagnostics().contains("retried"),
+        "{}",
+        out.diagnostics()
+    );
 
     let attempts = repo
         .stub
@@ -278,7 +319,7 @@ fn a_transient_failure_on_a_write_is_not_retried() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 1, "{}", out.stderr);
+    assert_eq!(out.code, 1, "{}", out.diagnostics());
 
     let attempts = repo
         .stub
@@ -296,7 +337,11 @@ fn a_missing_config_suggests_init() {
     let out = repo.ship(&["preview"]);
 
     assert_eq!(out.code, 1);
-    assert!(out.stderr.contains("gh ship init"), "{}", out.stderr);
+    assert!(
+        out.diagnostics().contains("gh ship init"),
+        "{}",
+        out.diagnostics()
+    );
 }
 
 // --- Rendering -----------------------------------------------------------
@@ -329,7 +374,7 @@ pull_request:
 fn preview_output_is_stable() {
     let repo = Repo::new(CONFIG, GhStub::new().artifact(CHANGED_ARTIFACT));
     let out = repo.ship(&["preview"]);
-    with_redactions(|| insta::assert_snapshot!("preview__changed", out.stderr));
+    with_redactions(|| insta::assert_snapshot!("preview__changed", out.diagnostics()));
 }
 
 #[test]
@@ -339,7 +384,7 @@ fn nothing_to_release_output_is_stable() {
         GhStub::new().artifact(r#"{"schemaVersion":1,"changed":false}"#),
     );
     let out = repo.ship(&["preview"]);
-    with_redactions(|| insta::assert_snapshot!("preview__unchanged", out.stderr));
+    with_redactions(|| insta::assert_snapshot!("preview__unchanged", out.diagnostics()));
 }
 
 // --- prepare -------------------------------------------------------------
@@ -354,7 +399,7 @@ fn prepare_creates_the_release_branch_when_missing() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub.called_with(&["api", "git/refs", "POST"]),
         "the branch must exist before dispatch, because workflow_dispatch \
@@ -373,7 +418,7 @@ fn a_missing_release_branch_is_created_at_the_staged_commit() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub
             .called_with(&["git/refs", "POST", "refs/heads/release/next"]),
@@ -398,7 +443,7 @@ fn the_in_flight_release_guard_short_circuits_before_staging() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         !repo.stub.called_with(&["PATCH"]),
         "the guard must short-circuit before the branch is touched: {:?}",
@@ -418,7 +463,7 @@ fn preview_dispatches_on_the_base_branch() {
     );
     let out = repo.ship(&["preview"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub.called_with(&["workflow run", "--ref main"]),
         "preview should run against the base: {:?}",
@@ -439,13 +484,17 @@ fn prepare_opens_a_pull_request() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub.called_with(&["pr create"]),
         "{:?}",
         repo.stub.calls()
     );
-    assert!(out.stderr.contains("Release PR opened"), "{}", out.stderr);
+    assert!(
+        out.diagnostics().contains("Release PR opened"),
+        "{}",
+        out.diagnostics()
+    );
 }
 
 #[test]
@@ -456,7 +505,7 @@ fn prepare_updates_an_existing_pull_request() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub.called_with(&["pr edit"]),
         "{:?}",
@@ -497,8 +546,12 @@ fn prepare_reports_nothing_to_release_without_opening_a_pr() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
-    assert!(out.stderr.contains("nothing to release"), "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    assert!(
+        out.diagnostics().contains("nothing to release"),
+        "{}",
+        out.diagnostics()
+    );
     assert!(!repo.stub.called_with(&["pr create"]));
     assert!(!repo.stub.called_with(&["pr edit"]));
 }
@@ -519,7 +572,7 @@ fn prepare_no_wait_dispatches_and_stops() {
     let repo = Repo::new(CONFIG, GhStub::new().artifact(CHANGED_ARTIFACT));
     let out = repo.ship(&["prepare", "--no-wait"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(repo.stub.called_with(&["workflow run"]));
     assert!(
         !repo.stub.called_with(&["run download"]),
@@ -535,7 +588,7 @@ fn prepare_output_is_stable() {
         GhStub::new().pr_exists(false).artifact(CHANGED_ARTIFACT),
     );
     let out = repo.ship(&["prepare"]);
-    with_redactions(|| insta::assert_snapshot!("prepare__opens_pr", out.stderr));
+    with_redactions(|| insta::assert_snapshot!("prepare__opens_pr", out.diagnostics()));
 }
 
 // --- status --------------------------------------------------------------
@@ -545,9 +598,17 @@ fn status_reports_a_fresh_repository() {
     let repo = Repo::new(CONFIG, GhStub::new().branch_exists(false).pr_exists(false));
     let out = repo.ship(&["status"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
-    assert!(out.stderr.contains("does not exist"), "{}", out.stderr);
-    assert!(out.stderr.contains("gh ship prepare"), "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    assert!(
+        out.diagnostics().contains("does not exist"),
+        "{}",
+        out.diagnostics()
+    );
+    assert!(
+        out.diagnostics().contains("gh ship prepare"),
+        "{}",
+        out.diagnostics()
+    );
 }
 
 #[test]
@@ -578,9 +639,13 @@ fn status_recovers_the_artifact_from_the_pull_request() {
     let repo = Repo::new(CONFIG, GhStub::new().pr_body(&body));
     let out = repo.ship(&["status"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
-    assert!(out.stderr.contains("1.4.0"), "{}", out.stderr);
-    assert!(out.stderr.contains("v1.4.0"), "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    assert!(out.diagnostics().contains("1.4.0"), "{}", out.diagnostics());
+    assert!(
+        out.diagnostics().contains("v1.4.0"),
+        "{}",
+        out.diagnostics()
+    );
 }
 
 #[test]
@@ -595,12 +660,16 @@ fn status_tells_a_merged_pr_to_release() {
     );
     let out = repo.ship(&["status"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
-    assert!(out.stderr.contains("gh ship release"), "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
-        out.stderr.contains("abc1234"),
+        out.diagnostics().contains("gh ship release"),
+        "{}",
+        out.diagnostics()
+    );
+    assert!(
+        out.diagnostics().contains("abc1234"),
         "the merge SHA should be shown: {}",
-        out.stderr
+        out.diagnostics()
     );
 }
 
@@ -616,7 +685,7 @@ fn status_reports_the_last_prepare_run() {
     );
     let out = repo.ship(&["status", "--json"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     let v: serde_json::Value = serde_json::from_str(&out.stdout)
         .unwrap_or_else(|e| panic!("stdout must be JSON ({e}): {}", out.stdout));
     assert_eq!(v["last_run"]["id"], 41);
@@ -629,7 +698,7 @@ fn status_json_is_machine_readable() {
     let repo = Repo::new(CONFIG, GhStub::new().pr_body(&body));
     let out = repo.ship(&["status", "--json"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     let v: serde_json::Value = serde_json::from_str(&out.stdout)
         .unwrap_or_else(|e| panic!("stdout must be JSON ({e}): {}", out.stdout));
     assert_eq!(v["repository"], "acme/widgets");
@@ -670,7 +739,7 @@ fn release_tags_the_merge_commit_not_the_branch_tip() {
     let repo = merged_repo(GhStub::new());
     let out = repo.ship(&["release"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub
             .called_with(&["release create", "v1.4.0", "--target abc1234def5678"]),
@@ -684,7 +753,7 @@ fn release_creates_a_draft_first() {
     let repo = merged_repo(GhStub::new());
     let out = repo.ship(&["release"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub.called_with(&["release create", "--draft"]),
         "the release must start as a draft so assets can be attached \
@@ -699,7 +768,7 @@ fn release_creates_a_draft_first() {
 fn release_undrafts_only_after_the_publish_workflow() {
     let repo = publishing_repo(GhStub::new());
     let out = repo.ship(&["release"]);
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
 
     let calls = repo.stub.calls();
     let dispatch = calls.iter().position(|c| c.starts_with("workflow run"));
@@ -727,17 +796,21 @@ fn release_skips_the_publish_dispatch_when_a_run_already_succeeded() {
     let repo = publishing_repo(GhStub::new().existing_run("completed", "success"));
     let out = repo.ship(&["release"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         !repo.stub.called_with(&["workflow run"]),
         "a publish run already succeeded for this tag — rebuilding it is waste: {:?}",
         repo.stub.calls()
     );
-    assert!(out.stderr.contains("already succeeded"), "{}", out.stderr);
     assert!(
-        out.stderr.contains("/actions/runs/41"),
+        out.diagnostics().contains("already succeeded"),
+        "{}",
+        out.diagnostics()
+    );
+    assert!(
+        out.diagnostics().contains("/actions/runs/41"),
         "the run that did the work must be named: {}",
-        out.stderr
+        out.diagnostics()
     );
     assert!(
         repo.stub.called_with(&["release edit", "--draft=false"]),
@@ -752,13 +825,17 @@ fn release_adopts_a_publish_run_that_is_still_going() {
     let repo = publishing_repo(GhStub::new().existing_run("in_progress", ""));
     let out = repo.ship(&["release"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         !repo.stub.called_with(&["workflow run"]),
         "a publish run is already in flight for this tag: {:?}",
         repo.stub.calls()
     );
-    assert!(out.stderr.contains("already running"), "{}", out.stderr);
+    assert!(
+        out.diagnostics().contains("already running"),
+        "{}",
+        out.diagnostics()
+    );
     assert!(
         repo.stub.called_with(&["run view", "41"]),
         "the adopted run must be polled to completion: {:?}",
@@ -774,7 +851,7 @@ fn release_dispatches_again_when_the_previous_publish_run_failed() {
     let repo = publishing_repo(GhStub::new().existing_run("completed", "failure"));
     let out = repo.ship(&["release"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub.called_with(&["workflow run"]),
         "a failed run published nothing: {:?}",
@@ -787,7 +864,7 @@ fn release_dispatches_the_publish_workflow_when_nothing_ran_yet() {
     let repo = publishing_repo(GhStub::new());
     let out = repo.ship(&["release"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub.called_with(&["workflow run", "tag=v1.4.0"]),
         "{:?}",
@@ -802,8 +879,16 @@ fn release_refuses_an_open_pull_request() {
     let out = repo.ship(&["release"]);
 
     assert_eq!(out.code, 1);
-    assert!(out.stderr.contains("still open"), "{}", out.stderr);
-    assert!(out.stderr.contains("--merge"), "{}", out.stderr);
+    assert!(
+        out.diagnostics().contains("still open"),
+        "{}",
+        out.diagnostics()
+    );
+    assert!(
+        out.diagnostics().contains("--merge"),
+        "{}",
+        out.diagnostics()
+    );
     assert!(
         !repo.stub.called_with(&["release create"]),
         "nothing may be released before the PR is merged"
@@ -827,11 +912,15 @@ fn release_can_merge_when_asked() {
         "{:?}",
         repo.stub.calls()
     );
-    assert!(out.stderr.contains("merged"), "{}", out.stderr);
+    assert!(
+        out.diagnostics().contains("merged"),
+        "{}",
+        out.diagnostics()
+    );
 
     // `--merge` is only useful if the release then proceeds, so assert the
     // outcome and not merely that `pr merge` was called.
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub.called_with(&["release create"]),
         "{:?}",
@@ -847,9 +936,9 @@ fn release_refuses_a_closed_pull_request() {
 
     assert_eq!(out.code, 1);
     assert!(
-        out.stderr.contains("closed without merging"),
+        out.diagnostics().contains("closed without merging"),
         "{}",
-        out.stderr
+        out.diagnostics()
     );
 }
 
@@ -865,12 +954,13 @@ fn release_without_an_embedded_artifact_explains_the_mechanism() {
 
     assert_eq!(out.code, 1);
     assert!(
-        out.stderr.contains("does not carry a release artifact"),
+        out.diagnostics()
+            .contains("does not carry a release artifact"),
         "{}",
-        out.stderr
+        out.diagnostics()
     );
     // miette hard-wraps help text, so match a fragment that survives it.
-    assert!(out.stderr.contains("HTML"), "{}", out.stderr);
+    assert!(out.diagnostics().contains("HTML"), "{}", out.diagnostics());
 }
 
 #[test]
@@ -879,8 +969,16 @@ fn release_without_a_pull_request_points_at_status() {
     let out = repo.ship(&["release"]);
 
     assert_eq!(out.code, 1);
-    assert!(out.stderr.contains("no Release PR found"), "{}", out.stderr);
-    assert!(out.stderr.contains("gh ship prepare"), "{}", out.stderr);
+    assert!(
+        out.diagnostics().contains("no Release PR found"),
+        "{}",
+        out.diagnostics()
+    );
+    assert!(
+        out.diagnostics().contains("gh ship prepare"),
+        "{}",
+        out.diagnostics()
+    );
 }
 
 #[test]
@@ -888,8 +986,12 @@ fn release_is_idempotent_when_the_release_already_exists() {
     let repo = merged_repo(GhStub::new().release_exists(true));
     let out = repo.ship(&["release"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
-    assert!(out.stderr.contains("already exists"), "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    assert!(
+        out.diagnostics().contains("already exists"),
+        "{}",
+        out.diagnostics()
+    );
     assert!(
         !repo.stub.called_with(&["release create"]),
         "re-running release must not create a second release"
@@ -911,7 +1013,7 @@ fn release_honours_make_latest_from_the_artifact() {
     );
     let out = repo.ship(&["release"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub.called_with(&["release create", "--latest=false"]),
         "an artifact asking not to be latest must say so on the wire: {:?}",
@@ -926,7 +1028,7 @@ fn release_omits_latest_when_the_artifact_is_silent() {
     let repo = merged_repo(GhStub::new());
     let out = repo.ship(&["release"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         !repo.stub.called_with(&["release create", "--latest"]),
         "an unstated `make_latest` must not become a flag: {:?}",
@@ -952,7 +1054,7 @@ fn release_carries_the_notes_from_the_artifact() {
 fn release_output_is_stable() {
     let repo = merged_repo(GhStub::new());
     let out = repo.ship(&["release"]);
-    with_redactions(|| insta::assert_snapshot!("release__ships", out.stderr));
+    with_redactions(|| insta::assert_snapshot!("release__ships", out.diagnostics()));
 }
 
 // --- labels --------------------------------------------------------------
@@ -979,7 +1081,7 @@ fn a_missing_label_is_created_before_the_pr() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub.called_with(&["label create", "release"]),
         "the missing label must be created: {:?}",
@@ -998,7 +1100,7 @@ fn an_existing_label_is_not_recreated() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         !repo.stub.called_with(&["label create"]),
         "an existing label must not be recreated: {:?}",
@@ -1021,16 +1123,21 @@ fn the_pr_is_still_created_when_a_label_cannot_be() {
     let out = repo.ship(&["prepare"]);
 
     assert_eq!(
-        out.code, 0,
+        out.code,
+        0,
         "a label must never cost the Release PR:\n{}",
-        out.stderr
+        out.diagnostics()
     );
     assert!(
-        out.stderr.contains("could not be created"),
+        out.diagnostics().contains("could not be created"),
         "{}",
-        out.stderr
+        out.diagnostics()
     );
-    assert!(out.stderr.contains("issues: write"), "{}", out.stderr);
+    assert!(
+        out.diagnostics().contains("issues: write"),
+        "{}",
+        out.diagnostics()
+    );
     assert!(repo.stub.called_with(&["pr create"]));
     assert!(
         !repo.stub.called_with(&["pr create", "--label"]),
@@ -1065,14 +1172,14 @@ fn gh_receives_the_filename_while_output_shows_the_slug() {
         repo.stub.calls()
     );
     assert!(
-        out.stderr.contains("dispatching prepare-release on"),
+        out.diagnostics().contains("dispatching prepare-release on"),
         "output should show the slug: {}",
-        out.stderr
+        out.diagnostics()
     );
     assert!(
-        !out.stderr.contains("prepare-release.yml"),
+        !out.diagnostics().contains("prepare-release.yml"),
         "output should not leak the filename: {}",
-        out.stderr
+        out.diagnostics()
     );
 }
 
@@ -1098,13 +1205,22 @@ fn prepare_refuses_while_a_merged_release_is_unpublished() {
     let out = repo.ship(&["prepare"]);
 
     assert_eq!(
-        out.code, 0,
+        out.code,
+        0,
         "a pending release is an expected state, not a failure — an \
          orchestrator must not go red on every push:\n{}",
-        out.stderr
+        out.diagnostics()
     );
-    assert!(out.stderr.contains("not yet published"), "{}", out.stderr);
-    assert!(out.stderr.contains("gh ship release"), "{}", out.stderr);
+    assert!(
+        out.diagnostics().contains("not yet published"),
+        "{}",
+        out.diagnostics()
+    );
+    assert!(
+        out.diagnostics().contains("gh ship release"),
+        "{}",
+        out.diagnostics()
+    );
 
     assert!(
         !repo.stub.called_with(&["workflow run"]),
@@ -1133,7 +1249,7 @@ fn prepare_proceeds_once_the_merged_release_is_published() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub.called_with(&["workflow run"]),
         "a completed release must not block the next one: {:?}",
@@ -1164,11 +1280,16 @@ fn prepare_skips_when_the_published_merge_is_still_the_base_tip() {
     let out = repo.ship(&["prepare"]);
 
     assert_eq!(
-        out.code, 0,
+        out.code,
+        0,
         "having just released is an expected state, not a failure:\n{}",
-        out.stderr
+        out.diagnostics()
     );
-    assert!(out.stderr.contains("already published"), "{}", out.stderr);
+    assert!(
+        out.diagnostics().contains("already published"),
+        "{}",
+        out.diagnostics()
+    );
 
     assert!(
         !repo.stub.called_with(&["workflow run"]),
@@ -1199,7 +1320,7 @@ fn prepare_proceeds_while_the_release_pr_is_open() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(repo.stub.called_with(&["workflow run"]));
     assert!(
         repo.stub.called_with(&["pr edit"]),
@@ -1221,7 +1342,7 @@ fn prepare_proceeds_when_a_merged_pr_has_no_artifact() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub.called_with(&["workflow run"]),
         "{:?}",
@@ -1237,7 +1358,7 @@ fn prepare_proceeds_when_there_is_no_release_pr() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(repo.stub.called_with(&["workflow run"]));
 }
 
@@ -1251,7 +1372,7 @@ fn release_tags_the_merge_commit_before_creating_the_release() {
     let repo = merged_repo(GhStub::new());
     let out = repo.ship(&["release"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
 
     let calls = repo.stub.calls();
     let tagged = calls
@@ -1293,9 +1414,10 @@ fn an_existing_tag_is_not_an_error() {
     let out = repo.ship(&["release"]);
 
     assert_eq!(
-        out.code, 0,
+        out.code,
+        0,
         "re-running after a partial failure must work:\n{}",
-        out.stderr
+        out.diagnostics()
     );
     assert!(repo.stub.called_with(&["release create"]));
 }
@@ -1314,7 +1436,7 @@ fn the_publish_workflow_is_dispatched_on_the_tag() {
             .merge_commit("abc1234def5678"),
     );
     let out = repo.ship(&["release"]);
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
 
     let calls = repo.stub.calls();
     let tagged = calls.iter().position(|c| c.contains("refs/tags/"));
@@ -1348,7 +1470,7 @@ fn reuse_updates_an_open_release_pr_in_place() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub.called_with(&["pr edit"]),
         "{:?}",
@@ -1371,7 +1493,7 @@ fn reuse_reopens_a_closed_release_pr() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub.called_with(&["pr reopen"]),
         "a closed Release PR must be reopened, not replaced: {:?}",
@@ -1383,7 +1505,11 @@ fn reuse_reopens_a_closed_release_pr() {
         "no second PR: {:?}",
         repo.stub.calls()
     );
-    assert!(out.stderr.contains("reopening"), "{}", out.stderr);
+    assert!(
+        out.diagnostics().contains("reopening"),
+        "{}",
+        out.diagnostics()
+    );
 }
 
 /// A merged PR belongs to a release that already shipped; reopening it would
@@ -1400,7 +1526,7 @@ fn reuse_never_touches_a_merged_release_pr() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(!repo.stub.called_with(&["pr reopen"]));
     assert!(!repo.stub.called_with(&["pr edit"]));
     assert!(
@@ -1418,7 +1544,7 @@ fn reuse_false_closes_the_open_pr_and_opens_a_new_one() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     let calls = repo.stub.calls();
     let closed = calls.iter().position(|c| c.starts_with("pr close"));
     let created = calls.iter().position(|c| c.starts_with("pr create"));
@@ -1440,7 +1566,7 @@ fn no_existing_pr_simply_opens_one() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(repo.stub.called_with(&["pr create"]));
     assert!(!repo.stub.called_with(&["pr reopen"]));
     assert!(!repo.stub.called_with(&["pr close"]));
@@ -1461,7 +1587,7 @@ fn prepare_sweeps_abandoned_staging_branches() {
     );
     let out = repo.ship(&["prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub
             .called_with(&["api", "git/refs/heads/ship/prepare-deadbeef1234", "DELETE"]),
@@ -1484,14 +1610,16 @@ fn a_staging_branch_that_cannot_be_deleted_does_not_fail_the_release() {
     let out = repo.ship(&["prepare"]);
 
     assert_eq!(
-        out.code, 0,
+        out.code,
+        0,
         "housekeeping must not fail the release: {}",
-        out.stderr
+        out.diagnostics()
     );
     assert!(
-        out.stderr.contains("could not delete the staging branch"),
+        out.diagnostics()
+            .contains("could not delete the staging branch"),
         "the failure must still be reported: {}",
-        out.stderr
+        out.diagnostics()
     );
     assert!(repo.stub.called_with(&["pr create"]));
 }
@@ -1509,7 +1637,7 @@ fn prepare_works_against_an_explicit_repository() {
     );
     let out = repo.ship(&["--repo", "acme/widgets", "prepare"]);
 
-    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
         repo.stub
             .called_with(&["api", "git/refs/heads/ship/prepare-deadbeef1234", "DELETE"]),

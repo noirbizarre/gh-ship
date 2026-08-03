@@ -10,15 +10,13 @@ mod common;
 
 use std::path::Path;
 
-use common::{CONFORMING_WORKFLOW as CONFORMING, MINIMAL_CONFIG, Outcome, layout as repo, ship};
+use common::{
+    CONFORMING_WORKFLOW as CONFORMING, MINIMAL_CONFIG, Outcome, layout as repo, ship,
+    with_redactions,
+};
 
 fn validate_in(dir: &Path) -> Outcome {
-    let out = ship().current_dir(dir).arg("validate").output().unwrap();
-    Outcome {
-        code: out.status.code().unwrap_or(-1),
-        stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
-    }
+    Outcome::run(ship().current_dir(dir).arg("validate"))
 }
 
 #[test]
@@ -177,8 +175,7 @@ fn validates_the_publish_workflow_too() {
 fn setup_output_is_stable() {
     let dir = repo(Some(MINIMAL_CONFIG), &[("prepare-release.yml", CONFORMING)]);
     let out = validate_in(dir.path());
-    let stderr = out.diagnostics();
-    insta::assert_snapshot!("setup__valid", stderr);
+    with_redactions(|| insta::assert_snapshot!("setup__valid", out.diagnostics()));
 }
 
 #[test]
@@ -186,8 +183,7 @@ fn call_only_diagnostic_is_stable() {
     let call_only = "name: prepare-release\non:\n  workflow_call:\n";
     let dir = repo(Some(MINIMAL_CONFIG), &[("prepare-release.yml", call_only)]);
     let out = validate_in(dir.path());
-    let stderr = out.diagnostics();
-    insta::assert_snapshot!("setup__call_only", stderr);
+    with_redactions(|| insta::assert_snapshot!("setup__call_only", out.diagnostics()));
 }
 
 // --- init ---------------------------------------------------------------
@@ -195,9 +191,9 @@ fn call_only_diagnostic_is_stable() {
 #[test]
 fn init_refuses_to_clobber_an_existing_config() {
     let dir = repo(Some(MINIMAL_CONFIG), &[("prepare-release.yml", CONFORMING)]);
-    let out = ship().current_dir(dir.path()).arg("init").output().unwrap();
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert_eq!(out.status.code(), Some(1));
+    let out = Outcome::run(ship().current_dir(dir.path()).arg("init"));
+    let stderr = out.diagnostics();
+    assert_eq!(out.code, 1);
     assert!(stderr.contains("already exists"), "{stderr}");
     assert!(stderr.contains("--force"), "{stderr}");
 }
@@ -227,12 +223,11 @@ fn init_output_round_trips_through_validate() {
 #[test]
 fn our_own_setup_satisfies_the_contract() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let out = ship().current_dir(root).arg("validate").output().unwrap();
-    let stderr = String::from_utf8_lossy(&out.stderr);
+    let out = validate_in(root);
+    let stderr = out.diagnostics();
 
     assert_eq!(
-        out.status.code(),
-        Some(0),
+        out.code, 0,
         "gh-ship must be able to release itself:\n{stderr}"
     );
     assert!(
@@ -343,10 +338,10 @@ fn suggestions_use_slugs_not_display_names() {
 #[test]
 fn our_own_emoji_named_workflows_resolve() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let out = ship().current_dir(root).arg("validate").output().unwrap();
-    let stderr = String::from_utf8_lossy(&out.stderr);
+    let out = validate_in(root);
+    let stderr = out.diagnostics();
 
-    assert_eq!(out.status.code(), Some(0), "{stderr}");
+    assert_eq!(out.code, 0, "{stderr}");
     assert!(stderr.contains("🚀 Prepare Release"), "{stderr}");
     assert!(stderr.contains("📦 Publish Release"), "{stderr}");
 }

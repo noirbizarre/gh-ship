@@ -282,7 +282,8 @@ fn fetch_artifact(ctx: &Context, finished: &Run) -> Result<Artifact> {
     // Report the artifact under its protocol name rather than the
     // temporary path it happens to occupy: the user never chose that
     // path and it means nothing to them.
-    let text = std::fs::read_to_string(&path).map_err(|source| ArtifactFetchError::Read { source })?;
+    let text =
+        std::fs::read_to_string(&path).map_err(|source| ArtifactFetchError::Read { source })?;
     let artifact = validate::validate_str(ARTIFACT_FILE, &text)?;
     eprintln!("{}", logger::ok(theme, "artifact is valid"));
     Ok(artifact)

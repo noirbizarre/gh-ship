@@ -8,7 +8,7 @@
 
 mod common;
 
-use common::{fixtures_in, ship, validate_fixture};
+use common::{Outcome, fixtures_in, ship, validate_fixture, with_redactions};
 
 /// Fixtures live in a directory; the snapshot name is the filename so
 /// snapshots stay stable when fixtures are added or reordered.
@@ -49,7 +49,7 @@ fn valid_artifact_output_is_stable() {
     for path in fixtures_in("artifacts/valid") {
         let name = stem(&path);
         let out = validate_fixture(&format!("artifacts/valid/{name}.json"));
-        insta::assert_snapshot!(format!("valid__{name}"), out.diagnostics());
+        with_redactions(|| insta::assert_snapshot!(format!("valid__{name}"), out.diagnostics()));
     }
 }
 
@@ -58,19 +58,15 @@ fn invalid_artifact_diagnostics_are_stable() {
     for path in fixtures_in("artifacts/invalid") {
         let name = stem(&path);
         let out = validate_fixture(&format!("artifacts/invalid/{name}.json"));
-        insta::assert_snapshot!(format!("invalid__{name}"), out.diagnostics());
+        with_redactions(|| insta::assert_snapshot!(format!("invalid__{name}"), out.diagnostics()));
     }
 }
 
 #[test]
 fn missing_file_reports_a_readable_error() {
-    let out = ship()
-        .arg("validate")
-        .arg("does-not-exist.json")
-        .output()
-        .unwrap();
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert_eq!(out.status.code(), Some(1));
+    let out = Outcome::run(ship().arg("validate").arg("does-not-exist.json"));
+    let stderr = out.diagnostics();
+    assert_eq!(out.code, 1);
     assert!(stderr.contains("failed to read"), "{stderr}");
     assert!(
         stderr.contains("ship-release"),
@@ -84,13 +80,9 @@ fn missing_file_reports_a_readable_error() {
 #[test]
 fn validate_without_a_target_checks_the_setup() {
     let dir = tempfile::tempdir().unwrap();
-    let out = ship()
-        .current_dir(dir.path())
-        .arg("validate")
-        .output()
-        .unwrap();
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert_eq!(out.status.code(), Some(1));
+    let out = Outcome::run(ship().current_dir(dir.path()).arg("validate"));
+    let stderr = out.diagnostics();
+    assert_eq!(out.code, 1);
     assert!(stderr.contains("no gh-ship configuration"), "{stderr}");
     assert!(stderr.contains("gh ship init"), "{stderr}");
 }
@@ -111,21 +103,21 @@ fn validate_works_with_no_gh_no_auth_and_no_repo() {
     )
     .unwrap();
 
-    let out = ship()
-        .current_dir(dir.path())
-        .env("PATH", "")
-        .env_remove("GH_TOKEN")
-        .env_remove("GITHUB_TOKEN")
-        .env_remove("GH_CONFIG_DIR")
-        .arg("validate")
-        .arg("ship.release.json")
-        .output()
-        .unwrap();
+    let out = Outcome::run(
+        ship()
+            .current_dir(dir.path())
+            .env("PATH", "")
+            .env_remove("GH_TOKEN")
+            .env_remove("GITHUB_TOKEN")
+            .env_remove("GH_CONFIG_DIR")
+            .arg("validate")
+            .arg("ship.release.json"),
+    );
 
     assert!(
-        out.status.success(),
+        out.succeeded(),
         "validate must be fully self-contained:\n{}",
-        String::from_utf8_lossy(&out.stderr)
+        out.diagnostics()
     );
 }
 
