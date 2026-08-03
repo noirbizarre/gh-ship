@@ -17,7 +17,7 @@ use miette::{Diagnostic, NamedSource, SourceSpan};
 use thiserror::Error;
 
 use super::span::{self, Step};
-use super::{ARTIFACT_FILE, ARTIFACT_NAME, Artifact, SCHEMA_VERSION};
+use super::{Artifact, SCHEMA_VERSION};
 
 /// A single schema violation, rendered as its own miette snippet.
 #[derive(Debug, Error, Diagnostic)]
@@ -87,28 +87,6 @@ pub enum ArtifactError {
         name: String,
         #[related]
         issues: Vec<Issue>,
-    },
-
-    #[error("could not create a temporary directory: {source}")]
-    #[diagnostic(code(ship::artifact::tempdir))]
-    Tempdir {
-        #[source]
-        source: std::io::Error,
-    },
-
-    #[error("could not download the `{ARTIFACT_NAME}` artifact: {message}")]
-    #[diagnostic(code(ship::artifact::download), help("{help}"))]
-    Download { message: String, help: String },
-
-    #[error("`{ARTIFACT_FILE}` not found in the artifact")]
-    #[diagnostic(code(ship::artifact::missing_file), help("{help}"))]
-    MissingFile { help: String },
-
-    #[error("could not read the downloaded `{ARTIFACT_FILE}`: {source}")]
-    #[diagnostic(code(ship::artifact::read))]
-    Read {
-        #[source]
-        source: std::io::Error,
     },
 }
 

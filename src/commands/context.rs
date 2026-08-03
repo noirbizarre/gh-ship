@@ -8,9 +8,10 @@
 
 use std::path::PathBuf;
 
-use miette::Result;
+use miette::{Diagnostic, Result};
+use thiserror::Error;
 
-use gh_ship::artifact::validate::{self, ArtifactError};
+use gh_ship::artifact::validate;
 use gh_ship::artifact::{ARTIFACT_FILE, ARTIFACT_NAME, Artifact};
 use gh_ship::cli::Cli;
 use gh_ship::config::Config;
@@ -22,6 +23,38 @@ use gh_ship::logger;
 use gh_ship::style::Theme;
 
 use super::repo_root;
+
+/// Everything that can go wrong between a run succeeding and gh-ship
+/// holding its artifact.
+///
+/// These live here rather than in [`gh_ship::artifact`] because they are
+/// about *transport* — tempdirs, `gh run download`, workflow-artifact
+/// layout — and the artifact module is deliberately free of any GitHub,
+/// network or filesystem coupling beyond reading a single file.
+#[derive(Debug, Error, Diagnostic)]
+pub enum ArtifactFetchError {
+    #[error("could not create a temporary directory: {source}")]
+    #[diagnostic(code(ship::artifact::tempdir))]
+    Tempdir {
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("could not download the `{ARTIFACT_NAME}` artifact: {message}")]
+    #[diagnostic(code(ship::artifact::download), help("{help}"))]
+    Download { message: String, help: String },
+
+    #[error("`{ARTIFACT_FILE}` not found in the artifact")]
+    #[diagnostic(code(ship::artifact::missing_file), help("{help}"))]
+    MissingFile { help: String },
+
+    #[error("could not read the downloaded `{ARTIFACT_FILE}`: {source}")]
+    #[diagnostic(code(ship::artifact::read))]
+    Read {
+        #[source]
+        source: std::io::Error,
+    },
+}
 
 /// Everything the lifecycle commands resolve up front.
 pub struct Context {
@@ -214,12 +247,12 @@ pub(crate) fn wait_for_run(ctx: &Context, workflow: &WorkflowRef, found: &Run) -
 /// Download and validate the release artifact produced by a run.
 fn fetch_artifact(ctx: &Context, finished: &Run) -> Result<Artifact> {
     let theme = ctx.theme;
-    let dir = tempfile::tempdir().map_err(|source| ArtifactError::Tempdir { source })?;
+    let dir = tempfile::tempdir().map_err(|source| ArtifactFetchError::Tempdir { source })?;
 
     eprintln!("{}", logger::action(theme, "downloading", ARTIFACT_NAME));
 
     run::download_artifact(&ctx.gh, finished.id, ARTIFACT_NAME, dir.path()).map_err(|e| {
-        ArtifactError::Download {
+        ArtifactFetchError::Download {
             message: e.to_string(),
             help: format!(
                 "the run succeeded but produced no `{ARTIFACT_NAME}` artifact. A conforming \
@@ -232,7 +265,7 @@ fn fetch_artifact(ctx: &Context, finished: &Run) -> Result<Artifact> {
 
     let path = dir.path().join(ARTIFACT_FILE);
     if !path.exists() {
-        return Err(ArtifactError::MissingFile {
+        return Err(ArtifactFetchError::MissingFile {
             help: format!(
                 "the `{ARTIFACT_NAME}` artifact does not contain `{ARTIFACT_FILE}`. \
                  The filename is part of the protocol. Run: {}",
@@ -245,7 +278,7 @@ fn fetch_artifact(ctx: &Context, finished: &Run) -> Result<Artifact> {
     // Report the artifact under its protocol name rather than the
     // temporary path it happens to occupy: the user never chose that
     // path and it means nothing to them.
-    let text = std::fs::read_to_string(&path).map_err(|source| ArtifactError::Read { source })?;
+    let text = std::fs::read_to_string(&path).map_err(|source| ArtifactFetchError::Read { source })?;
     let artifact = validate::validate_str(ARTIFACT_FILE, &text)?;
     eprintln!("{}", logger::ok(theme, "artifact is valid"));
     Ok(artifact)
