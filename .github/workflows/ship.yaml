@@ -40,8 +40,9 @@ jobs:
     name: 🚢 Prepare
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    # `gh ship prepare` blocks on the dispatched workflow; cap the wait well
-    # below its own 60 minute default so a stuck run fails the job visibly.
+    # `gh ship prepare` blocks on the dispatched workflow until
+    # SHIP_RUN_TIMEOUT expires, 60 minutes by default. Cap the job well below
+    # that so a stuck run fails visibly.
     timeout-minutes: 30
 
     # Same pattern as 🚀 Prepare Release: SHIP_TOKEN lives in this
@@ -53,7 +54,7 @@ jobs:
       deployment: false
 
     env:
-      GITHUB_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
 
     steps:
       - uses: actions/checkout@v7
@@ -90,7 +91,7 @@ jobs:
       deployment: false
 
     env:
-      GITHUB_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
 
     steps:
       - uses: actions/checkout@v7

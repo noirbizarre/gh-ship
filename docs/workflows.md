@@ -269,20 +269,20 @@ concurrency:
 jobs:
   prepare:
     runs-on: ubuntu-latest
-    # `gh ship prepare` blocks on the dispatched run, whose own default is 60
-    # minutes. Capping below that makes a stuck run fail the job visibly.
+    # `gh ship prepare` blocks on the dispatched run until `SHIP_RUN_TIMEOUT`
+    # expires, 60 minutes by default. Capping below that makes a stuck run
+    # fail the job visibly. See [Waiting](cli.md#waiting).
     timeout-minutes: 30
     environment:
       name: release
       deployment: false
+    # Set once so every `gh` invocation picks up SHIP_TOKEN when configured.
+    env:
+      GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
       - run: gh extension install noirbizarre/gh-ship
-        env:
-          GH_TOKEN: ${{ github.token }}
       - run: gh ship prepare
-        env:
-          GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
 ```
 
 Add a second job to release when that PR merges, and the whole lifecycle runs

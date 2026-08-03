@@ -50,6 +50,13 @@ jobs:
       name: release
       deployment: false
 
+    # Every `gh` invocation in this job authenticates with this. Setting it
+    # once at the job level is what makes SHIP_TOKEN apply to all of them:
+    # a per-step `GH_TOKEN: ${{ github.token }}` would silently fall back to
+    # the default token even when SHIP_TOKEN is configured.
+    env:
+      GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
+
     steps:
       - uses: actions/checkout@v7
         with:
@@ -132,8 +139,6 @@ jobs:
       # a precise error, instead of a confusing failure in gh-ship later.
       # This step needs no network and no repository.
       - name: Validate the release artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           gh extension install noirbizarre/gh-ship
           gh ship validate ship.release.json
