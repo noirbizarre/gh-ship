@@ -48,7 +48,7 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
 
     // Read the base tip once: the guard compares it against the merge commit of
     // the last Release PR, and staging cuts its branch from it.
-    let base_sha = repo::branch_sha(&ctx.gh, ctx.repo_slug(), &base_branch)?;
+    let base_sha = repo::branch_sha(&ctx.gh, &base_branch)?;
 
     // Refuse to start a release on top of one still in flight, or on top of one
     // that just landed and left nothing behind it.
@@ -72,7 +72,7 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
             &format!("{staging} from {base_branch}")
         )
     );
-    repo::create_branch_at(&ctx.gh, ctx.repo_slug(), &staging, &base_sha)?;
+    repo::create_branch_at(&ctx.gh, &staging, &base_sha)?;
 
     if args.no_wait {
         return dispatch_only(&ctx, &staging, &ship_id);
@@ -280,9 +280,9 @@ fn stage_branch(ship_id: &ShipId) -> String {
 /// is never emptied and never closed.
 fn promote(ctx: &Context, staging: &str, release: &str) -> Result<()> {
     let theme = ctx.theme;
-    let staged_sha = repo::branch_sha(&ctx.gh, ctx.repo_slug(), staging)?;
+    let staged_sha = repo::branch_sha(&ctx.gh, staging)?;
 
-    if repo::branch_exists(&ctx.gh, ctx.repo_slug(), release)? {
+    if repo::branch_exists(&ctx.gh, release)? {
         eprintln!(
             "{}",
             logger::action(
@@ -291,10 +291,10 @@ fn promote(ctx: &Context, staging: &str, release: &str) -> Result<()> {
                 &format!("{release} to {}", short_sha(&staged_sha))
             )
         );
-        repo::reset_branch(&ctx.gh, ctx.repo_slug(), release, &staged_sha)?;
+        repo::reset_branch(&ctx.gh, release, &staged_sha)?;
     } else {
         eprintln!("{}", logger::action(theme, "creating branch", release));
-        repo::create_branch_at(&ctx.gh, ctx.repo_slug(), release, &staged_sha)?;
+        repo::create_branch_at(&ctx.gh, release, &staged_sha)?;
     }
     Ok(())
 }
@@ -307,8 +307,8 @@ fn promote(ctx: &Context, staging: &str, release: &str) -> Result<()> {
 /// branches, and is safe because gh-ship releases one at a time: the Release PR
 /// is the lock.
 fn sweep_staging_branches(ctx: &Context) {
-    for branch in repo::matching_branches(&ctx.gh, ctx.repo_slug(), STAGING_PREFIX) {
-        if repo::delete_branch(&ctx.gh, ctx.repo_slug(), &branch).is_err() {
+    for branch in repo::matching_branches(&ctx.gh, STAGING_PREFIX) {
+        if repo::delete_branch(&ctx.gh, &branch).is_err() {
             eprintln!(
                 "{}",
                 logger::warn(

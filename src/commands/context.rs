@@ -77,6 +77,10 @@ impl Context {
         let config = Config::load(&cli.config)?;
         let gh = Gh::new(cli.repo.clone());
         let repository = repo::repository(&gh)?;
+        // From here on the repository is known, so the `gh api` helpers can
+        // read it off the invoker instead of having it threaded through
+        // every call.
+        let gh = gh.scoped_to(&repository.name_with_owner);
         Ok(Self {
             gh,
             config,

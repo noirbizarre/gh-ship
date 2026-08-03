@@ -85,7 +85,7 @@ fn collect(ctx: &Context) -> Result<Status> {
     let release_branch = ctx.release_branch().to_string();
     let base_branch = ctx.base_branch().to_string();
 
-    let branch_exists = repo::branch_exists(&ctx.gh, ctx.repo_slug(), &release_branch)?;
+    let branch_exists = repo::branch_exists(&ctx.gh, &release_branch)?;
 
     let pr = repo::find_pull_request(&ctx.gh, &release_branch, &base_branch)?;
 

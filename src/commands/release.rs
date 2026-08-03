@@ -184,7 +184,7 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
     // create the git ref, and the publish workflow is dispatched on this tag
     // and checks it out.
     eprintln!("{}", logger::action(theme, "tagging", tag));
-    repo::create_tag(&ctx.gh, ctx.repo_slug(), tag, target)?;
+    repo::create_tag(&ctx.gh, tag, target)?;
 
     // --- 5. Create the release (draft by default) ------------------------
     if repo::release_exists(&ctx.gh, tag)? {

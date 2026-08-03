@@ -41,7 +41,8 @@ pub fn repository(gh: &Gh) -> Result<Repository, GhError> {
 ///
 /// Uses the API rather than the local clone, because gh-ship must work
 /// with `--repo` against a repository that was never cloned.
-pub fn branch_exists(gh: &Gh, repo: &str, branch: &str) -> Result<bool, GhError> {
+pub fn branch_exists(gh: &Gh, branch: &str) -> Result<bool, GhError> {
+    let repo = gh.slug()?;
     match gh.run(&[
         "api",
         &format!("repos/{repo}/branches/{branch}"),
@@ -56,7 +57,8 @@ pub fn branch_exists(gh: &Gh, repo: &str, branch: &str) -> Result<bool, GhError>
 }
 
 /// Create `branch` pointing at `sha`.
-pub fn create_branch_at(gh: &Gh, repo: &str, branch: &str, sha: &str) -> Result<(), GhError> {
+pub fn create_branch_at(gh: &Gh, branch: &str, sha: &str) -> Result<(), GhError> {
+    let repo = gh.slug()?;
     gh.run(&[
         "api",
         &format!("repos/{repo}/git/refs"),
@@ -81,7 +83,8 @@ pub fn create_branch_at(gh: &Gh, repo: &str, branch: &str, sha: &str) -> Result<
 ///
 /// Idempotent: a tag that already exists is not an error, so re-running after a
 /// partial failure works.
-pub fn create_tag(gh: &Gh, repo: &str, tag: &str, sha: &str) -> Result<(), GhError> {
+pub fn create_tag(gh: &Gh, tag: &str, sha: &str) -> Result<(), GhError> {
+    let repo = gh.slug()?;
     match gh.run(&[
         "api",
         &format!("repos/{repo}/git/refs"),
@@ -106,7 +109,8 @@ pub fn create_tag(gh: &Gh, repo: &str, tag: &str, sha: &str) -> Result<(), GhErr
 /// Used to bring the release branch back in line with its base. The reset is
 /// not a fast-forward — the release branch carries a version bump the base does
 /// not — so `force` is required.
-pub fn reset_branch(gh: &Gh, repo: &str, branch: &str, sha: &str) -> Result<(), GhError> {
+pub fn reset_branch(gh: &Gh, branch: &str, sha: &str) -> Result<(), GhError> {
+    let repo = gh.slug()?;
     gh.run(&[
         "api",
         &format!("repos/{repo}/git/refs/heads/{branch}"),
@@ -122,7 +126,8 @@ pub fn reset_branch(gh: &Gh, repo: &str, branch: &str, sha: &str) -> Result<(), 
 }
 
 /// Delete a branch, ignoring one that is already gone.
-pub fn delete_branch(gh: &Gh, repo: &str, branch: &str) -> Result<(), GhError> {
+pub fn delete_branch(gh: &Gh, branch: &str) -> Result<(), GhError> {
+    let repo = gh.slug()?;
     match gh.run(&[
         "api",
         &format!("repos/{repo}/git/refs/heads/{branch}"),
@@ -141,16 +146,19 @@ pub fn delete_branch(gh: &Gh, repo: &str, branch: &str) -> Result<(), GhError> {
 ///
 /// Used to sweep abandoned staging branches. A failure to list is not fatal:
 /// housekeeping should never be the reason a release cannot proceed.
-pub fn matching_branches(gh: &Gh, repo: &str, prefix: &str) -> Vec<String> {
+pub fn matching_branches(gh: &Gh, prefix: &str) -> Vec<String> {
     #[derive(Deserialize)]
     struct Ref {
         #[serde(rename = "ref")]
         name: String,
     }
 
-    // Unscoped on purpose: `gh api` has no `--repo` flag, and the repository
-    // is already in the URL path. Using the scoped variant here made the sweep
-    // fail silently whenever `-R`/`SHIP_REPO` was set.
+    // `run`, not `run_scoped`: `gh api` has no `--repo` flag, and the
+    // repository is already in the URL path. Using the scoped variant here
+    // made the sweep fail silently whenever `-R`/`SHIP_REPO` was set.
+    let Ok(repo) = gh.slug() else {
+        return Vec::new();
+    };
     gh.json::<Vec<Ref>, _>(&[
         "api",
         &format!("repos/{repo}/git/matching-refs/heads/{prefix}"),
@@ -164,7 +172,8 @@ pub fn matching_branches(gh: &Gh, repo: &str, prefix: &str) -> Vec<String> {
 }
 
 /// The commit SHA at the tip of a branch.
-pub fn branch_sha(gh: &Gh, repo: &str, branch: &str) -> Result<String, GhError> {
+pub fn branch_sha(gh: &Gh, branch: &str) -> Result<String, GhError> {
+    let repo = gh.slug()?;
     let out = gh.run(&[
         "api",
         &format!("repos/{repo}/git/ref/heads/{branch}"),

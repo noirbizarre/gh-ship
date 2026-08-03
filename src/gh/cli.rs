@@ -86,6 +86,17 @@ pub enum GhError {
         )
     )]
     Decode { args: String, message: String },
+
+    #[error("the repository was not resolved before calling `gh api`")]
+    #[diagnostic(
+        code(ship::gh::unscoped),
+        help(
+            "this is a gh-ship bug: `gh api` spells the repository into its URL, so the caller must \
+             go through a `Gh` that has been through `Gh::scoped_to`. Please report it at \
+             https://github.com/noirbizarre/gh-ship/issues"
+        )
+    )]
+    Unscoped,
 }
 
 /// A configured GitHub CLI invoker.
@@ -93,16 +104,39 @@ pub enum GhError {
 pub struct Gh {
     /// `OWNER/REPO`, or `None` to let `gh` infer it from the checkout.
     repo: Option<String>,
+    /// The repository actually being operated on, once known.
+    ///
+    /// `gh pr`/`gh release`/`gh label` take `--repo` and are happy with
+    /// `repo` above — including when it is `None`, since `gh` then infers
+    /// from the checkout. `gh api` takes no such flag: the repository has
+    /// to be spelled into the URL, so it must be *resolved*, and only
+    /// `gh repo view` can do that.
+    ///
+    /// Keeping it here rather than passing `OWNER/REPO` to every `api`
+    /// helper is what stops the two conventions from diverging — the bug
+    /// noted in `repo::matching_branches` came from exactly that split.
+    slug: Option<String>,
 }
 
 impl Gh {
     pub fn new(repo: Option<String>) -> Self {
-        Self { repo }
+        Self { repo, slug: None }
     }
 
-    /// The explicitly configured repository, if any.
-    pub fn repo(&self) -> Option<&str> {
-        self.repo.as_deref()
+    /// Pin this invoker to a resolved `OWNER/REPO`.
+    pub fn scoped_to(self, slug: impl Into<String>) -> Self {
+        Self {
+            slug: Some(slug.into()),
+            ..self
+        }
+    }
+
+    /// The resolved repository, for callers that must build an API path.
+    ///
+    /// Errors rather than panics: an unresolved `Gh` is a gh-ship bug, and
+    /// a diagnostic asking for a bug report beats a backtrace.
+    pub fn slug(&self) -> Result<&str, GhError> {
+        self.slug.as_deref().ok_or(GhError::Unscoped)
     }
 
     /// Run `gh` with the given arguments and capture stdout.
