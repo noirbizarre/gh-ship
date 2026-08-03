@@ -110,9 +110,11 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
         &ctx,
         &release_branch,
         &base_branch,
-        &rendered.title,
-        &body,
-        &labels,
+        &repo::PullRequestContent {
+            title: &rendered.title,
+            body: &body,
+            labels: &labels,
+        },
     )?;
 
     eprintln!();
@@ -327,9 +329,7 @@ fn upsert_pull_request(
     ctx: &Context,
     head: &str,
     base: &str,
-    title: &str,
-    body: &str,
-    labels: &[String],
+    content: &repo::PullRequestContent<'_>,
 ) -> Result<()> {
     let theme = ctx.theme;
     let reuse = ctx.config.pull_request().reuse;
@@ -351,7 +351,7 @@ fn upsert_pull_request(
                 "{}",
                 logger::action(theme, "updating", &format!("PR #{}", pr.number))
             );
-            repo::update_pull_request(&ctx.gh, pr.number, title, body, labels)?;
+            repo::update_pull_request(&ctx.gh, pr.number, content)?;
             eprintln!("{}", logger::ok(theme, "Release PR updated"));
             eprintln!("{}", logger::detail_url(theme, "pr", &pr.url));
         }
@@ -362,9 +362,9 @@ fn upsert_pull_request(
                 logger::action(theme, "closing", &format!("PR #{}", pr.number))
             );
             repo::close_pull_request(&ctx.gh, pr.number)?;
-            open_pull_request(ctx, head, base, title, body, labels)?;
+            open_pull_request(ctx, head, base, content)?;
         }
-        _ => open_pull_request(ctx, head, base, title, body, labels)?,
+        _ => open_pull_request(ctx, head, base, content)?,
     }
     Ok(())
 }
@@ -373,13 +373,22 @@ fn open_pull_request(
     ctx: &Context,
     head: &str,
     base: &str,
-    title: &str,
-    body: &str,
-    labels: &[String],
+    content: &repo::PullRequestContent<'_>,
 ) -> Result<()> {
     let theme = ctx.theme;
     eprintln!("{}", logger::action(theme, "opening", "Release PR"));
-    let url = repo::create_pull_request(&ctx.gh, head, base, title, body, labels)?;
+    let url = repo::create_pull_request(
+        &ctx.gh,
+        &repo::NewPullRequest {
+            head,
+            base,
+            content: repo::PullRequestContent {
+                title: content.title,
+                body: content.body,
+                labels: content.labels,
+            },
+        },
+    )?;
     eprintln!("{}", logger::ok(theme, "Release PR opened"));
     eprintln!("{}", logger::detail_url(theme, "pr", &url));
     Ok(())

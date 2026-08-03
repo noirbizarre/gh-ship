@@ -329,28 +329,42 @@ pub fn view_pull_request(gh: &Gh, number: u64) -> Result<PullRequest, GhError> {
     gh.json_scoped(&["pr", "view", &number.to_string(), "--json", PR_FIELDS])
 }
 
+/// What a Release PR says, independent of where it points.
+///
+/// A struct rather than a parameter list, for the same reason as
+/// [`NewRelease`]: `title` and `body` are adjacent `&str`, so swapping them
+/// compiles cleanly and produces a PR whose title is the changelog.
+pub struct PullRequestContent<'a> {
+    pub title: &'a str,
+    pub body: &'a str,
+    pub labels: &'a [String],
+}
+
+/// Everything `gh pr create` needs.
+///
+/// `head` and `base` are the other pair that must not be swapped: reversing
+/// them targets the staging branch at the Release PR instead of the reverse.
+pub struct NewPullRequest<'a> {
+    pub head: &'a str,
+    pub base: &'a str,
+    pub content: PullRequestContent<'a>,
+}
+
 /// Open a Release PR.
-pub fn create_pull_request(
-    gh: &Gh,
-    head: &str,
-    base: &str,
-    title: &str,
-    body: &str,
-    labels: &[String],
-) -> Result<String, GhError> {
+pub fn create_pull_request(gh: &Gh, pr: &NewPullRequest<'_>) -> Result<String, GhError> {
     let mut args: Vec<String> = vec![
         "pr".into(),
         "create".into(),
         "--head".into(),
-        head.into(),
+        pr.head.into(),
         "--base".into(),
-        base.into(),
+        pr.base.into(),
         "--title".into(),
-        title.into(),
+        pr.content.title.into(),
         "--body".into(),
-        body.into(),
+        pr.content.body.into(),
     ];
-    for label in labels {
+    for label in pr.content.labels {
         args.push("--label".into());
         args.push(label.clone());
     }
@@ -362,20 +376,18 @@ pub fn create_pull_request(
 pub fn update_pull_request(
     gh: &Gh,
     number: u64,
-    title: &str,
-    body: &str,
-    labels: &[String],
+    content: &PullRequestContent<'_>,
 ) -> Result<(), GhError> {
     let mut args: Vec<String> = vec![
         "pr".into(),
         "edit".into(),
         number.to_string(),
         "--title".into(),
-        title.into(),
+        content.title.into(),
         "--body".into(),
-        body.into(),
+        content.body.into(),
     ];
-    for label in labels {
+    for label in content.labels {
         args.push("--add-label".into());
         args.push(label.clone());
     }
