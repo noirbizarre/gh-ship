@@ -31,7 +31,7 @@ jobs:
       # as `mise run docs:build` locally.
       - uses: jdx/mise-action@v4
         with:
-          # Keep in sync with MISE_ACTION_VERSION in ci.yaml.
+          # Keep in sync with PINNED_MISE_VERSION in ci.yaml.
           version: 2026.7.18
           cache: true
 
