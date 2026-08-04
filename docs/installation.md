@@ -54,21 +54,20 @@ declared in `Cargo.toml`.
 
 ## Building from source
 
-You do not need this to use gh-ship, and gh-ship's own workflows no longer do
-either. Until 0.1.0 existed they had to:
+You do not need this to use gh-ship. Building from source is not a second
+installation route, and gh-ship's own workflows use it in exactly one place:
+the [release artifact](specifications/release-artifact.md) check in
+`prepare-release`, which validates the artifact with a binary built from the
+very commit being released. That is deliberate dogfooding, not an install.
+
+Everywhere else gh-ship releases itself with
+`gh extension install noirbizarre/gh-ship`, like everyone else. Before its own
+first release existed it had no choice but to bootstrap —
 
 ```yaml
 - run: cargo build --release
 - run: ./target/release/gh-ship prepare
 ```
 
-That was bootstrapping, not a second installation route — an extension cannot
-install itself before its own first release exists. Now that one does, gh-ship
-releases itself with `gh extension install noirbizarre/gh-ship`, like everyone
-else.
-
-The one place source still wins is the [release
-artifact](specifications/release-artifact.md) check in gh-ship's own
-`prepare-release` workflow, which validates the artifact with the binary built
-from the very commit being released. That is deliberate dogfooding, not an
-install.
+— because an extension cannot install itself before there is anything to
+install. That has not been necessary for some time.

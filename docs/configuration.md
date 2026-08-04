@@ -202,7 +202,7 @@ working on. They look, in order:
 2. The GitHub Actions environment — the branch a PR targets on a
    `pull_request` event, otherwise the branch of the run. A run on a tag names
    no branch, and is not guessed at.
-3. The local checkout's current branch.
+3. The local checkout's current branch, read from `.git/HEAD`.
 4. The repository's default branch.
 
 Detection only happens when `branches` is configured. Without it there is one

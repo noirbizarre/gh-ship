@@ -23,14 +23,15 @@ gh ship <COMMAND>
 With [release lines](configuration.md#release-lines) configured, this selects
 the line. Without them it simply overrides the branch the Release PR targets.
 
-When it is not given, gh-ship works the branch out for itself, in order:
+gh-ship works the branch out for itself, in order:
 
-1. The GitHub Actions environment — the branch a `pull_request` targets,
+1. `--base <BRANCH>`, or `SHIP_BASE_BRANCH`.
+2. The GitHub Actions environment — the branch a `pull_request` targets,
    otherwise the branch of the run. A run on a tag names no branch and is not
    guessed at.
-2. The local checkout's current branch, read from `.git/HEAD`. No `git`
+3. The local checkout's current branch, read from `.git/HEAD`. No `git`
    binary is needed and nothing is fetched or cloned.
-3. The repository's default branch.
+4. The repository's default branch.
 
 Detection only applies when `branches` is configured; otherwise the repository
 default branch is used, exactly as before. `gh ship status` always reports which
@@ -66,8 +67,9 @@ gh-ship retries those rather than failing the release:
 | `SHIP_GH_RETRIES` | `3` | Extra attempts for a read-only `gh` call that fails transiently. `0` disables. |
 | `SHIP_GH_RETRY_DELAY` | `1` | Seconds before the first retry. Doubles per attempt, capped at 8. |
 
-Only **read-only** calls are retried — `list`, `view`, `status`, `download` and
-`GET` requests to `gh api`. A gateway timeout means GitHub stopped *answering*,
+Only **read-only** calls are retried — `list`, `view`, `status`, `download`,
+`diff`, `checks` and `GET` requests to `gh api`. A gateway timeout means GitHub
+stopped *answering*,
 not that it stopped *acting*: a timed-out `pr create` may well have created the
 pull request, so retrying it would open a second one. Writes still fail on the
 first error, and are safe to re-run by hand because every gh-ship command is
