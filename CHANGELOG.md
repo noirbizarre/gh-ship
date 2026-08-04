@@ -4,6 +4,52 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0](https://github.com/noirbizarre/gh-ship/compare/0.2.2..0.3.0) - 2026-08-04
+
+### 💫 Features
+
+- **config** Name the key a typo was reaching for - ([27cd835](https://github.com/noirbizarre/gh-ship/commit/27cd835094d7f43800b205937f79ce12b0827e1a))
+- **config** Let a release line carry its own release branch - ([de554a0](https://github.com/noirbizarre/gh-ship/commit/de554a0b0f797bf150e775e24520991983a084ba))
+- **config**  🚨 **breaking** Release from several branches at once - ([b695a90](https://github.com/noirbizarre/gh-ship/commit/b695a900ab7c60f7669fcab26745e62c580fb942))
+
+### 🐛 Bug Fixes
+
+- **init** Suggest branches, not the removed base_branch - ([c05a83b](https://github.com/noirbizarre/gh-ship/commit/c05a83b6e9015f012ed5797ab528e823519ffdc6))
+- **templates** Let SHIP_TOKEN reach every gh invocation - ([e46a1d7](https://github.com/noirbizarre/gh-ship/commit/e46a1d79a51517092e8eff9ff596bae5e59af959))
+- **templates** Keep the release notes out of the worktree - ([4bd9af0](https://github.com/noirbizarre/gh-ship/commit/4bd9af0f6e1f06ed5719e2bbbb5155735550718d))
+
+### 🔨 Refactor
+
+- **artifact** Move the transport errors out of the protocol module - ([dc6fa8e](https://github.com/noirbizarre/gh-ship/commit/dc6fa8e5f32808063c8bbf3e2cf01a80e8a1ebbf))
+- **config** Give each default a single source of truth - ([1026d8b](https://github.com/noirbizarre/gh-ship/commit/1026d8b3d756e5aed9cc5a9a99ccdc86f4d89031))
+- **gh** Say closed when closed is what is meant - ([53c5890](https://github.com/noirbizarre/gh-ship/commit/53c58904aacee0d0924f25bf05627d133efbb8c4))
+- **gh** Let Gh own the repository it talks to - ([62718e8](https://github.com/noirbizarre/gh-ship/commit/62718e8f178e3fd18419c5be30130378c613de6d))
+- **gh** Name the pull request arguments - ([3acc345](https://github.com/noirbizarre/gh-ship/commit/3acc345b577510ee2d8453bceb78f448bf611782))
+- **gh** Centralise the stderr vocabularies and the env knobs - ([d0e6267](https://github.com/noirbizarre/gh-ship/commit/d0e626775f1f8a3d9387b538fbe56daf0cddbb0d))
+- **init** Enumerate the errors instead of raising them ad hoc - ([eda6d9f](https://github.com/noirbizarre/gh-ship/commit/eda6d9f3a2236856e1dd9d93b4c0fc3be8786986))
+- Settle the conventions that had drifted into variants - ([3cdc17f](https://github.com/noirbizarre/gh-ship/commit/3cdc17faaec54fffce1c00520b59b6a0fa505596))
+
+### 📚 Documentation
+
+- Number the branch precedence the same way everywhere - ([ca6c60c](https://github.com/noirbizarre/gh-ship/commit/ca6c60c7d447c7d92690f7ab641d4af13c0f8051))
+- Show the output the commands actually print - ([410449a](https://github.com/noirbizarre/gh-ship/commit/410449afbf8c39bc4c2be03d319e762f0ccd4e31))
+- Say that the staging sweep is scoped per release line - ([3962481](https://github.com/noirbizarre/gh-ship/commit/3962481931b69b31ce7a49a630347ce3f1fc37a3))
+- Correct the claims that no longer match the code - ([c114165](https://github.com/noirbizarre/gh-ship/commit/c114165c45a735ff66ff8e67617f2de5fc609397))
+
+### 🧪 Tests
+
+- **detect** Stop the precedence tests reading CI's own environment - ([4b536fe](https://github.com/noirbizarre/gh-ship/commit/4b536fe81f6b2926ca9d741bb9481b2564650644))
+- **init** Prove the commented hints survive being uncommented - ([049ead4](https://github.com/noirbizarre/gh-ship/commit/049ead4250958ea35410c3c89ec23f10c24db63d))
+- Read the binary's output through one accessor - ([b716b66](https://github.com/noirbizarre/gh-ship/commit/b716b665d10249f626505e390f794056feb02e80))
+
+### 🔧 CI
+
+- **cliff** Force 0.x versioning until 1.0 - ([3d2c140](https://github.com/noirbizarre/gh-ship/commit/3d2c1402a5f7e21668b7a70576a5d7b7e0bcf8bb))
+- **typos** Allow the near-miss proving nested key suggestions - ([5fd6fed](https://github.com/noirbizarre/gh-ship/commit/5fd6fed5f4af31e7cc2b8db41983bf91f2a24cdd))
+- **typos** Allow the deliberate near-miss, fix the real typo - ([5375ad2](https://github.com/noirbizarre/gh-ship/commit/5375ad23b9c1c7edb571823c09915f0169f28cf8))
+- Keep the mise pin out of mise's own namespace - ([ab9adf1](https://github.com/noirbizarre/gh-ship/commit/ab9adf1bda352d2ec75d2408333a901995b0464e))
+- Stop repeating the mise pin, and say why msrv uses @master - ([9e9156b](https://github.com/noirbizarre/gh-ship/commit/9e9156b3f12ee2f741b318a5e8990d630bbbc5ea))
+
 ## [0.2.2](https://github.com/noirbizarre/gh-ship/compare/0.2.1..0.2.2) - 2026-08-03
 
 ### 🐛 Bug Fixes
