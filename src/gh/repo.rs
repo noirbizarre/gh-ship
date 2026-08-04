@@ -303,6 +303,10 @@ impl PullRequest {
         state::is_open(&self.state)
     }
 
+    pub fn is_closed(&self) -> bool {
+        state::is_closed(&self.state)
+    }
+
     /// The commit the PR landed as.
     ///
     /// Never cache a SHA taken before the merge: a squash or rebase

@@ -251,7 +251,7 @@ fn ensure_merged(ctx: &Context, pr: PullRequest, merge: bool) -> Result<PullRequ
         return Ok(pr);
     }
 
-    if !pr.is_open() {
+    if pr.is_closed() {
         return Err(ReleaseError::PullRequestClosed {
             number: pr.number,
             state: pr.state.clone(),
