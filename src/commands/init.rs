@@ -378,9 +378,9 @@ pub fn render_config(prepare: &str, publish: Option<&str>) -> String {
          # push to it yourself.\n\
          release_branch: {DEFAULT_RELEASE_BRANCH}\n\
          \n\
-         # Branch the Release PR targets.\n\
-         # Defaults to the repository's default branch.\n\
-         # base_branch: main\n\
+         # Base branches gh-ship releases from — one release line each.\n\
+         # When omitted, the repository's default branch is the only line.\n\
+         # branches: [main]\n\
          \n"
     ));
 
@@ -539,6 +539,51 @@ mod tests {
         assert!(yaml.contains("workflow_dispatch"), "{yaml}");
         assert!(yaml.contains("run-name"), "{yaml}");
         assert!(yaml.contains("never bumps versions"), "{yaml}");
+    }
+
+    /// Every commented-out key in the generated config must be a key the
+    /// parser still accepts.
+    ///
+    /// The generated file is documentation that happens to be executable:
+    /// a user uncomments a line and expects it to work. A commented hint
+    /// for a removed key is worse than no hint at all, and it cannot be
+    /// caught by parsing the output — the line is a comment, so it parses
+    /// either way. This compares the hints against the published schema,
+    /// which `tests/config_schema.rs` in turn keeps aligned with the Rust
+    /// model.
+    #[test]
+    fn commented_keys_are_live_schema_keys() {
+        let yaml = render_config("prepare-release", None);
+
+        let schema: serde_json::Value = {
+            let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("schemas/config.v1.schema.json");
+            let text = std::fs::read_to_string(&path).expect("config schema exists");
+            serde_json::from_str(&text).expect("config schema is valid JSON")
+        };
+
+        // Only top-level hints are checked: a nested one (`  # publish:`)
+        // would have to be resolved against its parent's subschema, and
+        // the keys that get removed are the top-level ones.
+        let hints = yaml.lines().filter_map(|line| {
+            let key = line.strip_prefix("# ")?.split_once(':')?.0;
+            // A prose comment is not a hint: keys are bare identifiers.
+            key.chars()
+                .all(|c| c.is_ascii_lowercase() || c == '_')
+                .then_some(key)
+        });
+
+        let properties = schema
+            .get("properties")
+            .and_then(|p| p.as_object())
+            .expect("the schema declares top-level properties");
+
+        for key in hints {
+            assert!(
+                properties.contains_key(key),
+                "the generated config suggests `{key}`, which is not a \
+                 configuration key — see schemas/config.v1.schema.json"
+            );
+        }
     }
 
     /// The shipped templates must satisfy the contract they exist to
