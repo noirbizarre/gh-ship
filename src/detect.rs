@@ -52,13 +52,28 @@ pub struct Detected {
 /// `None` means "nothing to go on"; the caller decides what to fall back
 /// to, because only it knows the repository's default branch.
 pub fn base_branch(flag: Option<&str>, root: &Path) -> Option<Detected> {
+    base_branch_in(flag, root, &environment())
+}
+
+/// As [`base_branch`], against a given environment.
+///
+/// The whole of the precedence lives here, taking the environment as an
+/// argument, so that it can be tested without `std::env::set_var` —
+/// process-global, while nextest runs tests in threads — and without the
+/// tests silently reading the environment of the CI job running them,
+/// where `GITHUB_REF` is very much set.
+fn base_branch_in(
+    flag: Option<&str>,
+    root: &Path,
+    env: &BTreeMap<String, String>,
+) -> Option<Detected> {
     if let Some(branch) = flag.map(str::trim).filter(|b| !b.is_empty()) {
         return Some(Detected {
             branch: branch.to_string(),
             origin: Origin::Flag,
         });
     }
-    if let Some(branch) = from_ci(&environment()) {
+    if let Some(branch) = from_ci(env) {
         return Some(Detected {
             branch,
             origin: Origin::Ci,
@@ -72,9 +87,8 @@ pub fn base_branch(flag: Option<&str>, root: &Path) -> Option<Detected> {
 
 /// The process environment, read once.
 ///
-/// The rest of this module takes a map so that precedence is testable
-/// without `std::env::set_var` — which is process-global, while nextest
-/// runs tests in threads, and would make these tests flaky under load.
+/// The single place this module touches `std::env`; everything below it
+/// takes a map.
 fn environment() -> BTreeMap<String, String> {
     std::env::vars().collect()
 }
@@ -266,14 +280,48 @@ mod tests {
     #[test]
     fn the_flag_wins() {
         let dir = tempfile::tempdir().unwrap();
-        let d = base_branch(Some("release/2.x"), dir.path()).unwrap();
+        let e = env(&[
+            ("GITHUB_ACTIONS", "true"),
+            ("GITHUB_REF", "refs/heads/main"),
+        ]);
+        let d = base_branch_in(Some("release/2.x"), dir.path(), &e).unwrap();
         assert_eq!(d.branch, "release/2.x");
         assert_eq!(d.origin, Origin::Flag);
     }
 
     #[test]
+    fn ci_beats_the_checkout() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".git")).unwrap();
+        std::fs::write(dir.path().join(".git/HEAD"), "ref: refs/heads/local\n").unwrap();
+        let e = env(&[
+            ("GITHUB_ACTIONS", "true"),
+            ("GITHUB_REF", "refs/heads/from-ci"),
+        ]);
+        let d = base_branch_in(None, dir.path(), &e).unwrap();
+        assert_eq!(d.branch, "from-ci");
+        assert_eq!(d.origin, Origin::Ci);
+    }
+
+    #[test]
+    fn the_checkout_is_the_last_resort() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".git")).unwrap();
+        std::fs::write(dir.path().join(".git/HEAD"), "ref: refs/heads/local\n").unwrap();
+        let d = base_branch_in(None, dir.path(), &env(&[])).unwrap();
+        assert_eq!(d.branch, "local");
+        assert_eq!(d.origin, Origin::Git);
+    }
+
+    #[test]
     fn a_blank_flag_is_not_an_answer() {
         let dir = tempfile::tempdir().unwrap();
-        assert_eq!(base_branch(Some("  "), dir.path()), None);
+        assert_eq!(base_branch_in(Some("  "), dir.path(), &env(&[])), None);
+    }
+
+    #[test]
+    fn nothing_anywhere_is_not_an_answer() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(base_branch_in(None, dir.path(), &env(&[])), None);
     }
 }
