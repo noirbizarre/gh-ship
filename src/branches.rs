@@ -96,11 +96,6 @@ pub enum BranchError {
     Template(#[from] TemplateError),
 }
 
-/// Whether an entry is a glob rather than an exact branch name.
-pub fn is_pattern(entry: &str) -> bool {
-    entry.contains('*')
-}
-
 /// Probe branch names used to decide whether a template varies.
 ///
 /// They must share no prefix, no suffix and no length: `{{ match[0] }}`

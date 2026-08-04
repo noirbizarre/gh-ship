@@ -464,13 +464,16 @@ fn next_steps(theme: Theme, has_publish: bool) -> String {
         ),
         String::new(),
         logger::warn(theme, "one thing to decide: the token"),
-        logger::note(&[
-            "GitHub's default GITHUB_TOKEN cannot trigger other workflows,",
-            "so a Release PR it authors will NOT run your CI. If the Release",
-            "PR must be tested before merging, add a PAT or GitHub App token",
-            "as the `SHIP_TOKEN` secret. The generated workflow already",
-            "prefers it when present.",
-        ]),
+        logger::note(
+            theme,
+            &[
+                "GitHub's default GITHUB_TOKEN cannot trigger other workflows,",
+                "so a Release PR it authors will NOT run your CI. If the Release",
+                "PR must be tested before merging, add a PAT or GitHub App token",
+                "as the `SHIP_TOKEN` secret. The generated workflow already",
+                "prefers it when present.",
+            ],
+        ),
         logger::note_url(
             theme,
             "https://noirbizarre.github.io/gh-ship/workflows/#tokens",
@@ -479,10 +482,13 @@ fn next_steps(theme: Theme, has_publish: bool) -> String {
 
     if has_publish {
         out.push(String::new());
-        out.push(logger::note(&[
-            "Your publish workflow uploads assets to the DRAFT release;",
-            "gh-ship undrafts it only after that workflow succeeds.",
-        ]));
+        out.push(logger::note(
+            theme,
+            &[
+                "Your publish workflow uploads assets to the DRAFT release;",
+                "gh-ship undrafts it only after that workflow succeeds.",
+            ],
+        ));
     }
     out.push(String::new());
 

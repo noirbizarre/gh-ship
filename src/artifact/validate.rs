@@ -67,14 +67,13 @@ pub enum ArtifactError {
     },
 
     #[error("unsupported artifact schema version: {found}")]
-    #[diagnostic(code(ship::artifact::version))]
+    #[diagnostic(code(ship::artifact::version), help("{help}"))]
     UnsupportedVersion {
         found: String,
         #[source_code]
         src: NamedSource<String>,
         #[label("this version is not supported")]
         span: SourceSpan,
-        #[help]
         help: String,
     },
 

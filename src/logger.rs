@@ -69,7 +69,11 @@ pub fn step(theme: Theme, n: usize, lines: &[&str]) -> String {
 }
 
 /// A note aligned under [`step`] continuations.
-pub fn note(lines: &[&str]) -> String {
+///
+/// The theme is unused today — a note is plain text — but every renderer
+/// in this module takes one, and a caller should not have to remember
+/// which of [`step`], `note` and [`note_url`] is the exception.
+pub fn note(_theme: Theme, lines: &[&str]) -> String {
     lines
         .iter()
         .map(|l| format!("     {l}"))
@@ -100,10 +104,9 @@ pub fn rule(theme: Theme, label: &str) -> String {
 /// This is a success, not a warning: a workflow reporting `changed:
 /// false` is the system working correctly.
 pub fn nothing_to_release(theme: Theme) -> String {
-    format!(
-        "{} {}",
-        theme.success("✔"),
-        "nothing to release — the prepare workflow reported no changes"
+    ok(
+        theme,
+        "nothing to release — the prepare workflow reported no changes",
     )
 }
 
@@ -143,7 +146,7 @@ mod tests {
             nothing_to_release(t),
             release_identity(t, Some("1.4.0"), Some("v1.4.0")),
             step(t, 1, &["do a thing", "on two lines"]),
-            note(&["a note"]),
+            note(t, &["a note"]),
             note_url(t, "https://example.com"),
         ] {
             assert!(!s.contains('\x1b'), "unexpected ANSI in plain mode: {s:?}");
@@ -190,7 +193,7 @@ mod tests {
             "  2. first line\n     second line"
         );
         assert_eq!(step(t, 1, &["alone"]), "  1. alone");
-        assert_eq!(note(&["a", "b"]), "     a\n     b");
+        assert_eq!(note(t, &["a", "b"]), "     a\n     b");
         assert_eq!(
             note_url(t, "https://example.com"),
             "     https://example.com"
