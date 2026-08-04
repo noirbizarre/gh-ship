@@ -20,7 +20,7 @@ pub use cli::{Gh, GhError};
 ///
 /// Every duration knob gh-ship exposes is seconds-as-integer, so the parsing
 /// lives here rather than being re-derived per module. `None` covers both
-/// "unset" and "unparseable": a typo falls back to the documented default
+/// "unset" and "unparsable": a typo falls back to the documented default
 /// rather than failing a release over an environment variable.
 pub(crate) fn env_duration(key: &str) -> Option<std::time::Duration> {
     std::env::var(key)

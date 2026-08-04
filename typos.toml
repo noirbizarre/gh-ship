@@ -23,3 +23,6 @@ extend-exclude = [
 relase = "relase"
 releas = "releas"
 tru = "tru"
+# A near-miss for `main`, close enough for the Jaro–Winkler floor, used to
+# prove an unmatched release line suggests the branch you meant.
+mian = "mian"
