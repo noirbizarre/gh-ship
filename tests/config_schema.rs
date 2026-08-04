@@ -145,6 +145,45 @@ fn empty_strings_are_rejected_where_the_binary_rejects_them() {
     assert!(check("version: 1\nrelease_branch: \"\"\nworkflows:\n  prepare: p\n").is_err());
     assert!(check("version: 1\nworkflows:\n  prepare: \"\"\n").is_err());
     assert!(check("version: 1\nbranches: [\"\"]\nworkflows:\n  prepare: p\n").is_err());
+    assert!(check("version: 1\nbranches:\n  - branch: \"\"\nworkflows:\n  prepare: p\n").is_err());
+    assert!(
+        check(
+            "version: 1\nbranches:\n  - branch: main\n    release_branch: \"\"\nworkflows:\n  prepare: p\n"
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn both_entry_forms_are_accepted() {
+    assert!(
+        check(
+            "version: 1\nrelease_branch: \"next/{{ match }}\"\nbranches:\n  - branch: main\n    release_branch: next/release\n  - \"release/*\"\nworkflows:\n  prepare: p\n"
+        )
+        .is_ok(),
+        "mixing a mapping and a plain name is the point of the feature"
+    );
+    assert!(
+        check("version: 1\nbranches:\n  - branch: main\nworkflows:\n  prepare: p\n").is_ok(),
+        "a mapping without an override is legal"
+    );
+    assert!(
+        check("version: 1\nbranches:\n  - match: main\nworkflows:\n  prepare: p\n").is_err(),
+        "`match` is the template variable, not the selector key"
+    );
+    assert!(
+        check("version: 1\nbranches:\n  - release_branch: x\nworkflows:\n  prepare: p\n").is_err(),
+        "`branch` is required"
+    );
+    assert!(
+        check("version: 1\nbranches:\n  - branch: \"a*b*c\"\nworkflows:\n  prepare: p\n").is_err(),
+        "the one-wildcard rule applies to both forms"
+    );
+    assert!(
+        check("version: 1\nbranches:\n  - branch: main\n    bogus: 1\nworkflows:\n  prepare: p\n")
+            .is_err(),
+        "entries reject unknown keys like everything else"
+    );
 }
 
 #[test]

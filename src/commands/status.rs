@@ -33,6 +33,13 @@ pub struct Status {
     /// The `branches` entry that matched, when release lines are configured.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub branch_rule: Option<String>,
+    /// Whether that entry carried its own `release_branch`.
+    ///
+    /// Not serialised: `release_branch` above already reports the
+    /// resolved name, which is what a machine reader wants. This only
+    /// exists so the human report can say where that name came from.
+    #[serde(skip)]
+    pub branch_rule_override: bool,
     pub release_branch: String,
     pub release_branch_exists: bool,
     pub pull_request: Option<PullRequestStatus>,
@@ -147,7 +154,13 @@ fn collect(ctx: &Context) -> Result<Status> {
         branch_rule: ctx
             .line()
             .entry
-            .and_then(|i| ctx.config.branches().get(i).cloned()),
+            .and_then(|i| ctx.config.branches().get(i))
+            .map(|rule| rule.branch.clone()),
+        branch_rule_override: ctx
+            .line()
+            .entry
+            .and_then(|i| ctx.config.branches().get(i))
+            .is_some_and(|rule| rule.release_branch.is_some()),
         release_branch,
         release_branch_exists: branch_exists,
         pull_request,
@@ -217,7 +230,12 @@ fn report(status: &Status, theme: Theme) {
     );
 
     if let Some(rule) = &status.branch_rule {
-        eprintln!("{}", logger::detail(theme, "release line", rule));
+        let line = if status.branch_rule_override {
+            format!("{rule} (override)")
+        } else {
+            rule.clone()
+        };
+        eprintln!("{}", logger::detail(theme, "release line", &line));
     }
 
     let branch = if status.release_branch_exists {

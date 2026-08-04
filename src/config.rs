@@ -77,12 +77,13 @@ pub struct Settings {
 
     /// The base branches gh-ship releases from, one release line each.
     ///
-    /// An entry containing `*` is a glob; anything else is an exact
-    /// branch name. Empty — the default — means the repository's own
-    /// default branch, resolved at runtime, which is why there is no
-    /// literal `main` anywhere in this model.
+    /// An entry is either a bare branch name — a glob if it contains
+    /// `*` — or a mapping that also carries its own `release_branch`.
+    /// Empty, the default, means the repository's own default branch,
+    /// resolved at runtime, which is why there is no literal `main`
+    /// anywhere in this model.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub branches: Vec<String>,
+    pub branches: Vec<BranchRule>,
 
     /// The workflows gh-ship dispatches.
     pub workflows: Workflows,
@@ -94,6 +95,113 @@ pub struct Settings {
     /// GitHub Release behaviour.
     #[serde(default)]
     pub release: ReleaseConfig,
+}
+
+/// One release line: which base branch, and optionally where it stages.
+///
+/// Written either as a bare branch name or as a mapping:
+///
+/// ```yaml
+/// branches:
+///   - branch: main
+///     release_branch: next/release
+///   - "release/*"
+/// ```
+///
+/// The two forms mean the same thing when the mapping carries no
+/// `release_branch`; the mapping exists only so that one line can
+/// deviate without forcing every other line to be spelled out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BranchRule {
+    /// The base branch this line releases from. A glob when it holds
+    /// `*`, an exact name otherwise.
+    pub branch: String,
+
+    /// This line's `release_branch` template, overriding the top-level
+    /// one. `None` means "use the top-level template".
+    pub release_branch: Option<String>,
+}
+
+impl BranchRule {
+    /// Whether the selector is a glob rather than an exact name.
+    pub fn is_pattern(&self) -> bool {
+        self.branch.contains('*')
+    }
+}
+
+/// The mapping form, kept private so that `deny_unknown_fields` applies
+/// to it without [`BranchRule`] having to be deserialisable two ways.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BranchRuleMapping {
+    branch: String,
+    #[serde(default)]
+    release_branch: Option<String>,
+}
+
+impl<'de> Deserialize<'de> for BranchRule {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Entry;
+
+        impl<'de> serde::de::Visitor<'de> for Entry {
+            type Value = BranchRule;
+
+            // This string *is* the error a user sees for a node that is
+            // neither — `- [1, 2]` yields "invalid type: sequence,
+            // expected <this>" — so it is written as guidance rather
+            // than as a type name.
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str(
+                    "a branch name, or a mapping with `branch` and an optional `release_branch`",
+                )
+            }
+
+            // serde's defaults forward `visit_borrowed_str` and
+            // `visit_string` here, so this one method covers every way a
+            // scalar can arrive.
+            fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<BranchRule, E> {
+                Ok(BranchRule {
+                    branch: value.to_string(),
+                    release_branch: None,
+                })
+            }
+
+            fn visit_map<M: serde::de::MapAccess<'de>>(
+                self,
+                map: M,
+            ) -> Result<BranchRule, M::Error> {
+                let mapping = BranchRuleMapping::deserialize(
+                    serde::de::value::MapAccessDeserializer::new(map),
+                )?;
+                Ok(BranchRule {
+                    branch: mapping.branch,
+                    release_branch: mapping.release_branch,
+                })
+            }
+        }
+
+        // `deserialize_any`, not `deserialize_str`: serde_norway
+        // dispatches on the node it actually finds, and anything
+        // narrower would reject the mapping form outright.
+        deserializer.deserialize_any(Entry)
+    }
+}
+
+impl Serialize for BranchRule {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match &self.release_branch {
+            // Round-trip the short form as the short form: a config
+            // written as `- main` should not come back as a mapping.
+            None => serializer.serialize_str(&self.branch),
+            Some(release_branch) => {
+                use serde::ser::SerializeMap;
+                let mut map = serializer.serialize_map(Some(2))?;
+                map.serialize_entry("branch", &self.branch)?;
+                map.serialize_entry("release_branch", release_branch)?;
+                map.end()
+            }
+        }
+    }
 }
 
 /// Workflows gh-ship dispatches.
@@ -254,6 +362,17 @@ pub enum ConfigError {
         span: SourceSpan,
     },
 
+    #[error("`{field}` is not a configuration key here")]
+    #[diagnostic(code(ship::config::wrong_key), help("{help}"))]
+    WrongKey {
+        field: String,
+        help: String,
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("not this one")]
+        span: SourceSpan,
+    },
+
     #[error("invalid branch pattern `{pattern}`: {reason}")]
     #[diagnostic(code(ship::config::branch_pattern), help("{help}"))]
     BranchPattern {
@@ -315,6 +434,20 @@ impl Config {
                         .into(),
                     src: source.named(),
                     span: source.locate("base_branch:"),
+                };
+            }
+            // `match` is the name of the template variable, so it is the
+            // key a user is most likely to reach for when writing a
+            // release line. Say where it went rather than listing the
+            // expected fields and leaving them to guess.
+            if message.contains("unknown field `match`") {
+                return ConfigError::WrongKey {
+                    field: "match".into(),
+                    help: "the selector key is `branch`: write `- branch: release/*`. \
+                           `{{ match }}` is the template variable holding what the `*` captured."
+                        .into(),
+                    src: source.named(),
+                    span: source.locate("match:"),
                 };
             }
             ConfigError::Parse {
@@ -383,12 +516,12 @@ impl Config {
     fn check_branches(&self) -> Result<(), ConfigError> {
         let mut seen: Vec<&str> = Vec::new();
 
-        for (i, entry) in self.settings.branches.iter().enumerate() {
-            let entry = entry.as_str();
+        for (i, rule) in self.settings.branches.iter().enumerate() {
+            let entry = rule.branch.as_str();
 
             if entry.trim().is_empty() {
                 return Err(ConfigError::EmptyField {
-                    field: format!("branches[{i}]"),
+                    field: format!("branches[{i}].branch"),
                     src: self.source.named(),
                     span: self.source.locate("branches:"),
                     help: Some(
@@ -409,6 +542,22 @@ impl Config {
                 });
             }
 
+            if let Some(release_branch) = &rule.release_branch
+                && release_branch.trim().is_empty()
+            {
+                return Err(ConfigError::EmptyField {
+                    field: format!("branches[{i}].release_branch"),
+                    src: self.source.named(),
+                    span: self.source.locate(entry),
+                    help: Some(
+                        "drop the key to fall back to the top-level `release_branch`".into(),
+                    ),
+                });
+            }
+
+            // Keyed on the selector, not the whole rule: `- main` and
+            // `- {branch: main}` are the same line, and the second would
+            // never be reached.
             if seen.contains(&entry) {
                 return Err(ConfigError::DuplicateBranch {
                     entry: entry.to_string(),
@@ -424,18 +573,38 @@ impl Config {
 
     /// Convenience accessors.
     ///
-    /// This is the `release_branch` *template*, not a branch name: with
-    /// several release lines it renders differently per line. The
-    /// resolved name comes from the release line — see
-    /// [`crate::branches::Line`].
+    /// This is the top-level `release_branch` *template*, not a branch
+    /// name. Prefer [`Config::release_branch_template_for`], which
+    /// accounts for a line overriding it.
     pub fn release_branch_template(&self) -> &str {
         &self.settings.release_branch
     }
 
-    /// The configured base branches, empty when the repository default
-    /// branch is the only release line.
-    pub fn branches(&self) -> &[String] {
+    /// The `release_branch` template that applies to a release line.
+    ///
+    /// The single place that decides between a line's own template and
+    /// the top-level one, so that reporting and resolution cannot
+    /// disagree about which is in force.
+    pub fn release_branch_template_for(&self, entry: Option<usize>) -> &str {
+        entry
+            .and_then(|i| self.settings.branches.get(i))
+            .and_then(|rule| rule.release_branch.as_deref())
+            .unwrap_or(&self.settings.release_branch)
+    }
+
+    /// The configured release lines, empty when the repository default
+    /// branch is the only one.
+    pub fn branches(&self) -> &[BranchRule] {
         &self.settings.branches
+    }
+
+    /// The base branches, in configuration order.
+    pub fn selectors(&self) -> Vec<&str> {
+        self.settings
+            .branches
+            .iter()
+            .map(|rule| rule.branch.as_str())
+            .collect()
     }
 
     /// Whether explicit release lines are configured.
@@ -532,7 +701,7 @@ release:
 "#;
         let c = parse(text).unwrap();
         assert_eq!(c.release_branch_template(), "release/staging");
-        assert_eq!(c.branches(), ["develop"]);
+        assert_eq!(c.selectors(), ["develop"]);
         assert_eq!(c.publish_workflow(), Some("publish-release"));
         assert_eq!(c.settings.pull_request.title, "Ship {{ version }}");
         assert_eq!(
@@ -548,7 +717,7 @@ release:
     fn parses_several_release_lines() {
         let text = "version: 1\nbranches: [main, \"release/*\"]\nrelease_branch: \"next/{{ match }}\"\nworkflows:\n  prepare: x\n";
         let c = parse(text).unwrap();
-        assert_eq!(c.branches(), ["main", "release/*"]);
+        assert_eq!(c.selectors(), ["main", "release/*"]);
         assert!(c.has_branches());
     }
 
@@ -584,7 +753,119 @@ release:
         let ConfigError::EmptyField { field, .. } = &e else {
             panic!("expected EmptyField, got {e:?}")
         };
-        assert_eq!(field, "branches[0]");
+        assert_eq!(field, "branches[0].branch");
+    }
+
+    #[test]
+    fn a_mapping_entry_may_carry_its_own_release_branch() {
+        let text = "version: 1\nrelease_branch: \"next/{{ match }}\"\nbranches:\n  - branch: main\n    release_branch: next/release\n  - \"release/*\"\nworkflows:\n  prepare: x\n";
+        let c = parse(text).unwrap();
+        assert_eq!(c.selectors(), ["main", "release/*"]);
+        assert_eq!(
+            c.settings.branches[0].release_branch.as_deref(),
+            Some("next/release")
+        );
+        assert_eq!(
+            c.settings.branches[1].release_branch, None,
+            "the plain form carries no override"
+        );
+        assert_eq!(c.release_branch_template_for(Some(0)), "next/release");
+        assert_eq!(
+            c.release_branch_template_for(Some(1)),
+            "next/{{ match }}",
+            "a line without an override falls back to the top level"
+        );
+        assert_eq!(c.release_branch_template_for(None), "next/{{ match }}");
+    }
+
+    #[test]
+    fn the_two_entry_forms_mean_the_same_thing() {
+        let plain = parse("version: 1\nbranches: [main]\nworkflows:\n  prepare: x\n").unwrap();
+        let mapping =
+            parse("version: 1\nbranches:\n  - branch: main\nworkflows:\n  prepare: x\n").unwrap();
+        assert_eq!(plain.settings.branches, mapping.settings.branches);
+    }
+
+    #[test]
+    fn match_is_pointed_back_at_branch() {
+        // `match` is the template variable, so it is the key a user is
+        // most likely to reach for.
+        let e = parse("version: 1\nbranches:\n  - match: main\nworkflows:\n  prepare: x\n")
+            .unwrap_err();
+        let ConfigError::WrongKey { field, help, .. } = &e else {
+            panic!("expected WrongKey, got {e:?}")
+        };
+        assert_eq!(field, "match");
+        assert!(help.contains("`branch`"), "{help}");
+    }
+
+    #[test]
+    fn a_mapping_entry_requires_a_branch() {
+        let e = parse("version: 1\nbranches:\n  - release_branch: x\nworkflows:\n  prepare: x\n")
+            .unwrap_err();
+        assert!(e.to_string().contains("branch"), "{e}");
+    }
+
+    #[test]
+    fn rejects_an_unknown_entry_key() {
+        let e = parse(
+            "version: 1\nbranches:\n  - branch: main\n    bogus: 1\nworkflows:\n  prepare: x\n",
+        )
+        .unwrap_err();
+        assert!(e.to_string().contains("unknown field"), "{e}");
+    }
+
+    #[test]
+    fn rejects_an_entry_that_is_neither_a_name_nor_a_mapping() {
+        let e = parse("version: 1\nbranches:\n  - [a, b]\nworkflows:\n  prepare: x\n").unwrap_err();
+        // `expecting()` is the whole message here, so it has to read as
+        // guidance rather than as a type name.
+        assert!(e.to_string().contains("a branch name, or a mapping"), "{e}");
+    }
+
+    #[test]
+    fn rejects_an_empty_release_branch_override() {
+        let e = parse(
+            "version: 1\nbranches:\n  - branch: main\n    release_branch: \"\"\nworkflows:\n  prepare: x\n",
+        )
+        .unwrap_err();
+        let ConfigError::EmptyField { field, .. } = &e else {
+            panic!("expected EmptyField, got {e:?}")
+        };
+        assert_eq!(field, "branches[0].release_branch");
+    }
+
+    #[test]
+    fn the_two_forms_cannot_name_the_same_branch_twice() {
+        let e = parse(
+            "version: 1\nbranches:\n  - main\n  - branch: main\n    release_branch: x\nworkflows:\n  prepare: x\n",
+        )
+        .unwrap_err();
+        assert!(matches!(e, ConfigError::DuplicateBranch { .. }), "{e:?}");
+    }
+
+    #[test]
+    fn entries_round_trip_through_their_written_form() {
+        // Nothing in the binary serialises `Settings` today, so without
+        // this the custom `Serialize` would rot unnoticed.
+        let rules = vec![
+            BranchRule {
+                branch: "main".into(),
+                release_branch: None,
+            },
+            BranchRule {
+                branch: "release/*".into(),
+                release_branch: Some("next/{{ match }}".into()),
+            },
+        ];
+        let yaml = serde_norway::to_string(&rules).expect("entries serialise");
+        assert!(
+            yaml.contains("- main\n"),
+            "the short form stays short: {yaml}"
+        );
+        assert!(yaml.contains("branch: release/*"), "{yaml}");
+        let back: Vec<BranchRule> = serde_norway::from_str(&yaml).expect("entries parse back");
+        assert_eq!(back, rules);
     }
 
     #[test]

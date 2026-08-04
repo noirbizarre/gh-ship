@@ -1,0 +1,16 @@
+---
+source: tests/branches.rs
+expression: out.diagnostics()
+---
+ship::config::wrong_key
+
+  × `match` is not a configuration key here
+   ╭─[.github/ship.yml:3:5]
+ 2 │ branches:
+ 3 │   - match: main
+   ·     ───┬──
+   ·        ╰── not this one
+ 4 │ workflows:
+   ╰────
+  help: the selector key is `branch`: write `- branch: release/*`.
+        `{{ match }}` is the template variable holding what the `*` captured.

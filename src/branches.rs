@@ -38,15 +38,56 @@ pub enum BranchError {
     #[diagnostic(code(ship::branches::no_match), help("{help}"))]
     NoMatch { base: String, help: String },
 
-    #[error(
-        "`release_branch` is the same for every release line, so they would collide on one branch"
-    )]
-    #[diagnostic(code(ship::branches::ambiguous_release_branch), help("{help}"))]
-    AmbiguousReleaseBranch {
+    #[error("`{pattern}` matches many branches, but its release branch does not vary")]
+    #[diagnostic(code(ship::branches::constant_glob_release_branch), help("{help}"))]
+    ConstantGlobReleaseBranch {
+        pattern: String,
         help: String,
         #[source_code]
         src: miette::NamedSource<String>,
-        #[label("does not vary per line")]
+        #[label("every branch this matches stages on one branch")]
+        span: miette::SourceSpan,
+    },
+
+    #[error("`{left}` and `{right}` would both stage on `{release}`")]
+    #[diagnostic(
+        code(ship::branches::colliding_release_branches),
+        help(
+            "two release lines sharing a branch share a Release PR, so each prepare would \
+             overwrite the other. Give them release branches that differ — `{{ match }}` in the \
+             template is usually enough"
+        )
+    )]
+    CollidingReleaseBranches {
+        left: String,
+        right: String,
+        release: String,
+        #[source_code]
+        src: miette::NamedSource<String>,
+        #[label("collides with an earlier line")]
+        span: miette::SourceSpan,
+    },
+
+    #[error("`{left}` and `{right}` can match branches that stage on the same release branch")]
+    #[diagnostic(code(ship::branches::colliding_globs), help("{help}"))]
+    CollidingGlobs {
+        left: String,
+        right: String,
+        help: String,
+        #[source_code]
+        src: miette::NamedSource<String>,
+        #[label("collides with an earlier line")]
+        span: miette::SourceSpan,
+    },
+
+    #[error("`{release}` is both a release branch and a base branch")]
+    #[diagnostic(code(ship::branches::release_branch_is_base_branch), help("{help}"))]
+    ReleaseBranchIsBaseBranch {
+        release: String,
+        help: String,
+        #[source_code]
+        src: miette::NamedSource<String>,
+        #[label("here")]
         span: miette::SourceSpan,
     },
 
@@ -59,6 +100,15 @@ pub enum BranchError {
 pub fn is_pattern(entry: &str) -> bool {
     entry.contains('*')
 }
+
+/// Probe branch names used to decide whether a template varies.
+///
+/// They must share no prefix, no suffix and no length: `{{ match[0] }}`
+/// and `{{ match | truncate(4) }}` are legitimate templates that would
+/// render identically for two probes that happen to look alike, and be
+/// wrongly condemned as constant.
+const PROBE_A: &str = "aaaa";
+const PROBE_B: &str = "zz";
 
 /// Match `input` against a glob containing exactly one `*`.
 ///
@@ -91,26 +141,30 @@ pub fn resolve(config: &Config, base: &str) -> Result<Line, BranchError> {
     let matched = entries
         .iter()
         .enumerate()
-        .find(|(_, e)| !is_pattern(e) && e.as_str() == base)
+        .find(|(_, rule)| !rule.is_pattern() && rule.branch == base)
         .map(|(i, _)| (i, base))
         .or_else(|| {
             entries
                 .iter()
                 .enumerate()
-                .filter(|(_, e)| is_pattern(e))
-                .find_map(|(i, e)| glob_match(e, base).map(|c| (i, c)))
+                .filter(|(_, rule)| rule.is_pattern())
+                .find_map(|(i, rule)| glob_match(&rule.branch, base).map(|c| (i, c)))
         });
 
     let Some((index, capture)) = matched else {
         return Err(BranchError::NoMatch {
             base: base.to_string(),
-            help: no_match_help(entries, base),
+            help: no_match_help(config, base),
         });
     };
 
     Ok(Line {
         base: base.to_string(),
-        release: render_release_branch(config, base, capture)?,
+        release: render_release_branch(
+            config.release_branch_template_for(Some(index)),
+            base,
+            capture,
+        )?,
         entry: Some(index),
     })
 }
@@ -122,7 +176,7 @@ pub fn resolve(config: &Config, base: &str) -> Result<Line, BranchError> {
 pub fn single(config: &Config, base: &str) -> Result<Line, BranchError> {
     Ok(Line {
         base: base.to_string(),
-        release: render_release_branch(config, base, base)?,
+        release: render_release_branch(config.release_branch_template(), base, base)?,
         entry: None,
     })
 }
@@ -133,37 +187,158 @@ pub fn single(config: &Config, base: &str) -> Result<Line, BranchError> {
 /// that the config module stays free of MiniJinja. `gh ship validate`
 /// calls this, which is what turns a typo in `release_branch` into a
 /// setup-time failure instead of a mid-release surprise.
+///
+/// Everything below guards one property: **two release lines must never
+/// stage on the same branch**. They would share a head branch, and so a
+/// Release PR, and each prepare would silently overwrite the other's.
 pub fn check(config: &Config) -> Result<(), BranchError> {
-    // Compile-and-render against a probe: a template that cannot render
-    // for any branch cannot render for a real one either.
-    let probe = render_release_branch(config, "probe-a", "probe-a")?;
+    // Render the top-level template unconditionally, even when every
+    // line overrides it. Otherwise a syntax error there lies dormant
+    // until someone adds a line without an override, and then it
+    // surfaces mid-release.
+    render_release_branch(config.release_branch_template(), PROBE_A, PROBE_A)?;
 
-    // With several lines a constant `release_branch` puts every line on
-    // the same head branch, where they would silently overwrite each
-    // other's Release PR. Detect it by rendering twice rather than by
-    // looking for `{{ branch }}` in the text, so `{{ branch | lower }}`
-    // and friends are covered too.
-    if config.branches().len() >= 2 {
-        let other = render_release_branch(config, "probe-b", "probe-b")?;
-        if probe == other {
-            return Err(BranchError::AmbiguousReleaseBranch {
-                help: format!(
-                    "`{}` renders the same for every base branch. With several release lines it \
-                     must vary — use `{{{{ match }}}}` (what a `*` captured, or the branch itself \
-                     for an exact entry), e.g. `next/{{{{ match }}}}`",
-                    config.release_branch_template()
-                ),
-                src: config.source.named(),
-                span: config.source.locate("release_branch:"),
-            });
+    let mut exact: Vec<(&str, String)> = Vec::new();
+    let selectors = config.selectors();
+
+    for (i, rule) in config.branches().iter().enumerate() {
+        let template = config.release_branch_template_for(Some(i));
+
+        if rule.is_pattern() {
+            // A glob matches many branches, so its release branch has to
+            // tell them apart. Probe with two branches the glob really
+            // matches: `branch` and `match` are not independent for a
+            // glob — `release/*` matching `release/1.x` fixes the
+            // capture at `1.x` — so varying one without the other would
+            // condemn the perfectly sound `next/{{ branch }}`.
+            let a = render_release_branch(template, &probe_branch(rule, PROBE_A), PROBE_A)?;
+            let b = render_release_branch(template, &probe_branch(rule, PROBE_B), PROBE_B)?;
+            if a == b {
+                return Err(constant_glob(config, rule, template));
+            }
+            continue;
         }
+
+        let name = render_release_branch(template, &rule.branch, &rule.branch)?;
+
+        // A release branch that is also a base branch would have gh-ship
+        // open a pull request from a branch into itself.
+        if let Some(base) = selectors.iter().find(|s| **s == name) {
+            return Err(release_branch_is_base(config, rule, &name, base));
+        }
+
+        if let Some((other, _)) = exact.iter().find(|(_, n)| *n == name) {
+            return Err(collision(config, &rule.branch, other, &name));
+        }
+        exact.push((&rule.branch, name));
     }
 
+    check_glob_pairs(config)
+}
+
+/// Two globs collide when their release branches ignore what
+/// distinguishes them: `release/1.x` and `v1.x` both capture `1.x`, so
+/// `next/{{ match }}` sends both lines to `next/1.x`.
+///
+/// Probe each with the *same* capture on a branch of its own shape. A
+/// template that uses `{{ branch }}` then comes out different, because
+/// the two globs have different literal parts, and is left alone.
+fn check_glob_pairs(config: &Config) -> Result<(), BranchError> {
+    let globs: Vec<(usize, &crate::config::BranchRule)> = config
+        .branches()
+        .iter()
+        .enumerate()
+        .filter(|(_, rule)| rule.is_pattern())
+        .collect();
+
+    for (n, (i, left)) in globs.iter().enumerate() {
+        let a = render_release_branch(
+            config.release_branch_template_for(Some(*i)),
+            &probe_branch(left, PROBE_A),
+            PROBE_A,
+        )?;
+        for (j, right) in globs.iter().skip(n + 1) {
+            let b = render_release_branch(
+                config.release_branch_template_for(Some(*j)),
+                &probe_branch(right, PROBE_A),
+                PROBE_A,
+            )?;
+            if a == b {
+                return Err(BranchError::CollidingGlobs {
+                    left: left.branch.clone(),
+                    right: right.branch.clone(),
+                    help: format!(
+                        "both render their release branch from `{{{{ match }}}}` alone, so any \
+                         capture the two share — `{}` and `{}` both matching `1.x`, say — sends \
+                         them to one branch. Include `{{{{ branch }}}}`, or give one line its own \
+                         `release_branch`",
+                        left.branch, right.branch
+                    ),
+                    src: config.source.named(),
+                    span: config.source.locate(&right.branch),
+                });
+            }
+        }
+    }
     Ok(())
 }
 
-fn render_release_branch(
+/// A branch the glob really matches, with `capture` in the `*` position.
+fn probe_branch(rule: &crate::config::BranchRule, capture: &str) -> String {
+    rule.branch.replacen('*', capture, 1)
+}
+
+fn constant_glob(config: &Config, rule: &crate::config::BranchRule, template: &str) -> BranchError {
+    BranchError::ConstantGlobReleaseBranch {
+        pattern: rule.branch.clone(),
+        help: format!(
+            "`{}` renders `{template}` for every branch `{}` matches, so they would all stage on \
+             one branch. Use `{{{{ match }}}}` — what the `*` captured — as in \
+             `next/{{{{ match }}}}`",
+            template, rule.branch
+        ),
+        src: config.source.named(),
+        span: config.source.locate(&rule.branch),
+    }
+}
+
+fn release_branch_is_base(
     config: &Config,
+    rule: &crate::config::BranchRule,
+    name: &str,
+    base: &str,
+) -> BranchError {
+    BranchError::ReleaseBranchIsBaseBranch {
+        release: name.to_string(),
+        help: if base == rule.branch {
+            format!(
+                "`{}` would stage on itself, so the Release PR would have the same branch on \
+                 both sides. Give the line a distinct release branch, e.g. `next/{}`",
+                rule.branch, rule.branch
+            )
+        } else {
+            format!(
+                "`{name}` is the base branch of another release line, so the two would fight \
+                 over it. Give this line a distinct release branch"
+            )
+        },
+        src: config.source.named(),
+        span: config.source.locate(&rule.branch),
+    }
+}
+
+fn collision(config: &Config, left: &str, right: &str, name: &str) -> BranchError {
+    BranchError::CollidingReleaseBranches {
+        left: left.to_string(),
+        right: right.to_string(),
+        release: name.to_string(),
+        src: config.source.named(),
+        span: config.source.locate(right),
+    }
+}
+
+fn render_release_branch(
+    template: &str,
     branch: &str,
     capture: &str,
 ) -> Result<String, BranchError> {
@@ -174,7 +349,7 @@ fn render_release_branch(
     let value = minijinja::Value::from_serialize(&vars);
     Ok(render::render_template_with_help(
         "release_branch",
-        config.release_branch_template(),
+        template,
         &value,
         branch_template_help,
     )?)
@@ -197,8 +372,9 @@ fn branch_template_help(err: &minijinja::Error) -> String {
     }
 }
 
-fn no_match_help(entries: &[String], base: &str) -> String {
-    let listed = entries
+fn no_match_help(config: &Config, base: &str) -> String {
+    let selectors = config.selectors();
+    let listed = selectors
         .iter()
         .map(|e| format!("`{e}`"))
         .collect::<Vec<_>>()
@@ -207,7 +383,7 @@ fn no_match_help(entries: &[String], base: &str) -> String {
         "`branches` lists {listed}. Add `{base}` to it, or pass `--base` to release from a \
          branch that is listed"
     );
-    if let Some(closest) = suggest::suggest(base, entries) {
+    if let Some(closest) = suggest::suggest(base, &selectors) {
         help = format!("{help}\ndid you mean `{closest}`?");
     }
     help
@@ -220,6 +396,15 @@ mod tests {
     fn config(branches: &str, release_branch: &str) -> Config {
         let text = format!(
             "version: 1\nbranches: {branches}\nrelease_branch: \"{release_branch}\"\nworkflows:\n  prepare: x\n"
+        );
+        Config::parse(".github/ship.yml", &text).expect("config parses")
+    }
+
+    /// A config whose `branches` block is written out in full, for the
+    /// mapping form.
+    fn config_yaml(branches: &str, release_branch: &str) -> Config {
+        let text = format!(
+            "version: 1\nrelease_branch: \"{release_branch}\"\nbranches:\n{branches}workflows:\n  prepare: x\n"
         );
         Config::parse(".github/ship.yml", &text).expect("config parses")
     }
@@ -304,19 +489,123 @@ mod tests {
     }
 
     #[test]
-    fn a_constant_release_branch_is_rejected_for_several_lines() {
-        let c = config("[main, \"release/*\"]", "release/next");
-        let e = check(&c).unwrap_err();
+    fn an_override_wins_over_the_top_level_template() {
+        let c = config_yaml(
+            "  - branch: main\n    release_branch: next/release\n  - \"release/*\"\n",
+            "next/{{ match }}",
+        );
+        assert_eq!(resolve(&c, "main").unwrap().release, "next/release");
+        assert_eq!(
+            resolve(&c, "release/1.x").unwrap().release,
+            "next/1.x",
+            "a line without an override still falls back"
+        );
+    }
+
+    #[test]
+    fn an_override_is_a_template_too() {
+        let c = config_yaml(
+            "  - branch: \"release/*\"\n    release_branch: \"maint/{{ match }}\"\n",
+            "next/{{ match }}",
+        );
+        assert_eq!(resolve(&c, "release/1.x").unwrap().release, "maint/1.x");
+    }
+
+    #[test]
+    fn a_glob_whose_release_branch_cannot_vary_is_rejected() {
+        // Every maintenance branch would stage on `release/next`. This
+        // holds even as the only entry, which is why it is checked per
+        // entry rather than only when several are configured.
+        let e = check(&config("[\"release/*\"]", "release/next")).unwrap_err();
         assert!(
-            matches!(e, BranchError::AmbiguousReleaseBranch { .. }),
+            matches!(e, BranchError::ConstantGlobReleaseBranch { .. }),
             "{e:?}"
         );
     }
 
     #[test]
-    fn a_constant_release_branch_is_fine_for_one_line() {
+    fn a_glob_may_index_its_capture() {
+        // The probes must share no prefix, suffix or length, or this
+        // legitimate template looks constant and is condemned.
+        check(&config("[\"release/*\"]", "next/{{ match[0] }}"))
+            .expect("`{{ match[0] }}` varies with the capture");
+        check(&config("[\"release/*\"]", "next/{{ match[:2] }}"))
+            .expect("so does a sliced capture");
+    }
+
+    #[test]
+    fn two_globs_that_can_produce_one_name_are_rejected() {
+        // `release/1.x` and `v1.x` both capture `1.x`.
+        let e = check(&config("[\"release/*\", \"v*\"]", "next/{{ match }}")).unwrap_err();
+        assert!(matches!(e, BranchError::CollidingGlobs { .. }), "{e:?}");
+    }
+
+    #[test]
+    fn two_globs_distinguished_by_their_templates_pass() {
+        check(&config_yaml(
+            "  - branch: \"release/*\"\n  - branch: \"v*\"\n    release_branch: \"tags/{{ match }}\"\n",
+            "next/{{ match }}",
+        ))
+        .expect("distinct templates cannot collide");
+    }
+
+    #[test]
+    fn two_exact_lines_with_one_release_branch_are_rejected() {
+        let e = check(&config_yaml(
+            "  - branch: main\n    release_branch: next/release\n  - branch: develop\n    release_branch: next/release\n",
+            "release/next",
+        ))
+        .unwrap_err();
+        assert!(
+            matches!(e, BranchError::CollidingReleaseBranches { .. }),
+            "{e:?}"
+        );
+    }
+
+    #[test]
+    fn a_release_branch_that_is_its_own_base_is_rejected() {
+        // Would open a pull request from `main` into `main`.
+        let e = check(&config_yaml(
+            "  - branch: main\n    release_branch: main\n",
+            "release/next",
+        ))
+        .unwrap_err();
+        assert!(
+            matches!(e, BranchError::ReleaseBranchIsBaseBranch { .. }),
+            "{e:?}"
+        );
+    }
+
+    #[test]
+    fn a_release_branch_that_is_another_lines_base_is_rejected() {
+        let e = check(&config_yaml(
+            "  - branch: main\n    release_branch: develop\n  - branch: develop\n",
+            "next/{{ match }}",
+        ))
+        .unwrap_err();
+        assert!(
+            matches!(e, BranchError::ReleaseBranchIsBaseBranch { .. }),
+            "{e:?}"
+        );
+    }
+
+    #[test]
+    fn a_constant_release_branch_is_fine_for_one_exact_line() {
         let c = config("[main]", "release/next");
         check(&c).expect("one line cannot collide with itself");
+    }
+
+    #[test]
+    fn every_line_overriding_leaves_the_top_level_template_unused_but_checked() {
+        // The top-level template is rendered even when nothing falls
+        // back to it, so a syntax error there cannot lie dormant until
+        // someone adds a line without an override.
+        let e = check(&config_yaml(
+            "  - branch: main\n    release_branch: next/main\n",
+            "next/{{ match ",
+        ))
+        .unwrap_err();
+        assert!(matches!(e, BranchError::Template(_)), "{e:?}");
     }
 
     #[test]

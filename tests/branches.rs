@@ -185,7 +185,112 @@ fn a_constant_release_branch_across_lines_is_refused() {
 
     assert_ne!(out.code, 0, "two lines would collide on one branch");
     assert!(
-        out.diagnostics().contains("release line"),
+        out.diagnostics()
+            .contains("ship::branches::constant_glob_release_branch"),
+        "{}",
+        out.diagnostics()
+    );
+}
+
+// --- Per-entry overrides -------------------------------------------------
+
+/// One line deviates; the rest fall back to the top-level template.
+const OVERRIDE: &str = "version: 1\n\
+                        release_branch: \"next/{{ match }}\"\n\
+                        branches:\n\
+                        \x20 - branch: main\n\
+                        \x20   release_branch: next/release\n\
+                        \x20 - \"release/*\"\n\
+                        workflows:\n  prepare: prepare-release\n";
+
+#[test]
+fn an_overridden_line_stages_where_it_says() {
+    let repo = Repo::new(OVERRIDE, stub());
+    let out = repo.ship(&["status", "--base", "main", "--json"]);
+
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    let status: serde_json::Value = serde_json::from_str(&out.stdout).expect("status is JSON");
+    assert_eq!(status["release_branch"], "next/release");
+    assert_eq!(status["branch_rule"], "main");
+}
+
+#[test]
+fn a_line_without_an_override_still_falls_back() {
+    let repo = Repo::new(OVERRIDE, stub());
+    let out = repo.ship(&["status", "--base", "release/1.x", "--json"]);
+
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    let status: serde_json::Value = serde_json::from_str(&out.stdout).expect("status is JSON");
+    assert_eq!(status["release_branch"], "next/1.x");
+}
+
+#[test]
+fn prepare_opens_the_pull_request_from_the_overridden_branch() {
+    let repo = Repo::new(OVERRIDE, stub());
+    let out = repo.ship(&["prepare", "--base", "main"]);
+
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    assert!(
+        repo.stub.called_with(&["pr create", "next/release"]),
+        "the override has to reach the PR, not just the report: {:?}",
+        repo.stub.calls()
+    );
+}
+
+#[test]
+fn validate_says_which_lines_override_the_template() {
+    let repo = Repo::new(OVERRIDE, stub());
+    let out = repo.ship(&["validate"]);
+
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    with_redactions(|| insta::assert_snapshot!("validate_overrides", out.diagnostics()));
+}
+
+#[test]
+fn the_selector_key_is_branch_not_match() {
+    let config = "version: 1\nbranches:\n  - match: main\nworkflows:\n  prepare: prepare-release\n";
+    let repo = Repo::new(config, stub());
+    let out = repo.ship(&["validate"]);
+
+    assert_ne!(out.code, 0);
+    with_redactions(|| insta::assert_snapshot!("match_is_not_the_key", out.diagnostics()));
+}
+
+#[test]
+fn two_globs_that_can_produce_one_branch_are_refused() {
+    // `release/1.x` and `v1.x` both capture `1.x`.
+    let config = "version: 1\n\
+                  branches: [\"release/*\", \"v*\"]\n\
+                  release_branch: \"next/{{ match }}\"\n\
+                  workflows:\n  prepare: prepare-release\n";
+    let repo = Repo::new(config, stub());
+    let out = repo.ship(&["validate"]);
+
+    assert_ne!(out.code, 0);
+    assert!(
+        // The code, not the prose: miette wraps the message, so any
+        // long-enough phrase is at the mercy of the terminal width.
+        out.diagnostics()
+            .contains("ship::branches::colliding_globs"),
+        "{}",
+        out.diagnostics()
+    );
+}
+
+#[test]
+fn a_release_branch_that_is_a_base_branch_is_refused() {
+    let config = "version: 1\n\
+                  branches:\n\
+                  \x20 - branch: main\n\
+                  \x20   release_branch: main\n\
+                  workflows:\n  prepare: prepare-release\n";
+    let repo = Repo::new(config, stub());
+    let out = repo.ship(&["validate"]);
+
+    assert_ne!(out.code, 0, "a PR from main into main is not a release");
+    assert!(
+        out.diagnostics()
+            .contains("ship::branches::release_branch_is_base_branch"),
         "{}",
         out.diagnostics()
     );

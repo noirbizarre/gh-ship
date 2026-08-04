@@ -1,0 +1,9 @@
+---
+source: tests/branches.rs
+expression: out.diagnostics()
+---
+✔ .github/ship.yml is valid
+  release line: main -> next/release (override)
+  release line: release/* -> next/{{ match }} (per match)
+  prepare: prepare-release
+✔ workflows satisfy the gh-ship contract

@@ -63,6 +63,17 @@ so `main` and `release/1.x` release independently and in parallel. gh-ship
 works out which line it is on from the branch it is running on — or pass
 `--base release/1.x` to say so explicitly.
 
+If one line needs a release branch the template cannot express, give that entry
+its own:
+
+```yaml
+release_branch: "next/{{ match }}"
+branches:
+  - branch: main
+    release_branch: next/release
+  - "release/*"
+```
+
 ## What happened to `base_branch`?
 
 It became `branches`, which is the same idea for any number of release lines:

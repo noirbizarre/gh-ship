@@ -69,7 +69,7 @@ release:
 |---|---|---|---|
 | `version` | integer | — | **Required.** Config schema version. Must be `1`. |
 | `release_branch` | template | `release/next` | Branch the release is staged on. |
-| `branches` | list | repo default | Base branches to release from — see [Release lines](#release-lines). |
+| `branches` | list | repo default | Base branches to release from, one release line each — see [Release lines](#release-lines). Entries are branch names, or mappings with `branch` and an optional `release_branch`. |
 | `workflows` | object | — | **Required.** See below. |
 | `pull_request` | object | — | Release PR rendering. |
 | `release` | object | — | GitHub Release behaviour. |
@@ -128,6 +128,26 @@ branches, so two prepares can run at once without touching each other.
 
 ### Entries
 
+An entry is written either as a **branch name** or as a **mapping**:
+
+```yaml
+release_branch: "next/{{ match }}"
+branches:
+  - branch: main               # this line deviates
+    release_branch: next/release
+  - "release/*"                # this one uses the top-level template
+```
+
+The two forms mean the same thing when the mapping carries no `release_branch`;
+`- main` and `- {branch: main}` are one and the same line. Reach for the mapping
+only when a line needs its own release branch — the plain form stays the common
+case.
+
+| Key | Meaning |
+|---|---|
+| `branch` | **Required.** The base branch to release from. A glob if it holds `*`. |
+| `release_branch` | This line's template, overriding the top-level one. |
+
 An entry containing `*` is a **glob**; anything else is an **exact branch
 name**. A glob may contain at most one `*`, and `*` matches `/` — so
 `release/*` covers `release/1.x` as well as `release/1/x`.
@@ -138,6 +158,12 @@ therefore means what it looks like: `main` is special.
 
 A branch matching no entry is refused, rather than released from by accident.
 
+!!! tip "The selector key is `branch`, not `match`"
+
+    `match` is the name of the *template variable* — what a `*` captured. The
+    key naming the branch is `branch`. gh-ship says so if you reach for the
+    other one.
+
 ### The `release_branch` template
 
 `release_branch` is a MiniJinja template with two variables:
@@ -147,16 +173,25 @@ A branch matching no entry is refused, rather than released from by accident.
 | `{{ branch }}` | The full base branch name, e.g. `release/1.x`. |
 | `{{ match }}` | What the `*` captured, e.g. `1.x`. For an exact entry, the branch itself. |
 
-!!! warning "With several lines, it must vary"
+An entry's own `release_branch` is a template too, with the same context, and
+wins over the top-level one for that line.
 
-    A constant `release_branch` would put every line on the same branch, where
-    they would silently overwrite each other's Release PR. gh-ship refuses a
-    configuration with two or more `branches` entries whose `release_branch`
-    renders the same for every one of them.
+!!! warning "Two lines must never stage on the same branch"
 
-    Two *templates* that happen to collide — different bases rendering to the
-    same name — cannot be detected up front. Keep `{{ match }}` in the name and
-    they cannot.
+    They would share a head branch, and so a Release PR, and each prepare would
+    silently overwrite the other's. `gh ship validate` refuses four ways of
+    getting there:
+
+    - a **glob whose release branch does not vary** with what it matches —
+      `branches: ["release/*"]` with a constant `release_branch` would collect
+      every maintenance line onto one branch;
+    - **two globs that can produce one name** — `release/*` and `v*` under
+      `next/{{ match }}` both send `1.x` to `next/1.x`;
+    - **two exact lines** rendering to the same name;
+    - a **release branch that is also a base branch**, which would open a pull
+      request from a branch into itself.
+
+    Keeping `{{ match }}` in the name avoids all four.
 
 ### Which branch am I on?
 

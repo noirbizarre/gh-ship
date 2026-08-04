@@ -145,6 +145,10 @@ fn validate_setup(cli: &Cli, theme: Theme) -> Result<()> {
 /// Only exact entries can be resolved without knowing a real branch, so
 /// globs are reported as the template they will render — which is still
 /// enough to catch "I meant `{{ match }}`, I wrote `{{ matched }}`".
+///
+/// The template shown is the one actually in force for that line, and an
+/// overridden line says so: when a release lands on an unexpected
+/// branch, this is the line that explains why.
 fn report_release_lines(config: &Config, theme: Theme) -> Result<()> {
     if !config.has_branches() {
         eprintln!(
@@ -154,15 +158,25 @@ fn report_release_lines(config: &Config, theme: Theme) -> Result<()> {
         return Ok(());
     }
 
-    for entry in config.branches() {
-        let resolved = if branches::is_pattern(entry) {
-            format!("{} (per match)", config.release_branch_template())
+    for (i, rule) in config.branches().iter().enumerate() {
+        let template = config.release_branch_template_for(Some(i));
+        let resolved = if rule.is_pattern() {
+            format!("{template} (per match)")
         } else {
-            branches::resolve(config, entry)?.release
+            branches::resolve(config, &rule.branch)?.release
+        };
+        let origin = if rule.release_branch.is_some() {
+            " (override)"
+        } else {
+            ""
         };
         eprintln!(
             "{}",
-            logger::detail(theme, "release line", &format!("{entry} -> {resolved}"))
+            logger::detail(
+                theme,
+                "release line",
+                &format!("{} -> {resolved}{origin}", rule.branch)
+            )
         );
     }
     Ok(())
