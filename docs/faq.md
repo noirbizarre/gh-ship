@@ -205,6 +205,7 @@ the binary. This is enforced by a test.
 
 ## Can I use gh-ship without the GitHub CLI?
 
-Only for `validate`. Everything else is GitHub orchestration, and gh-ship delegates
-all GitHub access to `gh` rather than implementing a REST client and handling tokens
-itself.
+Only for `init` and `validate`. Both are entirely local — `init` writes files and
+`validate` checks them against a schema baked into the binary. Everything else is
+GitHub orchestration, and gh-ship delegates all GitHub access to `gh` rather than
+implementing a REST client and handling tokens itself.

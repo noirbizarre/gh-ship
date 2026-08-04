@@ -34,7 +34,7 @@ upload.
 $ gh ship validate
 ✔ .github/ship.yml is valid
   release branch: release/next
-  prepare: prepare-release (🚀 Prepare Release)
+  prepare: prepare-release  —  🚀 Prepare Release
 ✔ workflows satisfy the gh-ship contract
 ```
 
@@ -82,7 +82,7 @@ At any point:
 $ gh ship status
 ▶ status of acme/widgets
 
-  base branch: main
+  base branch: main (the repository default)
   release branch: release/next
   release pr: #7 Release 1.4.0 [open]
   pr: https://github.com/acme/widgets/pull/7
