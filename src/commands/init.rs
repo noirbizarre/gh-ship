@@ -592,6 +592,37 @@ mod tests {
         }
     }
 
+    /// Uncommenting a hint must produce a config that still parses.
+    ///
+    /// This is what a user actually does with a commented example, and
+    /// it is the step the schema comparison above cannot make on its
+    /// own: a key can exist and still be suggested with a value the
+    /// parser rejects.
+    #[test]
+    fn the_hints_work_once_uncommented() {
+        let yaml = render_config("prepare-release", Some("publish-release"));
+        let uncommented: String = yaml
+            .lines()
+            .map(|line| match line.split_once("# ") {
+                // Only hints: a prose comment has no `key: value` shape.
+                Some((indent, rest))
+                    if indent.trim().is_empty()
+                        && rest.split_once(':').is_some_and(|(k, _)| {
+                            k.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+                        }) =>
+                {
+                    format!("{indent}{rest}")
+                }
+                _ => line.to_string(),
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let c = Config::parse(".github/ship.yml", &uncommented)
+            .expect("every commented hint must be uncommentable");
+        assert!(c.has_branches(), "the branches hint must take effect");
+    }
+
     /// The shipped templates must satisfy the contract they exist to
     /// teach. If this fails, `init` generates workflows that `validate`
     /// immediately rejects.
