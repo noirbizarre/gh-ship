@@ -500,7 +500,7 @@ mod tests {
         let c = Config::parse(".github/ship.yml", &yaml).expect("init must emit a valid config");
         assert_eq!(c.prepare_workflow(), "prepare-release");
         assert_eq!(c.publish_workflow(), Some("publish-release"));
-        assert_eq!(c.release_branch(), DEFAULT_RELEASE_BRANCH);
+        assert_eq!(c.release_branch_template(), DEFAULT_RELEASE_BRANCH);
     }
 
     #[test]

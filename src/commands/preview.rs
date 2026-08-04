@@ -21,7 +21,7 @@ use gh_ship::style::Theme;
 use super::context::{Context, print_rendered, report_nothing_to_release, run_workflow};
 
 pub fn run(cli: &Cli, args: &PreviewArgs, theme: Theme) -> Result<()> {
-    let ctx = Context::load(cli, theme)?;
+    let ctx = Context::load(cli, args.base.base.as_deref(), theme)?;
 
     eprintln!("{}", logger::action(theme, "previewing", ctx.repo_slug()));
     eprintln!(

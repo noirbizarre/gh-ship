@@ -39,12 +39,24 @@ use super::context::{Context, report_nothing_to_release, run_workflow_as};
 use super::short_sha;
 
 pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
-    let ctx = Context::load(cli, theme)?;
+    let ctx = Context::load(cli, args.base.base.as_deref(), theme)?;
 
     eprintln!("{}", logger::action(theme, "preparing", ctx.repo_slug()));
 
     let release_branch = ctx.release_branch().to_string();
     let base_branch = ctx.base_branch().to_string();
+
+    // Scope the staging branches to this release line only when there is
+    // more than one line to confuse. Without `branches` there is exactly
+    // one, so the unscoped names and the unscoped sweep stay as they
+    // were — which also means no branch staged by an earlier version is
+    // left orphaned.
+    let scoped = ctx.config.has_branches();
+    let sweep_prefix = if scoped {
+        staging_prefix(&base_branch)
+    } else {
+        STAGING_PREFIX.to_string()
+    };
 
     // Read the base tip once: the guard compares it against the merge commit of
     // the last Release PR, and staging cuts its branch from it.
@@ -57,12 +69,12 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
     }
 
     // Clean up after any run that was abandoned before it could tidy up.
-    sweep_staging_branches(&ctx);
+    sweep_staging_branches(&ctx, &sweep_prefix);
 
     // Stage on a throwaway branch cut from the base, rather than resetting the
     // release branch in place. See `stage_branch` for why.
     let ship_id = ShipId::generate();
-    let staging = stage_branch(&ship_id);
+    let staging = stage_branch(&base_branch, &ship_id, scoped);
 
     eprintln!(
         "{}",
@@ -83,7 +95,7 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
     if !artifact.changed {
         // Nothing was committed, so there is nothing to promote and no reason
         // to leave a release branch behind.
-        sweep_staging_branches(&ctx);
+        sweep_staging_branches(&ctx, &sweep_prefix);
         report_nothing_to_release(theme);
         return Ok(());
     }
@@ -91,7 +103,7 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
     // Promote: move the release branch straight from its previous release
     // commit to the new one, in a single update.
     promote(&ctx, &staging, &release_branch)?;
-    sweep_staging_branches(&ctx);
+    sweep_staging_branches(&ctx, &sweep_prefix);
 
     let rendered = render::render(ctx.config.pull_request(), &artifact)?;
 
@@ -257,13 +269,41 @@ fn release_in_flight(
 /// Prefix for the throwaway branches `prepare` stages its work on.
 pub const STAGING_PREFIX: &str = "ship/prepare-";
 
+/// The staging-branch prefix for one release line.
+///
+/// With several release lines, two prepares can be in flight at once,
+/// and an unscoped sweep would delete the other line's staging branch —
+/// destroying the ref its `workflow_dispatch` is running on. The line
+/// therefore becomes part of the name and part of the sweep filter.
+pub fn staging_prefix(base: &str) -> String {
+    format!("{STAGING_PREFIX}{}-", slug(base))
+}
+
+/// A branch name reduced to one git-ref-safe path segment.
+fn slug(branch: &str) -> String {
+    branch
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '.' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
 /// The staging branch name for a run.
 ///
 /// Named after the correlation nonce so the branch, the dispatch and the run
 /// all carry one identifier — which is what makes a branch left behind by a
 /// failed run traceable to the run that abandoned it.
-fn stage_branch(ship_id: &ShipId) -> String {
-    format!("{STAGING_PREFIX}{ship_id}")
+fn stage_branch(base: &str, ship_id: &ShipId, scoped: bool) -> String {
+    if scoped {
+        format!("{}{ship_id}", staging_prefix(base))
+    } else {
+        format!("{STAGING_PREFIX}{ship_id}")
+    }
 }
 
 /// Move the release branch onto the staged release commit.
@@ -299,15 +339,15 @@ fn promote(ctx: &Context, staging: &str, release: &str) -> Result<()> {
     Ok(())
 }
 
-/// Delete every staging branch.
+/// Delete every staging branch under `prefix`.
 ///
 /// Housekeeping, so it never fails a release: a branch that cannot be deleted
 /// is reported and otherwise ignored. Sweeping on every run is what stops
 /// abandoned runs — a failure part-way, or `--no-wait` — from accumulating
-/// branches, and is safe because gh-ship releases one at a time: the Release PR
-/// is the lock.
-fn sweep_staging_branches(ctx: &Context) {
-    for branch in repo::matching_branches(&ctx.gh, STAGING_PREFIX) {
+/// branches, and is safe because gh-ship releases one at a time *per line*:
+/// the Release PR is the lock, and there is one per line.
+fn sweep_staging_branches(ctx: &Context, prefix: &str) {
+    for branch in repo::matching_branches(&ctx.gh, prefix) {
         if repo::delete_branch(&ctx.gh, &branch).is_err() {
             eprintln!(
                 "{}",

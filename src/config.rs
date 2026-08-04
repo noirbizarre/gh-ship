@@ -44,11 +44,11 @@ pub struct Source {
 }
 
 impl Source {
-    fn named(&self) -> NamedSource<String> {
+    pub(crate) fn named(&self) -> NamedSource<String> {
         NamedSource::new(&self.name, self.text.clone()).with_language("yaml")
     }
 
-    fn locate(&self, needle: &str) -> SourceSpan {
+    pub(crate) fn locate(&self, needle: &str) -> SourceSpan {
         suggest::span_of_substring(&self.text, needle)
     }
 }
@@ -66,15 +66,23 @@ pub struct Settings {
     /// Config schema version. Must be [`CONFIG_VERSION`].
     pub version: u32,
 
-    /// Branch on which the release is staged. Created by gh-ship if
-    /// missing; the prepare workflow commits to it.
+    /// Branch on which the release is staged.
+    ///
+    /// A MiniJinja template rendered per release line, with `branch`
+    /// (the full base branch) and `match` (what a `*` in the matching
+    /// [`Settings::branches`] entry captured) in context. A config with
+    /// a single release line can leave it a plain string.
     #[serde(default = "default_release_branch")]
     pub release_branch: String,
 
-    /// Branch the Release PR targets. Defaults to the repository's
-    /// default branch, resolved at runtime.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub base_branch: Option<String>,
+    /// The base branches gh-ship releases from, one release line each.
+    ///
+    /// An entry containing `*` is a glob; anything else is an exact
+    /// branch name. Empty — the default — means the repository's own
+    /// default branch, resolved at runtime, which is why there is no
+    /// literal `main` anywhere in this model.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub branches: Vec<String>,
 
     /// The workflows gh-ship dispatches.
     pub workflows: Workflows,
@@ -234,6 +242,42 @@ pub enum ConfigError {
         #[help]
         help: Option<String>,
     },
+
+    #[error("`{field}` is no longer a configuration key")]
+    #[diagnostic(code(ship::config::removed_field), help("{help}"))]
+    RemovedField {
+        field: String,
+        help: String,
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("remove this")]
+        span: SourceSpan,
+    },
+
+    #[error("invalid branch pattern `{pattern}`: {reason}")]
+    #[diagnostic(code(ship::config::branch_pattern), help("{help}"))]
+    BranchPattern {
+        pattern: String,
+        reason: String,
+        help: String,
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("here")]
+        span: SourceSpan,
+    },
+
+    #[error("`branches` lists `{entry}` twice")]
+    #[diagnostic(
+        code(ship::config::duplicate_branch),
+        help("the first match wins, so the second entry is dead — remove one")
+    )]
+    DuplicateBranch {
+        entry: String,
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("duplicate")]
+        span: SourceSpan,
+    },
 }
 
 impl Config {
@@ -260,6 +304,19 @@ impl Config {
 
         let settings: Settings = serde_norway::from_str(text).map_err(|e| {
             let message = e.to_string();
+            // `base_branch` was folded into `branches`, and
+            // `deny_unknown_fields` would report it as an anonymous typo.
+            // A removed key deserves its migration instructions.
+            if message.contains("unknown field `base_branch`") {
+                return ConfigError::RemovedField {
+                    field: "base_branch".into(),
+                    help: "`base_branch` was replaced by `branches`, which lists every base \
+                           branch gh-ship releases from. Write `branches: [develop]`."
+                        .into(),
+                    src: source.named(),
+                    span: source.locate("base_branch:"),
+                };
+            }
             ConfigError::Parse {
                 name: name.to_string(),
                 help: parse_help(&message),
@@ -312,12 +369,82 @@ impl Config {
             });
         }
 
+        self.check_branches()?;
+
+        Ok(())
+    }
+
+    /// Shape checks for `branches`.
+    ///
+    /// Only the checks that need no templating live here; whether the
+    /// `release_branch` template compiles, and whether it actually
+    /// varies per line, belong to [`crate::branches::check`] so that
+    /// this module stays free of MiniJinja.
+    fn check_branches(&self) -> Result<(), ConfigError> {
+        let mut seen: Vec<&str> = Vec::new();
+
+        for (i, entry) in self.settings.branches.iter().enumerate() {
+            let entry = entry.as_str();
+
+            if entry.trim().is_empty() {
+                return Err(ConfigError::EmptyField {
+                    field: format!("branches[{i}]"),
+                    src: self.source.named(),
+                    span: self.source.locate("branches:"),
+                    help: Some(
+                        "each entry is a base branch name, or a glob such as `release/*`".into(),
+                    ),
+                });
+            }
+
+            if entry.matches('*').count() > 1 {
+                return Err(ConfigError::BranchPattern {
+                    pattern: entry.to_string(),
+                    reason: "a pattern may contain at most one `*`".into(),
+                    help: "`*` captures the part of the branch name that varies, and \
+                           `{{ match }}` is a single value — split this into several entries"
+                        .into(),
+                    src: self.source.named(),
+                    span: self.source.locate(entry),
+                });
+            }
+
+            if seen.contains(&entry) {
+                return Err(ConfigError::DuplicateBranch {
+                    entry: entry.to_string(),
+                    src: self.source.named(),
+                    span: self.source.locate(entry),
+                });
+            }
+            seen.push(entry);
+        }
+
         Ok(())
     }
 
     /// Convenience accessors.
-    pub fn release_branch(&self) -> &str {
+    ///
+    /// This is the `release_branch` *template*, not a branch name: with
+    /// several release lines it renders differently per line. The
+    /// resolved name comes from the release line — see
+    /// [`crate::branches::Line`].
+    pub fn release_branch_template(&self) -> &str {
         &self.settings.release_branch
+    }
+
+    /// The configured base branches, empty when the repository default
+    /// branch is the only release line.
+    pub fn branches(&self) -> &[String] {
+        &self.settings.branches
+    }
+
+    /// Whether explicit release lines are configured.
+    ///
+    /// This is the switch that turns on base-branch detection: without
+    /// it there is nothing to select, so the repository default branch
+    /// is as good an answer as it ever was.
+    pub fn has_branches(&self) -> bool {
+        !self.settings.branches.is_empty()
     }
 
     pub fn prepare_workflow(&self) -> &str {
@@ -326,10 +453,6 @@ impl Config {
 
     pub fn publish_workflow(&self) -> Option<&str> {
         self.settings.workflows.publish.as_deref()
-    }
-
-    pub fn base_branch(&self) -> Option<&str> {
-        self.settings.base_branch.as_deref()
     }
 
     pub fn pull_request(&self) -> &PullRequestConfig {
@@ -378,13 +501,13 @@ mod tests {
     fn minimal_config_is_enough() {
         let c = parse(MINIMAL).unwrap();
         assert_eq!(c.prepare_workflow(), "prepare-release");
-        assert_eq!(c.release_branch(), DEFAULT_RELEASE_BRANCH);
+        assert_eq!(c.release_branch_template(), DEFAULT_RELEASE_BRANCH);
         assert_eq!(c.publish_workflow(), None);
         assert_eq!(c.settings.pull_request.title, DEFAULT_PR_TITLE);
         assert!(c.settings.release.draft, "draft-first is the default");
-        assert_eq!(
-            c.settings.base_branch, None,
-            "base defaults to the repo default"
+        assert!(
+            !c.has_branches(),
+            "no branches means the repo default branch"
         );
     }
 
@@ -393,7 +516,7 @@ mod tests {
         let text = r#"
 version: 1
 release_branch: release/staging
-base_branch: develop
+branches: [develop]
 workflows:
   prepare: prepare-release
   publish: publish-release
@@ -408,8 +531,8 @@ release:
   draft: false
 "#;
         let c = parse(text).unwrap();
-        assert_eq!(c.release_branch(), "release/staging");
-        assert_eq!(c.settings.base_branch.as_deref(), Some("develop"));
+        assert_eq!(c.release_branch_template(), "release/staging");
+        assert_eq!(c.branches(), ["develop"]);
         assert_eq!(c.publish_workflow(), Some("publish-release"));
         assert_eq!(c.settings.pull_request.title, "Ship {{ version }}");
         assert_eq!(
@@ -419,6 +542,49 @@ release:
         assert_eq!(c.settings.pull_request.labels, ["release", "automated"]);
         assert!(c.settings.pull_request.reuse, "reuse defaults to true");
         assert!(!c.settings.release.draft);
+    }
+
+    #[test]
+    fn parses_several_release_lines() {
+        let text = "version: 1\nbranches: [main, \"release/*\"]\nrelease_branch: \"next/{{ match }}\"\nworkflows:\n  prepare: x\n";
+        let c = parse(text).unwrap();
+        assert_eq!(c.branches(), ["main", "release/*"]);
+        assert!(c.has_branches());
+    }
+
+    #[test]
+    fn base_branch_explains_its_replacement() {
+        let e = parse("version: 1\nbase_branch: develop\nworkflows:\n  prepare: x\n").unwrap_err();
+        let ConfigError::RemovedField { field, help, .. } = &e else {
+            panic!("expected RemovedField, got {e:?}")
+        };
+        assert_eq!(field, "base_branch");
+        assert!(help.contains("branches: [develop]"), "{help}");
+    }
+
+    #[test]
+    fn rejects_a_pattern_with_several_wildcards() {
+        let e = parse("version: 1\nbranches: [\"a*b*c\"]\nworkflows:\n  prepare: x\n").unwrap_err();
+        let ConfigError::BranchPattern { pattern, .. } = &e else {
+            panic!("expected BranchPattern, got {e:?}")
+        };
+        assert_eq!(pattern, "a*b*c");
+    }
+
+    #[test]
+    fn rejects_a_duplicated_branch() {
+        let e =
+            parse("version: 1\nbranches: [main, main]\nworkflows:\n  prepare: x\n").unwrap_err();
+        assert!(matches!(e, ConfigError::DuplicateBranch { .. }), "{e:?}");
+    }
+
+    #[test]
+    fn rejects_an_empty_branch_entry() {
+        let e = parse("version: 1\nbranches: [\"  \"]\nworkflows:\n  prepare: x\n").unwrap_err();
+        let ConfigError::EmptyField { field, .. } = &e else {
+            panic!("expected EmptyField, got {e:?}")
+        };
+        assert_eq!(field, "branches[0]");
     }
 
     #[test]

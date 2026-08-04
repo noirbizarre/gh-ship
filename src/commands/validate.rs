@@ -19,6 +19,7 @@ use miette::{Diagnostic, Result};
 use thiserror::Error;
 
 use gh_ship::artifact::validate;
+use gh_ship::branches;
 use gh_ship::cli::{Cli, ValidateArgs};
 use gh_ship::config::Config;
 use gh_ship::gh::workflow::{self, Role, Workflow};
@@ -93,14 +94,21 @@ pub struct SetupInvalid {
 
 fn validate_setup(cli: &Cli, theme: Theme) -> Result<()> {
     let config = Config::load(&cli.config)?;
+
+    // Whether `release_branch` compiles, and whether it actually varies
+    // per line, needs the template engine — so it is checked here rather
+    // than at parse time. Catching it now is the whole point: a typo in
+    // a branch template must fail at setup, not mid-release. It runs
+    // before the "is valid" line, because announcing validity and then
+    // failing reads as a contradiction.
+    branches::check(&config)?;
+
     eprintln!(
         "{}",
         logger::ok(theme, &format!("{} is valid", cli.config.display()))
     );
-    eprintln!(
-        "{}",
-        logger::detail(theme, "release branch", config.release_branch())
-    );
+
+    report_release_lines(&config, theme)?;
 
     // Workflows are resolved relative to the repository root, which we
     // take to be the config file's grandparent (`.github/ship.yml`).
@@ -130,6 +138,34 @@ fn validate_setup(cli: &Cli, theme: Theme) -> Result<()> {
     } else {
         Err(SetupInvalid { issues }.into())
     }
+}
+
+/// Show what each release line resolves to.
+///
+/// Only exact entries can be resolved without knowing a real branch, so
+/// globs are reported as the template they will render — which is still
+/// enough to catch "I meant `{{ match }}`, I wrote `{{ matched }}`".
+fn report_release_lines(config: &Config, theme: Theme) -> Result<()> {
+    if !config.has_branches() {
+        eprintln!(
+            "{}",
+            logger::detail(theme, "release branch", config.release_branch_template())
+        );
+        return Ok(());
+    }
+
+    for entry in config.branches() {
+        let resolved = if branches::is_pattern(entry) {
+            format!("{} (per match)", config.release_branch_template())
+        } else {
+            branches::resolve(config, entry)?.release
+        };
+        eprintln!(
+            "{}",
+            logger::detail(theme, "release line", &format!("{entry} -> {resolved}"))
+        );
+    }
+    Ok(())
 }
 
 fn check_workflow(

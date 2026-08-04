@@ -149,6 +149,10 @@ pull_request:
 
 Only `version` and `workflows.prepare` are required.
 
+Maintaining several release lines at once — a `1.x` branch alive while `main`
+moves on — is a two-line addition; see
+[Release lines](https://noirbizarre.github.io/gh-ship/configuration/#release-lines).
+
 ## Commands
 
 | Command | What it does |

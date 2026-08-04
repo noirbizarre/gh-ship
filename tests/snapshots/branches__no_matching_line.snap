@@ -1,0 +1,10 @@
+---
+source: tests/branches.rs
+expression: out.diagnostics()
+---
+ship::branches::no_match
+
+  × no branch rule matches `mian`
+  help: `branches` lists `main`, `release/*`. Add `mian` to it, or pass
+        `--base` to release from a branch that is listed
+        did you mean `main`?

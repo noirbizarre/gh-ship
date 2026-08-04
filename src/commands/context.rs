@@ -13,8 +13,10 @@ use thiserror::Error;
 
 use gh_ship::artifact::validate;
 use gh_ship::artifact::{ARTIFACT_FILE, ARTIFACT_NAME, Artifact};
+use gh_ship::branches::{self, Line};
 use gh_ship::cli::Cli;
 use gh_ship::config::Config;
+use gh_ship::detect::{self, Detected, Origin};
 use gh_ship::gh::repo::{self, Repository};
 use gh_ship::gh::run::{self, Run, ShipId};
 use gh_ship::gh::workflow::WorkflowRef;
@@ -69,11 +71,17 @@ pub struct Context {
     /// silently finds nothing and the raw config string ends up on the
     /// wire instead of a filename.
     pub root: PathBuf,
+    /// The release line this invocation is working on.
+    ///
+    /// Resolved once, here, so that no command has to know whether the
+    /// repository has one release line or five.
+    line: Line,
+    origin: Origin,
 }
 
 impl Context {
-    /// Resolve configuration and repository.
-    pub fn load(cli: &Cli, theme: Theme) -> Result<Self> {
+    /// Resolve configuration, repository and release line.
+    pub fn load(cli: &Cli, base: Option<&str>, theme: Theme) -> Result<Self> {
         let config = Config::load(&cli.config)?;
         let gh = Gh::new(cli.repo.clone());
         let repository = repo::repository(&gh)?;
@@ -81,12 +89,18 @@ impl Context {
         // read it off the invoker instead of having it threaded through
         // every call.
         let gh = gh.scoped_to(&repository.name_with_owner);
+        let root = repo_root(&cli.config);
+
+        let (line, origin) = resolve_line(&config, &repository, base, &root)?;
+
         Ok(Self {
             gh,
             config,
             repository,
             theme,
-            root: repo_root(&cli.config),
+            root,
+            line,
+            origin,
         })
     }
 
@@ -103,23 +117,65 @@ impl Context {
     }
 
     /// The branch the Release PR targets.
-    ///
-    /// Config wins; otherwise the repository's actual default branch,
-    /// which is why this is resolved at runtime rather than defaulted to
-    /// `main` in the config model.
     pub fn base_branch(&self) -> &str {
-        self.config
-            .base_branch()
-            .unwrap_or(&self.repository.default_branch.name)
+        &self.line.base
     }
 
+    /// The branch the release is staged on.
     pub fn release_branch(&self) -> &str {
-        self.config.release_branch()
+        &self.line.release
+    }
+
+    /// The resolved release line.
+    pub fn line(&self) -> &Line {
+        &self.line
+    }
+
+    /// How the base branch was arrived at, for reporting.
+    pub fn base_origin(&self) -> Origin {
+        self.origin
     }
 
     pub fn repo_slug(&self) -> &str {
         &self.repository.name_with_owner
     }
+}
+
+/// Resolve the release line this invocation works on.
+///
+/// The two arms are deliberately different. With `branches` configured
+/// the base branch is an *input* that selects a line, so it is detected;
+/// without it the base branch is a *setting* with one possible value,
+/// and running detection there would silently retarget the Release PR
+/// whenever someone happened to be on a feature branch. `--base` still
+/// wins in both, because an explicit answer always beats a guess.
+fn resolve_line(
+    config: &Config,
+    repository: &Repository,
+    base: Option<&str>,
+    root: &std::path::Path,
+) -> Result<(Line, Origin)> {
+    if !config.has_branches() {
+        let (branch, origin) = match base.map(str::trim).filter(|b| !b.is_empty()) {
+            Some(b) => (b.to_string(), Origin::Flag),
+            None => (repository.default_branch.name.clone(), Origin::Default),
+        };
+        return Ok((branches::single(config, &branch)?, origin));
+    }
+
+    // Nothing detected is not fatal: falling back to the default branch
+    // makes `--repo`-only invocations work on the main line, and when it
+    // is wrong `resolve` says which branch it assumed and which lines
+    // exist — a better error than "could not detect a branch".
+    let detected = detect::base_branch(base, root).unwrap_or(Detected {
+        branch: repository.default_branch.name.clone(),
+        origin: Origin::Default,
+    });
+
+    Ok((
+        branches::resolve(config, &detected.branch)?,
+        detected.origin,
+    ))
 }
 
 /// Dispatch a workflow, wait for it, and return the validated artifact.

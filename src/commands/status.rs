@@ -27,6 +27,12 @@ use super::short_sha;
 pub struct Status {
     pub repository: String,
     pub base_branch: String,
+    /// How the base branch was arrived at — the first thing to look at
+    /// when a release line turns out to be the wrong one.
+    pub base_branch_origin: gh_ship::detect::Origin,
+    /// The `branches` entry that matched, when release lines are configured.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub branch_rule: Option<String>,
     pub release_branch: String,
     pub release_branch_exists: bool,
     pub pull_request: Option<PullRequestStatus>,
@@ -66,7 +72,7 @@ pub struct RunStatus {
 }
 
 pub fn run(cli: &Cli, args: &StatusArgs, theme: Theme) -> Result<()> {
-    let ctx = Context::load(cli, theme)?;
+    let ctx = Context::load(cli, args.base.base.as_deref(), theme)?;
     let status = collect(&ctx)?;
 
     if args.json {
@@ -137,6 +143,11 @@ fn collect(ctx: &Context) -> Result<Status> {
     Ok(Status {
         repository: ctx.repo_slug().to_string(),
         base_branch,
+        base_branch_origin: ctx.base_origin(),
+        branch_rule: ctx
+            .line()
+            .entry
+            .and_then(|i| ctx.config.branches().get(i).cloned()),
         release_branch,
         release_branch_exists: branch_exists,
         pull_request,
@@ -194,8 +205,20 @@ fn report(status: &Status, theme: Theme) {
 
     eprintln!(
         "{}",
-        logger::detail(theme, "base branch", &status.base_branch)
+        logger::detail(
+            theme,
+            "base branch",
+            &format!(
+                "{} ({})",
+                status.base_branch,
+                status.base_branch_origin.describe()
+            )
+        )
     );
+
+    if let Some(rule) = &status.branch_rule {
+        eprintln!("{}", logger::detail(theme, "release line", rule));
+    }
 
     let branch = if status.release_branch_exists {
         status.release_branch.clone()

@@ -1,0 +1,16 @@
+---
+source: tests/branches.rs
+expression: out.diagnostics()
+---
+ship::config::removed_field
+
+  × `base_branch` is no longer a configuration key
+   ╭─[.github/ship.yml:2:1]
+ 1 │ version: 1
+ 2 │ base_branch: develop
+   · ──────┬─────
+   ·       ╰── remove this
+ 3 │ workflows:
+   ╰────
+  help: `base_branch` was replaced by `branches`, which lists every base
+        branch gh-ship releases from. Write `branches: [develop]`.

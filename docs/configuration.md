@@ -40,9 +40,9 @@ version: 1
 # yourself — anything else pushed there is discarded.
 release_branch: release/next
 
-# Branch the Release PR targets.
-# Defaults to the repository's default branch.
-base_branch: main
+# The branches gh-ship releases from, one release line each.
+# Omit it and the repository's default branch is the only line.
+branches: [main]
 
 workflows:
   prepare: prepare-release
@@ -68,8 +68,8 @@ release:
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `version` | integer | — | **Required.** Config schema version. Must be `1`. |
-| `release_branch` | string | `release/next` | Branch the release is staged on. |
-| `base_branch` | string | repo default | Branch the Release PR targets. |
+| `release_branch` | template | `release/next` | Branch the release is staged on. |
+| `branches` | list | repo default | Base branches to release from — see [Release lines](#release-lines). |
 | `workflows` | object | — | **Required.** See below. |
 | `pull_request` | object | — | Release PR rendering. |
 | `release` | object | — | GitHub Release behaviour. |
@@ -100,6 +100,98 @@ and what `gh ship init` writes.
     A workflow named here **must** declare `on: workflow_dispatch`. A
     `workflow_call`-only workflow cannot be started through the API at all.
     See [Workflows](workflows.md).
+
+## Release lines
+
+Most projects release from one branch. Some need more: a `1.x` line kept alive
+for security fixes while `main` moves on to `2.0`. `branches` lists the base
+branches gh-ship releases from, and `release_branch` becomes a template rendered
+once per line — so nothing is duplicated.
+
+```yaml
+version: 1
+branches: [main, "release/*"]
+release_branch: "next/{{ match }}"
+workflows:
+  prepare: prepare-release
+```
+
+That gives two independent releases in flight:
+
+| Base branch | Release branch | Release PR |
+|---|---|---|
+| `main` | `next/main` | `next/main` → `main` |
+| `release/1.x` | `next/1.x` | `next/1.x` → `release/1.x` |
+
+Each line gets its own release branch, its own Release PR and its own staging
+branches, so two prepares can run at once without touching each other.
+
+### Entries
+
+An entry containing `*` is a **glob**; anything else is an **exact branch
+name**. A glob may contain at most one `*`, and `*` matches `/` — so
+`release/*` covers `release/1.x` as well as `release/1/x`.
+
+Exact entries are matched first, whatever their order in the file, then globs in
+the order they are written, first match winning. Writing `main` alongside `*`
+therefore means what it looks like: `main` is special.
+
+A branch matching no entry is refused, rather than released from by accident.
+
+### The `release_branch` template
+
+`release_branch` is a MiniJinja template with two variables:
+
+| Variable | Meaning |
+|---|---|
+| `{{ branch }}` | The full base branch name, e.g. `release/1.x`. |
+| `{{ match }}` | What the `*` captured, e.g. `1.x`. For an exact entry, the branch itself. |
+
+!!! warning "With several lines, it must vary"
+
+    A constant `release_branch` would put every line on the same branch, where
+    they would silently overwrite each other's Release PR. gh-ship refuses a
+    configuration with two or more `branches` entries whose `release_branch`
+    renders the same for every one of them.
+
+    Two *templates* that happen to collide — different bases rendering to the
+    same name — cannot be detected up front. Keep `{{ match }}` in the name and
+    they cannot.
+
+### Which branch am I on?
+
+`prepare`, `preview`, `release` and `status` need to know which line they are
+working on. They look, in order:
+
+1. `--base <branch>`, or `SHIP_BASE_BRANCH`.
+2. The GitHub Actions environment — the branch a PR targets on a
+   `pull_request` event, otherwise the branch of the run. A run on a tag names
+   no branch, and is not guessed at.
+3. The local checkout's current branch.
+4. The repository's default branch.
+
+Detection only happens when `branches` is configured. Without it there is one
+line and nothing to select, so the repository default branch is used exactly as
+before — being on a feature branch never retargets your Release PR.
+
+`gh ship status` reports which it used:
+
+```
+base branch: release/1.x (detected from CI)
+release line: release/*
+```
+
+### Migrating from `base_branch`
+
+`base_branch` was replaced by `branches`, which is the same idea at any arity:
+
+```yaml
+# before
+base_branch: develop
+
+# after
+branches: [develop]
+```
 
 ### `pull_request`
 
@@ -179,6 +271,14 @@ pull_request:
     :warning: This is a pre-release.
     {% endif %}
 ```
+
+!!! warning "`release_branch` is the exception"
+
+    The `pull_request` templates above describe a release, so the artifact is
+    their context. `release_branch` names a branch, and is rendered before any
+    workflow has run — there is no artifact yet. Its context is the branch:
+    `{{ branch }}` and `{{ match }}`, and nothing else. See
+    [Release lines](#the-release_branch-template).
 
 ## Overrides from the artifact
 

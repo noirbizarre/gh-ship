@@ -49,6 +49,34 @@ gh-ship treats `version` as an opaque non-empty string. It never parses it.
 git-cliff, release-drafter, Changesets, semantic-release, and conventional-changelog
 all do this well and disagree about how. Picking one would be picking a fight.
 
+## How do I maintain a 1.x line while main moves on?
+
+Configure [release lines](configuration.md#release-lines):
+
+```yaml
+branches: [main, "release/*"]
+release_branch: "next/{{ match }}"
+```
+
+Each base branch gets its own release branch, Release PR and staging branches,
+so `main` and `release/1.x` release independently and in parallel. gh-ship
+works out which line it is on from the branch it is running on — or pass
+`--base release/1.x` to say so explicitly.
+
+## What happened to `base_branch`?
+
+It became `branches`, which is the same idea for any number of release lines:
+
+```yaml
+# before
+base_branch: develop
+
+# after
+branches: [develop]
+```
+
+`gh ship validate` will tell you this, pointing at the line.
+
 ## Will you support monorepos?
 
 Not in protocol v1, which describes exactly one release.
@@ -80,15 +108,22 @@ where things stand, and `gh ship prepare` again to pick up.
 
 ## Can two people run `gh ship prepare` at once?
 
-No — run them one at a time.
+Not on the same release line — run those one at a time.
 
 Each `prepare` sweeps abandoned `ship/prepare-*` staging branches, and the sweep
-cannot tell an abandoned branch from one a concurrent run is actively using. The
-second run would delete the first run's branch out from under it.
+cannot tell an abandoned branch from one a concurrent run is actively using. A
+second run on the same line would delete the first run's branch out from under
+it.
 
-gh-ship releases one at a time by design; the Release PR is the lock. Serialise
-with `concurrency: group: ship`, as the sample workflow in
-[Workflows](workflows.md) does.
+gh-ship releases one at a time per line by design; the Release PR is the lock,
+and there is one per line. Serialise with `concurrency: group: ship`, as the
+sample workflow in [Workflows](workflows.md) does.
+
+Different [release lines](configuration.md#release-lines) *can* prepare
+concurrently. Their staging branches are named after the line
+(`ship/prepare-release-1.x-<nonce>`) and each sweep is scoped to its own, so
+`main` and `release/1.x` never collide. Key the concurrency group by branch —
+`group: ship-${{ github.ref }}` — to allow it.
 
 ## Why does gh-ship create the tag and the release, rather than my workflow?
 

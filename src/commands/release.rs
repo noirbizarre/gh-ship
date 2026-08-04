@@ -132,7 +132,7 @@ pub enum ReleaseError {
 }
 
 pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
-    let ctx = Context::load(cli, theme)?;
+    let ctx = Context::load(cli, args.base.base.as_deref(), theme)?;
 
     eprintln!("{}", logger::action(theme, "releasing", ctx.repo_slug()));
 

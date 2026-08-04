@@ -62,11 +62,29 @@ pub enum Command {
     Release(ReleaseArgs),
 }
 
+/// The base branch to release from.
+///
+/// Flattened into the lifecycle commands rather than made global: it is
+/// meaningless to `init` and `validate`, and a flag that is silently
+/// ignored is worse than one that is refused.
+#[derive(Debug, Clone, clap::Args)]
+pub struct BaseArgs {
+    /// Base branch to release from.
+    ///
+    /// Selects the release line when `branches` is configured.
+    /// Otherwise defaults to the repository's default branch.
+    #[arg(long, value_name = "BRANCH", env = "SHIP_BASE_BRANCH")]
+    pub base: Option<String>,
+}
+
 #[derive(Debug, clap::Args)]
 pub struct ReleaseArgs {
     /// Merge the Release PR if it is still open.
     #[arg(long)]
     pub merge: bool,
+
+    #[command(flatten)]
+    pub base: BaseArgs,
 }
 
 #[derive(Debug, clap::Args)]
@@ -74,6 +92,9 @@ pub struct PrepareArgs {
     /// Dispatch the workflow but do not wait for it to finish.
     #[arg(long)]
     pub no_wait: bool,
+
+    #[command(flatten)]
+    pub base: BaseArgs,
 }
 
 #[derive(Debug, clap::Args)]
@@ -81,6 +102,9 @@ pub struct StatusArgs {
     /// Emit machine-readable JSON.
     #[arg(long)]
     pub json: bool,
+
+    #[command(flatten)]
+    pub base: BaseArgs,
 }
 
 #[derive(Debug, clap::Args)]
@@ -88,6 +112,9 @@ pub struct PreviewArgs {
     /// Emit the artifact and rendered PR as JSON.
     #[arg(long)]
     pub json: bool,
+
+    #[command(flatten)]
+    pub base: BaseArgs,
 }
 
 #[derive(Debug, clap::Args)]
@@ -145,5 +172,31 @@ mod tests {
         let cli = Cli::try_parse_from(["gh-ship", "validate", "-R", "owner/repo", "-vv"]).unwrap();
         assert_eq!(cli.repo.as_deref(), Some("owner/repo"));
         assert_eq!(cli.verbose, 2);
+    }
+
+    #[test]
+    fn base_is_accepted_by_every_lifecycle_command() {
+        for command in ["prepare", "preview", "release", "status"] {
+            let cli = Cli::try_parse_from(["gh-ship", command, "--base", "release/1.x"])
+                .unwrap_or_else(|e| panic!("{command} should accept --base: {e}"));
+            let base = match cli.command {
+                Command::Prepare(a) => a.base.base,
+                Command::Preview(a) => a.base.base,
+                Command::Release(a) => a.base.base,
+                Command::Status(a) => a.base.base,
+                other => panic!("unexpected command {other:?}"),
+            };
+            assert_eq!(base.as_deref(), Some("release/1.x"));
+        }
+    }
+
+    #[test]
+    fn base_is_refused_where_it_would_be_ignored() {
+        for command in ["init", "validate"] {
+            assert!(
+                Cli::try_parse_from(["gh-ship", command, "--base", "main"]).is_err(),
+                "{command} has no base branch to speak of"
+            );
+        }
     }
 }

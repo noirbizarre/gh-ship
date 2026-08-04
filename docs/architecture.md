@@ -45,6 +45,8 @@ src/
   commands/        # one module per subcommand
     context.rs     #   the shared dispatch → wait → validate sequence
   config.rs        # .github/ship.yml
+  detect.rs        # which branch are we releasing from?
+  branches.rs      # base branch -> release line
   render.rs        # PR templating and artifact embedding
   style / logger / suggest
 schemas/           # the published JSON Schemas — release artifact and config —
@@ -57,6 +59,19 @@ each carries its own miette diagnostic payload — code, help text and source
 span — next to the code that can raise it.
 
 ## Key mechanisms
+
+### Resolving the release line
+
+Every lifecycle command starts by answering "which release am I working on?".
+`detect.rs` finds the base branch — the `--base` flag, the GitHub Actions
+environment, then the checkout's `.git/HEAD` — and `branches.rs` matches it
+against the configured lines to produce a `Line { base, release }`. `Context`
+does this once, so no command below it knows whether the repository has one
+release line or five.
+
+`detect.rs` reads `.git/HEAD` directly rather than shelling out to `git`. `gh`
+is the only subprocess gh-ship spawns, and keeping it that way costs ten lines
+and buys a detection story with no `PATH` dependency and no way to fetch.
 
 ### Dispatch correlation
 

@@ -15,16 +15,22 @@
     },
 
     "release_branch": {
-      "description": "Branch on which the release is staged. gh-ship creates it if missing and moves it onto each new release commit, so it is machine-managed: anything else pushed there is discarded. Your prepare workflow commits to a throwaway ship/prepare-* branch, which gh-ship then promotes onto this one.",
+      "description": "Branch on which the release is staged. gh-ship creates it if missing and moves it onto each new release commit, so it is machine-managed: anything else pushed there is discarded. Your prepare workflow commits to a throwaway ship/prepare-* branch, which gh-ship then promotes onto this one. This is a MiniJinja template rendered once per release line, with {{ branch }} (the base branch) and {{ match }} (what a `*` in the matching `branches` entry captured, or the branch itself for an exact entry) in context. With two or more `branches` entries it must vary per line, or every line would collide on one branch.",
       "type": "string",
       "minLength": 1,
       "default": "release/next"
     },
 
-    "base_branch": {
-      "description": "Branch the Release PR targets. Defaults to the repository's default branch, resolved at runtime.",
-      "type": "string",
-      "minLength": 1
+    "branches": {
+      "description": "The base branches gh-ship releases from, one release line each, so a project can maintain release/1.x while main moves on. An entry containing `*` is a glob; anything else is an exact branch name, and a pattern may contain at most one `*`. Exact entries are matched before globs, and globs in the order listed. When omitted, the repository's own default branch is the only release line. gh-ship detects which branch it runs on from --base, the GitHub Actions environment, or the local checkout, in that order.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[^*]*\\*?[^*]*$"
+      }
     },
 
     "workflows": {
@@ -104,7 +110,7 @@
     {
       "version": 1,
       "release_branch": "release/next",
-      "base_branch": "main",
+      "branches": ["main"],
       "workflows": {
         "prepare": "prepare-release",
         "publish": "publish-release"
@@ -116,6 +122,12 @@
         "labels": ["release"]
       },
       "release": { "draft": true }
+    },
+    {
+      "version": 1,
+      "branches": ["main", "release/*"],
+      "release_branch": "next/{{ match }}",
+      "workflows": { "prepare": "prepare-release" }
     }
   ]
 }

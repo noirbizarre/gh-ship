@@ -134,10 +134,30 @@ fn render_optional(
         .transpose()
 }
 
-fn render_template(
+/// Render a template against a context.
+///
+/// This is the crate's single MiniJinja entry point: the engine stays
+/// confined to this module, so every template failure gets the same
+/// span, the same language tag and the same shape of help.
+pub fn render_template(
     field: &str,
     template: &str,
     context: &minijinja::Value,
+) -> Result<String, TemplateError> {
+    render_template_with_help(field, template, context, template_help)
+}
+
+/// As [`render_template`], with caller-supplied guidance.
+///
+/// [`template_help`] speaks of the release artifact, which is the right
+/// advice for PR templates and the wrong advice everywhere else — the
+/// branch templates in [`crate::branches`] have a different context
+/// entirely.
+pub fn render_template_with_help(
+    field: &str,
+    template: &str,
+    context: &minijinja::Value,
+    help: fn(&minijinja::Error) -> String,
 ) -> Result<String, TemplateError> {
     let env = Environment::new();
     env.render_str(template, context).map_err(|e| {
@@ -150,7 +170,7 @@ fn render_template(
             message: e.to_string(),
             src: NamedSource::new(field, template.to_string()).with_language("jinja"),
             span,
-            help: template_help(&e),
+            help: help(&e),
         }
     })
 }

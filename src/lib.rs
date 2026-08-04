@@ -34,8 +34,10 @@
 #![allow(clippy::result_large_err)]
 
 pub mod artifact;
+pub mod branches;
 pub mod cli;
 pub mod config;
+pub mod detect;
 pub mod gh;
 pub mod logger;
 pub mod render;

@@ -55,6 +55,8 @@ pub fn layout(config: Option<&str>, workflows: &[(&str, &str)]) -> tempfile::Tem
 pub struct Repo {
     pub dir: tempfile::TempDir,
     pub stub: stub::Installed,
+    /// Extra environment for [`Repo::ship`], set by the `in_*` builders.
+    env: Vec<(String, String)>,
 }
 
 impl Repo {
@@ -68,7 +70,47 @@ impl Repo {
         Self {
             dir,
             stub: installed,
+            env: Vec::new(),
         }
+    }
+
+    /// Set an environment variable for subsequent [`Repo::ship`] calls.
+    pub fn with_env(mut self, key: &str, value: &str) -> Self {
+        self.env.push((key.to_string(), value.to_string()));
+        self
+    }
+
+    /// Pin the base branch, as `--base` would.
+    pub fn base(self, branch: &str) -> Self {
+        self.with_env("SHIP_BASE_BRANCH", branch)
+    }
+
+    /// Pretend to be a GitHub Actions run triggered on a branch.
+    pub fn in_ci(self, branch: &str) -> Self {
+        self.with_env("GITHUB_ACTIONS", "true")
+            .with_env("GITHUB_REF", &format!("refs/heads/{branch}"))
+            .with_env("GITHUB_REF_NAME", branch)
+    }
+
+    /// Pretend to be a GitHub Actions run triggered by a pull request
+    /// targeting `base`.
+    pub fn in_pr(self, base: &str, head: &str) -> Self {
+        self.with_env("GITHUB_ACTIONS", "true")
+            .with_env("GITHUB_REF", "refs/pull/1/merge")
+            .with_env("GITHUB_BASE_REF", base)
+            .with_env("GITHUB_HEAD_REF", head)
+    }
+
+    /// Make the tempdir look like a git checkout of `branch`.
+    ///
+    /// Writing the file is the whole of the local-git surface gh-ship
+    /// reads, which is what makes detection hermetically testable
+    /// without a `git` binary.
+    pub fn with_git_head(self, branch: &str) -> Self {
+        let git = self.path().join(".git");
+        std::fs::create_dir_all(&git).unwrap();
+        std::fs::write(git.join("HEAD"), format!("ref: refs/heads/{branch}\n")).unwrap();
+        self
     }
 
     pub fn path(&self) -> &Path {
@@ -97,21 +139,42 @@ impl Repo {
         for (k, v) in &self.stub.env {
             cmd.env(k, v);
         }
+        for (k, v) in &self.env {
+            cmd.env(k, v);
+        }
         Outcome::run(cmd.args(args))
     }
 }
 
+/// Environment that must never leak into a test.
+///
+/// The `GITHUB_*` entries matter more than they look: this suite runs
+/// *on* GitHub Actions, where they are all set, so base-branch detection
+/// would resolve CI's own branch and every branch test would behave
+/// differently on a developer machine than in CI. Tests that want CI
+/// detection opt in explicitly via [`Repo::in_ci`] / [`Repo::in_pr`].
+const SCRUBBED: &[&str] = &[
+    "SHIP_CONFIG",
+    "SHIP_REPO",
+    "SHIP_BASE_BRANCH",
+    "RUST_BACKTRACE",
+    "GITHUB_ACTIONS",
+    "GITHUB_REF",
+    "GITHUB_REF_NAME",
+    "GITHUB_BASE_REF",
+    "GITHUB_HEAD_REF",
+];
+
 /// Build a `gh-ship` invocation with a deterministic environment.
 ///
-/// `NO_COLOR` / `TERM=dumb` force plain ASCII, and `SHIP_CONFIG` is
-/// cleared so a developer's shell cannot leak into a test.
+/// `NO_COLOR` / `TERM=dumb` force plain ASCII, and [`SCRUBBED`] is
+/// cleared so neither a developer's shell nor CI can leak into a test.
 pub fn ship() -> Command {
     let mut cmd = Command::cargo_bin("gh-ship").expect("binary builds");
-    cmd.env("NO_COLOR", "1")
-        .env("TERM", "dumb")
-        .env_remove("SHIP_CONFIG")
-        .env_remove("SHIP_REPO")
-        .env_remove("RUST_BACKTRACE");
+    cmd.env("NO_COLOR", "1").env("TERM", "dumb");
+    for key in SCRUBBED {
+        cmd.env_remove(key);
+    }
     cmd
 }
 

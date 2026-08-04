@@ -144,6 +144,31 @@ fn empty_strings_are_rejected_where_the_binary_rejects_them() {
     // schema should not call them valid.
     assert!(check("version: 1\nrelease_branch: \"\"\nworkflows:\n  prepare: p\n").is_err());
     assert!(check("version: 1\nworkflows:\n  prepare: \"\"\n").is_err());
+    assert!(check("version: 1\nbranches: [\"\"]\nworkflows:\n  prepare: p\n").is_err());
+}
+
+#[test]
+fn release_lines_are_validated_like_the_binary_validates_them() {
+    assert!(
+        check("version: 1\nbranches: [main, \"release/*\"]\nrelease_branch: \"next/{{ match }}\"\nworkflows:\n  prepare: p\n").is_ok(),
+        "several release lines with a varying template are the point of the feature"
+    );
+    assert!(
+        check("version: 1\nbranches: [\"a*b*c\"]\nworkflows:\n  prepare: p\n").is_err(),
+        "a pattern may hold at most one `*`"
+    );
+    assert!(
+        check("version: 1\nbranches: [main, main]\nworkflows:\n  prepare: p\n").is_err(),
+        "a duplicated entry is dead config"
+    );
+    assert!(
+        check("version: 1\nbranches: []\nworkflows:\n  prepare: p\n").is_err(),
+        "an empty list says nothing; omit the key instead"
+    );
+    assert!(
+        check("version: 1\nbase_branch: main\nworkflows:\n  prepare: p\n").is_err(),
+        "`base_branch` was replaced by `branches`"
+    );
 }
 
 #[test]
@@ -167,7 +192,7 @@ fn every_config_field_is_described() {
     for field in [
         "version",
         "release_branch",
-        "base_branch",
+        "branches",
         "workflows",
         "pull_request",
         "release",

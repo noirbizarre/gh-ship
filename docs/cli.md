@@ -12,6 +12,30 @@ gh ship <COMMAND>
 | `-R`, `--repo <OWNER/REPO>` | `SHIP_REPO` | Target repository. Defaults to the current one. |
 | `-v`, `--verbose` | | More detail. Repeat for more. |
 
+## Choosing the release line
+
+`preview`, `prepare`, `release` and `status` accept:
+
+| Option | Environment | Meaning |
+|---|---|---|
+| `--base <BRANCH>` | `SHIP_BASE_BRANCH` | Base branch to release from. |
+
+With [release lines](configuration.md#release-lines) configured, this selects
+the line. Without them it simply overrides the branch the Release PR targets.
+
+When it is not given, gh-ship works the branch out for itself, in order:
+
+1. The GitHub Actions environment — the branch a `pull_request` targets,
+   otherwise the branch of the run. A run on a tag names no branch and is not
+   guessed at.
+2. The local checkout's current branch, read from `.git/HEAD`. No `git`
+   binary is needed and nothing is fetched or cloned.
+3. The repository's default branch.
+
+Detection only applies when `branches` is configured; otherwise the repository
+default branch is used, exactly as before. `gh ship status` always reports which
+source it used.
+
 ## Waiting
 
 `preview`, `prepare` and `release` all block on a workflow run they dispatched.
