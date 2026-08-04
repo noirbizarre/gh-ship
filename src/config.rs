@@ -636,11 +636,15 @@ impl Config {
 /// Turn serde_norway's terse messages into something actionable.
 fn parse_help(message: &str) -> Option<String> {
     if message.contains("unknown field") {
-        // serde already lists the expected fields; point at the docs
-        // for the shape rather than repeating them.
-        return Some(
-            "see https://noirbizarre.github.io/gh-ship/configuration/ for the full schema".into(),
-        );
+        // serde already lists the expected fields, but a reader still has
+        // to scan them for the one they meant. Name it when we can — the
+        // config is the file most likely to be hand-typed, and the other
+        // two validators have offered suggestions all along.
+        let docs = "see https://noirbizarre.github.io/gh-ship/configuration/ for the full schema";
+        return Some(match unknown_field_suggestion(message) {
+            Some(hint) => format!("{hint} ({docs})"),
+            None => docs.to_string(),
+        });
     }
     if message.contains("missing field `workflows`") {
         return Some(
@@ -654,6 +658,29 @@ fn parse_help(message: &str) -> Option<String> {
         return Some(format!("start the file with `version: {CONFIG_VERSION}`"));
     }
     None
+}
+
+/// Recover a "did you mean?" from serde's own unknown-field message.
+///
+/// serde spells it `unknown field `x`, expected one of `a`, `b``, which
+/// carries both halves we need. Reading them back out is less pleasant
+/// than being handed the field list, but it is the only way to keep the
+/// suggestion correct for every struct in the model — including the
+/// nested ones — without maintaining a second copy of every key.
+fn unknown_field_suggestion(message: &str) -> Option<String> {
+    let quoted = |s: &str| -> Vec<String> {
+        s.split('`')
+            .skip(1)
+            .step_by(2)
+            .map(str::to_string)
+            .collect()
+    };
+
+    let (found, expected) = message.split_once(", expected ")?;
+    let field = quoted(found.split_once("unknown field")?.1)
+        .into_iter()
+        .next()?;
+    crate::suggest::did_you_mean(&field, &quoted(expected))
 }
 
 #[cfg(test)]
@@ -873,6 +900,38 @@ release:
         let e = parse("version: 1\nworkflows:\n  prepare: x\nevents:\n  foo: bar\n").unwrap_err();
         let msg = e.to_string();
         assert!(msg.contains("unknown field"), "{msg}");
+    }
+
+    /// A typo should be named, not merely reported.
+    #[test]
+    fn suggests_the_key_a_typo_was_reaching_for() {
+        let e = parse("version: 1\nrelease_brach: next\nworkflows:\n  prepare: x\n").unwrap_err();
+        let help = miette::Diagnostic::help(&e)
+            .map(|h| h.to_string())
+            .unwrap_or_default();
+        assert!(help.contains("did you mean `release_branch`?"), "{help}");
+    }
+
+    /// Suggestions must reach the nested structs too — serde's message
+    /// carries whichever field list applies, so nothing is hardcoded.
+    #[test]
+    fn suggests_a_nested_key() {
+        let e = parse("version: 1\nworkflows:\n  prepar: x\n").unwrap_err();
+        let help = miette::Diagnostic::help(&e)
+            .map(|h| h.to_string())
+            .unwrap_or_default();
+        assert!(help.contains("did you mean `prepare`?"), "{help}");
+    }
+
+    /// An unrelated key gets the docs link and no invented suggestion.
+    #[test]
+    fn does_not_invent_a_suggestion() {
+        let e = parse("version: 1\nworkflows:\n  prepare: x\nevents:\n  foo: bar\n").unwrap_err();
+        let help = miette::Diagnostic::help(&e)
+            .map(|h| h.to_string())
+            .unwrap_or_default();
+        assert!(!help.contains("did you mean"), "{help}");
+        assert!(help.contains("configuration/"), "{help}");
     }
 
     #[test]
