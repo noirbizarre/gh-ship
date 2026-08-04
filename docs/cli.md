@@ -189,7 +189,10 @@ $ gh ship prepare [--no-wait]
 1. Stops if a merged Release PR is still awaiting `gh ship release`.
 2. Sweeps staging branches left behind by earlier runs.
 3. Cuts a throwaway staging branch, `ship/prepare-<nonce>`, from the base branch
-   (`workflow_dispatch` needs the ref to exist).
+   (`workflow_dispatch` needs the ref to exist). With
+   [release lines](configuration.md#release-lines) configured the name carries
+   the line — `ship/prepare-<base>-<nonce>`, so `release/1.x` stages on
+   `ship/prepare-release-1.x-<nonce>`.
 4. Dispatches the prepare workflow **on that staging branch** and waits.
 5. Downloads and validates the artifact.
 6. Stops with exit 0 if `changed: false`.
@@ -200,11 +203,18 @@ Re-running is safe, and is the supported way to refresh a Release PR: the
 release branch moves onto the new commit and the existing PR is updated in
 place.
 
-!!! warning "Run one at a time"
+!!! warning "Run one at a time per release line"
 
-    Step 2 deletes every `ship/prepare-*` branch, including one a concurrent
-    run is using. Serialise with `concurrency: group: ship` — the sample
+    Step 2 deletes staging branches, including one a concurrent run is using,
+    so two prepares on the same line must not overlap.
+
+    Without `branches`, the sweep covers every `ship/prepare-*` branch:
+    serialise everything with `concurrency: group: ship`, as the sample
     workflow in [Workflows](workflows.md) does.
+
+    With `branches` configured the sweep is scoped to the line's own prefix, so
+    different lines never collide and may prepare concurrently. Key the group
+    by branch instead — `group: ship-${{ github.ref }}`.
 
 !!! note "Why a staging branch"
 

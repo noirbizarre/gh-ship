@@ -156,6 +156,11 @@ Staging branches are named `ship/prepare-<nonce>`, sharing the correlation nonce
 with the dispatch and the run, and are deleted once the release branch has moved.
 A run that fails part-way leaves one behind, so each prepare sweeps them first.
 
+With [release lines](configuration.md#release-lines) configured the name also
+carries the line — `ship/prepare-<base>-<nonce>` — and the sweep is filtered to
+that same prefix. Two lines can then prepare concurrently without either one
+deleting the ref the other's `workflow_dispatch` is running on.
+
 ### Draft-first releases
 
 Tag the merge commit → create the release as a draft → dispatch the publish
