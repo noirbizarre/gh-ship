@@ -5,6 +5,11 @@
 # use identical tool versions — CI drives the tools directly rather than
 # through the tasks defined below.
 #
+# Tools no CI job needs are declared on their own task rather than in `[tools]`,
+# because `mise install` — what CI runs — installs `[tools]` only. It matters
+# here: cargo-binstall has no prebuilt artifact for resvg or cargo-insta, so a
+# global entry made every CI job compile both from source.
+#
 # Rust itself is intentionally not managed here: CI needs per-job components
 # (rustfmt, clippy, llvm-tools-preview) and cross-compilation targets, which
 # `dtolnay/rust-toolchain` handles better. `rust-toolchain.toml` pins the
@@ -33,10 +38,8 @@ git-cliff = "latest"
 cargo-binstall = "latest"
 "cargo:cargo-nextest" = "latest"
 "cargo:cargo-llvm-cov" = "latest"
-"cargo:cargo-insta" = "latest"
-# Rasterizes docs/images/icon.svg (see the `icons` task). Pure Rust, so it
-# needs no system libraries and renders identically on every platform.
-"cargo:resvg" = "latest"
+# cargo-insta and resvg are declared on the tasks that use them instead of
+# here — see the note in the header.
 
 # --- Everyday ---------------------------------------------------------------
 
@@ -80,35 +83,9 @@ run = """
 actionlint -ignore 'unexpected key "deployment" for "environment" section' .github/workflows/*.yaml
 """
 
-[tasks.icons]
-description = "Rasterize docs/images/icon.svg into the PNG sizes"
-# Deliberately not a dependency of `default`: it rewrites committed binaries,
-# so every routine run would dirty the working tree. Run it when the SVG
-# changes.
-run = """
-for size in 128 256 512; do
-  resvg --width "$size" --height "$size" docs/images/icon.svg "docs/images/icon-$size.png"
-  echo "docs/images/icon-$size.png"
-done
-"""
-
-[tasks.social]
-description = "Render the GitHub social preview image from the logo"
-# GitHub has no API for the social preview, so this is generated here and
-# uploaded by hand, once, under:
-#   Settings -> General -> Social preview
-#
-# The canvas lives in social-preview.svg rather than being passed as flags:
-# resvg scales to fit rather than padding, so --width 1280 --height 640 on a
-# 1.8:1 logo yields 1151x640, not GitHub's required 1280x640. The wrapper
-# references logo.svg instead of copying it, so the two cannot drift.
-run = """
-resvg docs/images/social-preview.svg docs/images/social-preview.png
-echo "docs/images/social-preview.png — upload under Settings > General > Social preview"
-"""
-
 [tasks.snapshots]
 description = "Review and update insta snapshots interactively"
+tools = { "cargo:cargo-insta" = "latest" }
 run = "cargo insta review"
 
 # --- gh-ship itself ---------------------------------------------------------
@@ -139,3 +116,38 @@ run = "uvx zensical serve"
 [tasks."docs:build"]
 description = "Build the documentation"
 run = "uvx zensical build"
+
+# --- Artwork ----------------------------------------------------------------
+#
+# Neither of these joins `default`: they rewrite committed binaries, so a
+# routine run would dirty the working tree every time. Run them when the
+# artwork changes — both after editing icon.svg, since the social preview
+# embeds the logo.
+
+[tasks.icons]
+description = "Rasterize docs/images/icon.svg into the PNG sizes"
+# resvg is pure Rust, so it needs no system libraries and renders identically on
+# every platform.
+tools = { "cargo:resvg" = "latest" }
+run = """
+for size in 128 256 512; do
+  resvg --width "$size" --height "$size" docs/images/icon.svg "docs/images/icon-$size.png"
+  echo "docs/images/icon-$size.png"
+done
+"""
+
+[tasks.social]
+description = "Render the GitHub social preview image from the logo"
+# GitHub has no API for the social preview, so this is generated here and
+# uploaded by hand, once, under:
+#   Settings -> General -> Social preview
+#
+# The canvas lives in social-preview.svg rather than being passed as flags:
+# resvg scales to fit rather than padding, so --width 1280 --height 640 on a
+# 1.8:1 logo yields 1151x640, not GitHub's required 1280x640. The wrapper
+# references logo.svg instead of copying it, so the two cannot drift.
+tools = { "cargo:resvg" = "latest" }
+run = """
+resvg docs/images/social-preview.svg docs/images/social-preview.png
+echo "docs/images/social-preview.png — upload under Settings > General > Social preview"
+"""
