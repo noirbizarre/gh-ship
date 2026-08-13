@@ -60,6 +60,9 @@ pub enum Command {
 
     /// Tag, publish and release the merged Release PR.
     Release(ReleaseArgs),
+
+    /// Re-create a commit so GitHub signs it.
+    Sign(SignArgs),
 }
 
 /// The base branch to release from.
@@ -122,6 +125,21 @@ pub struct InitArgs {
     /// Overwrite an existing configuration.
     #[arg(long)]
     pub force: bool,
+}
+
+/// No [`BaseArgs`]: signing is not scoped to a release line.
+///
+/// The branch here is the one to sign, which in a prepare workflow is the
+/// staging branch the run was dispatched on — not the base the release is
+/// cut from.
+#[derive(Debug, clap::Args)]
+pub struct SignArgs {
+    /// Branch whose tip commit to sign.
+    ///
+    /// Defaults to the checked-out branch: `GITHUB_REF` in a workflow,
+    /// the checkout otherwise.
+    #[arg(value_name = "BRANCH")]
+    pub reference: Option<String>,
 }
 
 #[derive(Debug, clap::Args)]

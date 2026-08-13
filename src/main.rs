@@ -65,5 +65,6 @@ fn run(cli: Cli) -> Result<()> {
         Command::Prepare(args) => commands::prepare::run(&cli, args, theme),
         Command::Status(args) => commands::status::run(&cli, args, theme),
         Command::Release(args) => commands::release::run(&cli, args, theme),
+        Command::Sign(args) => commands::sign::run(&cli, args, theme),
     }
 }

@@ -93,6 +93,46 @@ fn environment() -> BTreeMap<String, String> {
     std::env::vars().collect()
 }
 
+/// Detect the branch that is *checked out*, rather than released from.
+///
+/// Deliberately not [`base_branch`]. That one answers "which release line
+/// is this?" and so prefers `GITHUB_BASE_REF`, the branch a pull request
+/// targets. `gh ship sign` needs the opposite: the ref the workflow was
+/// dispatched on and pushed to, which on a `pull_request` event is not a
+/// branch at all — so the caller is told nothing rather than handed the
+/// PR's target by mistake.
+pub fn checked_out_branch(flag: Option<&str>, root: &Path) -> Option<String> {
+    checked_out_branch_in(flag, root, &environment())
+}
+
+/// As [`checked_out_branch`], against a given environment.
+fn checked_out_branch_in(
+    flag: Option<&str>,
+    root: &Path,
+    env: &BTreeMap<String, String>,
+) -> Option<String> {
+    if let Some(branch) = flag.map(str::trim).filter(|b| !b.is_empty()) {
+        return Some(branch.to_string());
+    }
+
+    let get = |key: &str| env.get(key).map(String::as_str).filter(|v| !v.is_empty());
+
+    if get("GITHUB_ACTIONS") == Some("true")
+        && let Some(reference) = get("GITHUB_REF")
+        // `refs/tags/…` and `refs/pull/N/merge` name no branch, and a ref
+        // is what this command has to PATCH. Falling through to the
+        // checkout is right: on a runner there is nothing else to find,
+        // and the caller reports that it cannot tell.
+        && let Some(branch) = reference.strip_prefix("refs/heads/")
+    {
+        // `GITHUB_REF_NAME` is the runner's own already-stripped answer;
+        // prefer it, but only once `GITHUB_REF` has confirmed a branch.
+        return Some(get("GITHUB_REF_NAME").unwrap_or(branch).to_string());
+    }
+
+    from_git(root)
+}
+
 /// The base branch according to the GitHub Actions environment.
 fn from_ci(env: &BTreeMap<String, String>) -> Option<String> {
     let get = |key: &str| env.get(key).map(String::as_str).filter(|v| !v.is_empty());
@@ -323,5 +363,80 @@ mod tests {
     fn nothing_anywhere_is_not_an_answer() {
         let dir = tempfile::tempdir().unwrap();
         assert_eq!(base_branch_in(None, dir.path(), &env(&[])), None);
+    }
+
+    // --- checked_out_branch ----------------------------------------------
+
+    #[test]
+    fn the_checked_out_branch_is_the_dispatched_ref() {
+        let dir = tempfile::tempdir().unwrap();
+        let e = env(&[
+            ("GITHUB_ACTIONS", "true"),
+            ("GITHUB_REF", "refs/heads/ship/prepare-abc123"),
+            ("GITHUB_REF_NAME", "ship/prepare-abc123"),
+        ]);
+        assert_eq!(
+            checked_out_branch_in(None, dir.path(), &e),
+            Some("ship/prepare-abc123".into())
+        );
+    }
+
+    /// The opposite of `a_pull_request_uses_the_branch_it_targets`: the
+    /// branch a PR targets is emphatically not the one checked out, and
+    /// signing it would sign the wrong history.
+    #[test]
+    fn a_pull_request_yields_no_checked_out_branch() {
+        let dir = tempfile::tempdir().unwrap();
+        let e = env(&[
+            ("GITHUB_ACTIONS", "true"),
+            ("GITHUB_REF", "refs/pull/7/merge"),
+            ("GITHUB_BASE_REF", "main"),
+            ("GITHUB_HEAD_REF", "feature/whatever"),
+        ]);
+        assert_eq!(checked_out_branch_in(None, dir.path(), &e), None);
+    }
+
+    #[test]
+    fn a_tag_ref_yields_no_checked_out_branch() {
+        let dir = tempfile::tempdir().unwrap();
+        let e = env(&[
+            ("GITHUB_ACTIONS", "true"),
+            ("GITHUB_REF", "refs/tags/v1.0.0"),
+            ("GITHUB_REF_NAME", "v1.0.0"),
+        ]);
+        assert_eq!(checked_out_branch_in(None, dir.path(), &e), None);
+    }
+
+    #[test]
+    fn an_explicit_branch_wins_over_the_environment() {
+        let dir = tempfile::tempdir().unwrap();
+        let e = env(&[
+            ("GITHUB_ACTIONS", "true"),
+            ("GITHUB_REF", "refs/heads/main"),
+            ("GITHUB_REF_NAME", "main"),
+        ]);
+        assert_eq!(
+            checked_out_branch_in(Some("release/next"), dir.path(), &e),
+            Some("release/next".into())
+        );
+    }
+
+    #[test]
+    fn the_checked_out_branch_falls_back_to_the_checkout() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".git")).unwrap();
+        std::fs::write(dir.path().join(".git/HEAD"), "ref: refs/heads/local\n").unwrap();
+        assert_eq!(
+            checked_out_branch_in(None, dir.path(), &env(&[])),
+            Some("local".into())
+        );
+    }
+
+    #[test]
+    fn a_detached_head_yields_no_checked_out_branch() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".git")).unwrap();
+        std::fs::write(dir.path().join(".git/HEAD"), "a1b2c3d4\n").unwrap();
+        assert_eq!(checked_out_branch_in(None, dir.path(), &env(&[])), None);
     }
 }

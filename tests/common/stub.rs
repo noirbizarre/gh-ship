@@ -210,6 +210,20 @@ impl GhStub {
         self
     }
 
+    /// Report the branch tip as already carrying a valid signature, as it
+    /// does for someone signing with their own GPG or SSH key.
+    pub fn head_already_signed(mut self) -> Self {
+        self.env.insert("STUB_HEAD_VERIFIED".into(), "true".into());
+        self
+    }
+
+    /// Return the re-created commit unsigned, which is what GitHub does
+    /// for a token that is not a bot.
+    pub fn cannot_sign(mut self) -> Self {
+        self.env.insert("STUB_SIGN_VERIFIED".into(), "false".into());
+        self
+    }
+
     /// Refuse branch deletions, as a protected ref or a missing scope does.
     pub fn branch_delete_fails(mut self) -> Self {
         self.env
@@ -540,6 +554,18 @@ case "$1 ${2:-}" in
         ;;
       *"/git/ref/"*)
         printf 'a1b2c3d4e5f6\n'
+        ;;
+      # `gh ship sign` creating the re-signed commit. `verified` is what
+      # decides whether the ref is moved, and GitHub only sets it for a bot.
+      *"/git/commits"*)
+        printf '{"sha":"51c8ed0000000000000000000000000000000000","message":"chore(release): 1.0.0","tree":"77ee110000000000000000000000000000000000","parents":["9a5e110000000000000000000000000000000000"],"verified":%s}\n' \
+          "${STUB_SIGN_VERIFIED:-true}"
+        ;;
+      # The commit a ref points at, already flattened by the `--jq` the
+      # caller passes. `verified` reports an existing signature.
+      *"/commits/"*)
+        printf '{"sha":"c0ffee0000000000000000000000000000000000","message":"chore(release): 1.0.0","tree":"77ee110000000000000000000000000000000000","parents":["9a5e110000000000000000000000000000000000"],"verified":%s}\n' \
+          "${STUB_HEAD_VERIFIED:-false}"
         ;;
       # Staging-branch sweep. Reports one leftover when asked to.
       *"/git/matching-refs/heads/ship/prepare-"*)

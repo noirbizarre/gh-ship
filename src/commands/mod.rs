@@ -11,6 +11,7 @@ pub mod init;
 pub mod prepare;
 pub mod preview;
 pub mod release;
+pub mod sign;
 pub mod status;
 pub mod validate;
 

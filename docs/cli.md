@@ -323,3 +323,48 @@ $ gh ship release [--merge]
 | `--merge` | Merge the Release PR if it is still open. |
 
 Idempotent: if the release already exists, it is not recreated.
+
+---
+
+## `gh ship sign`
+
+Re-create a commit so GitHub signs it.
+
+```console
+$ gh ship sign [BRANCH]
+```
+
+Meant for the **prepare workflow**, not for you: it re-creates the tip commit of
+`BRANCH` through the API, with the same tree, parents and message but no identity
+of its own, and moves the branch onto the result. GitHub signs a commit it creates
+for a bot, so the commit comes out **Verified** where `git commit` cannot.
+
+`BRANCH` defaults to the branch the workflow was dispatched on — the staging
+branch — read from `GITHUB_REF`, or from the checkout outside CI.
+
+```console
+$ gh ship sign
+▸ signing ship/prepare-8f2c1a9e4b07 at c0ffee0
+✔ signed as 51c8ed0
+```
+
+Two behaviours worth knowing:
+
+- A commit that is **already signed** is left alone and the command succeeds.
+  Re-creating it would replace a signature its author chose with one they did not.
+- When GitHub returns the re-created commit **unsigned**, the command fails and
+  the branch is **not moved**. That happens when the token is not a bot — a PAT
+  or a user login cannot produce a signature, whatever its permissions — and
+  moving the branch anyway would change the commit's author for no benefit.
+
+Needs `contents: write`. See [Getting a verified release
+commit](workflows.md#getting-a-verified-release-commit) for where it fits in a
+workflow, and for the alternatives.
+
+!!! note "Why this is not an option on `prepare`"
+
+    Signing depends on *who is authenticated*, and only a bot gets a signature.
+    `gh ship prepare` is supported from a laptop as much as from CI, so a
+    `sign:` setting there would either sign only sometimes or stop `prepare`
+    working outside CI. The prepare workflow's token is already a bot, so that
+    is where the signing belongs.

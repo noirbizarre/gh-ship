@@ -106,9 +106,10 @@ pub fn create_tag(gh: &Gh, tag: &str, sha: &str) -> Result<(), GhError> {
 
 /// Force `branch` to point at `sha`, discarding whatever was there.
 ///
-/// Used to bring the release branch back in line with its base. The reset is
-/// not a fast-forward — the release branch carries a version bump the base does
-/// not — so `force` is required.
+/// Two callers, both moving a branch onto a commit that is not a descendant of
+/// where it currently points, which is why `force` is required: `prepare`
+/// promotes the release branch onto the staged release commit, and `sign` moves
+/// a branch onto the re-created, signed copy of its own tip.
 pub fn reset_branch(gh: &Gh, branch: &str, sha: &str) -> Result<(), GhError> {
     let repo = gh.slug()?;
     gh.run(&[
@@ -181,6 +182,81 @@ pub fn branch_sha(gh: &Gh, branch: &str) -> Result<String, GhError> {
         ".object.sha",
     ])?;
     Ok(out.trim().to_string())
+}
+
+// --- Commits -------------------------------------------------------------
+
+/// A commit, as much of it as re-creating one requires.
+///
+/// Distinct from [`Commit`], which is only ever a pull request's merge
+/// commit and carries nothing but its oid.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CommitDetails {
+    pub sha: String,
+    #[serde(default)]
+    pub message: String,
+    #[serde(default)]
+    pub tree: String,
+    #[serde(default)]
+    pub parents: Vec<String>,
+    /// Whether GitHub could verify a signature on it.
+    #[serde(default)]
+    pub verified: bool,
+}
+
+/// The commit a ref points at.
+///
+/// `--jq` flattens the response here rather than mirroring GitHub's nesting in
+/// Rust types: every field below is read once, by [`super::super::commands::sign`],
+/// and a faithful `Commit { commit: { tree: { sha } } }` shape would be three
+/// structs nobody else has a use for.
+pub fn commit_at(gh: &Gh, reference: &str) -> Result<CommitDetails, GhError> {
+    let repo = gh.slug()?;
+    gh.json(&[
+        "api",
+        &format!("repos/{repo}/commits/{reference}"),
+        "--jq",
+        "{sha: .sha, message: .commit.message, tree: .commit.tree.sha, \
+         parents: [.parents[].sha], verified: .commit.verification.verified}",
+    ])
+}
+
+/// Create a commit that GitHub signs, and report whether it did.
+///
+/// No author and no committer are sent, and that is the whole point: GitHub
+/// signs a commit it creates for a bot *only* when the request carries no
+/// identity of its own. Supplying one — as `git commit` inevitably does — is
+/// exactly what leaves the commit unsigned. The identity therefore comes from
+/// the token, and the caller must check the returned flag rather than assume.
+pub fn create_signed_commit(
+    gh: &Gh,
+    message: &str,
+    tree: &str,
+    parents: &[String],
+) -> Result<CommitDetails, GhError> {
+    let repo = gh.slug()?;
+    let mut args = vec![
+        "api".to_string(),
+        format!("repos/{repo}/git/commits"),
+        "--method".to_string(),
+        "POST".to_string(),
+        "-f".to_string(),
+        format!("message={message}"),
+        "-f".to_string(),
+        format!("tree={tree}"),
+    ];
+    for parent in parents {
+        args.push("-f".to_string());
+        args.push(format!("parents[]={parent}"));
+    }
+    args.push("--jq".to_string());
+    args.push(
+        "{sha: .sha, message: .message, tree: .tree.sha, \
+         parents: [.parents[].sha], verified: .verification.verified}"
+            .to_string(),
+    );
+
+    gh.json(&args)
 }
 
 // --- Labels --------------------------------------------------------------

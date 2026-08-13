@@ -481,9 +481,46 @@ exclusive in a single call. Measured, four routes to the same tree:
 | GraphQL `createCommitOnBranch` | **yes**, `valid` | `GitHub` |
 
 To take the third route, commit and push as usual, then re-create that commit
-through the API and move the branch onto it. The push has to come first: the API
-can only reference a tree that already exists on the server, and pushing is what
-uploads it.
+through the API and move the branch onto it. `gh ship sign` does exactly that,
+and your prepare workflow already installs gh-ship to validate the artifact:
+
+```yaml
+- name: Commit and push
+  run: |
+    git add -A
+    git commit -m "chore(release): ${{ steps.version.outputs.version }}"
+    git push origin HEAD
+
+- name: Sign the release commit
+  run: gh ship sign
+  env:
+    GH_TOKEN: ${{ steps.app-token.outputs.token }}
+```
+
+With no argument it signs the tip of the branch the workflow was dispatched on,
+which is the staging branch gh-ship cut. Pass one — `gh ship sign release/next` —
+if your workflow pushes somewhere else. A commit that is *already* signed is left
+alone, so this is safe to add to a workflow that imports its own signing key.
+
+It exits non-zero, without moving the branch, when GitHub returns the re-created
+commit unsigned. That happens whenever the token is not a bot, and the diagnostic
+says so rather than leaving you with a silently rewritten commit.
+
+!!! warning "What the re-created commit costs"
+
+    The signed commit is a *new* commit, so the committer becomes `GitHub` and
+    the author becomes the bot the token belongs to — you cannot choose either,
+    since choosing is what stops GitHub signing. That also makes the
+    `git config user.name`/`user.email` lines and the `Get the App's user id`
+    step above unnecessary: the identity comes from the token either way.
+
+    Only the tip is re-created. Its parents keep their SHAs, so a workflow that
+    makes several commits signs the last one alone.
+
+#### Without the extension
+
+The same thing by hand. The push has to come first: the API can only reference a
+tree that already exists on the server, and pushing is what uploads it.
 
 ```yaml
 - name: Commit, then re-create the commit so GitHub signs it
@@ -507,15 +544,20 @@ uploads it.
 gh-ship needs nothing from you here: it promotes whatever the staging branch
 points at, so moving the tip is enough.
 
-!!! warning "What the re-created commit costs"
+!!! warning "`HEAD^` assumes one commit"
 
-    The signed commit is a *new* commit, so the committer becomes `GitHub` and
-    the author becomes the bot the token belongs to — you cannot choose either,
-    since choosing is what stops GitHub signing.
+    The snippet takes the tip's parent as the new commit's parent, so it assumes
+    your workflow made exactly **one** commit on top of the ref it was dispatched
+    on. If it makes several, replay them or squash them deliberately.
 
-    The snippet assumes your workflow made exactly **one** commit on top of the
-    ref it was dispatched on. If it makes several, replay them or squash them
-    deliberately; `HEAD^` is otherwise the wrong parent.
+    `gh ship sign` reads the real parents from the API instead, so it does not
+    have this problem — it simply signs the last commit and leaves the rest.
+
+If you would rather not install the extension or write the calls,
+[`iarekylew00t/verified-bot-commit`](https://github.com/IAreKyleW00t/verified-bot-commit)
+and [`planetscale/ghcommit-action`](https://github.com/planetscale/ghcommit-action)
+do the same job as third-party actions, replacing the commit step rather than
+following it.
 
 For a release commit attributed to a person or an organisation rather than a bot,
 import a GPG or SSH signing key and set `commit.gpgsign` instead. That verifies
