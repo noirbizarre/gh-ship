@@ -1,0 +1,85 @@
+---
+source: tests/templates.rs
+expression: "render(role, strategy)"
+---
+name: 📦 Publish Release
+
+# gh-ship correlates the run it started via this nonce. See the
+# prepare-release template for why this is required.
+run-name: 📦 Publish Release (ship:${{ inputs.ship_id }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      ship_id:
+        description: gh-ship correlation nonce
+        required: true
+        type: string
+      tag:
+        description: The tag being released
+        required: true
+        type: string
+
+  workflow_call:
+    inputs:
+      ship_id:
+        required: true
+        type: string
+      tag:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    # This one IS a deployment: it is what actually ships. The `url:`
+    # registers it in the repository's deployment list and links straight
+    # to the release.
+    #
+    # Contrast prepare-release, which uses the same environment with
+    # `deployment: false` because preparing a release is not a deployment.
+    environment:
+      name: release
+      url: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ inputs.tag }}
+
+    # Every `gh` invocation in this job authenticates with this.
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # gh-ship has already created the tag at this point, so check
+          # out exactly what is being released rather than a branch tip.
+          ref: ${{ inputs.tag }}
+
+      # ----------------------------------------------------------------
+      # Everything below is YOURS: build artifacts, publish packages,
+      # push images, deploy docs.
+      #
+      # gh-ship has already created the GitHub Release as a DRAFT and
+      # will undraft it once this workflow succeeds. That ordering is
+      # deliberate: it is the only way to attach assets to a release
+      # before anyone watching the repository is notified about it.
+      # ----------------------------------------------------------------
+
+      - name: Build release assets
+        run: |
+          # Replace with your own build.
+          mkdir -p dist
+          echo "replace me" > dist/example.txt
+
+      - name: Upload assets to the draft release
+        run: gh release upload "${{ inputs.tag }}" dist/* --clobber
+
+      # Publishing to a registry usually belongs here, before the release
+      # is made visible.
+      #
+      # - name: Publish to the registry
+      #   run: cargo publish
+      #   env:
+      #     CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

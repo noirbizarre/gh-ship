@@ -1,3 +1,7 @@
+---
+source: tests/templates.rs
+expression: "render(role, strategy)"
+---
 name: 📦 Publish Release
 
 # gh-ship correlates the run it started via this nonce. See the
@@ -42,13 +46,19 @@ jobs:
       name: release
       url: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ inputs.tag }}
 
-    # Set once at the job level so every `gh` invocation below picks up
-    # SHIP_TOKEN when it is configured. See the prepare-release template.
-    env:
-      GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
-
     steps:
-      # ship:token-step
+      # An installation token, minted for this job and revoked when it
+      # ends: the private key never leaves the secret. It cannot be set
+      # once in the job's `env:` — a step output is not resolvable there,
+      # and would silently expand to the empty string — so every step
+      # running `gh` sets it itself. See:
+      # https://noirbizarre.github.io/gh-ship/workflows/#using-a-github-app
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - uses: actions/checkout@v7
         with:
           # gh-ship has already created the tag at this point, so check
@@ -73,6 +83,8 @@ jobs:
 
       - name: Upload assets to the draft release
         run: gh release upload "${{ inputs.tag }}" dist/* --clobber
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       # Publishing to a registry usually belongs here, before the release
       # is made visible.

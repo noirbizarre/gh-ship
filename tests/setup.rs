@@ -14,6 +14,7 @@ use common::{
     CONFORMING_WORKFLOW as CONFORMING, MINIMAL_CONFIG, Outcome, layout as repo, ship,
     with_redactions,
 };
+use gh_ship::templates::{self, Role, TokenStrategy};
 
 fn validate_in(dir: &Path) -> Outcome {
     Outcome::run(ship().current_dir(dir).arg("validate"))
@@ -236,40 +237,50 @@ fn our_own_setup_satisfies_the_contract() {
     );
 }
 
-/// The templates `init` writes, and the workflows this repository
-/// actually uses, must both stay conforming.
+/// Every workflow `init` can write must be conforming.
+///
+/// `init` writes a *rendering*, not the template on disk, and there are
+/// six of them: two roles times three token strategies. Checking only one
+/// left the other five to be discovered by a user mid-release, which is
+/// the failure this whole test file exists to prevent.
 #[test]
-fn shipped_templates_are_conforming_workflows() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    for (name, role) in [
-        ("prepare-release.yml", "prepare"),
-        ("publish-release.yml", "publish"),
+fn every_generated_workflow_is_conforming() {
+    for strategy in [
+        TokenStrategy::App,
+        TokenStrategy::Pat,
+        TokenStrategy::Default,
     ] {
-        let body = std::fs::read_to_string(root.join("templates").join(name))
-            .unwrap_or_else(|e| panic!("templates/{name} must exist: {e}"));
+        for role in [Role::Prepare, Role::Publish] {
+            let body = templates::render(role, strategy);
 
-        // Each template is wired into the role it exists for. The publish
-        // role additionally needs a prepare workflow to be a valid setup,
-        // so the conforming fixture stands in for it.
-        let dir = match role {
-            "prepare" => repo(
-                Some("version: 1\nworkflows:\n  prepare: prepare-release\n"),
-                &[("prepare-release.yml", &body)],
-            ),
-            _ => repo(
-                Some(
-                    "version: 1\nworkflows:\n  prepare: prepare-release\n  publish: publish-release\n",
+            // Each template is wired into the role it exists for. The
+            // publish role additionally needs a prepare workflow to be a
+            // valid setup, so the conforming fixture stands in for it.
+            let dir = match role {
+                Role::Prepare => repo(
+                    Some("version: 1\nworkflows:\n  prepare: prepare-release\n"),
+                    &[("prepare-release.yml", &body)],
                 ),
-                &[
-                    ("prepare-release.yml", CONFORMING),
-                    ("publish-release.yml", &body),
-                ],
-            ),
-        };
+                Role::Publish => repo(
+                    Some(
+                        "version: 1\nworkflows:\n  prepare: prepare-release\n  publish: publish-release\n",
+                    ),
+                    &[
+                        ("prepare-release.yml", CONFORMING),
+                        ("publish-release.yml", &body),
+                    ],
+                ),
+            };
 
-        let out = validate_in(dir.path());
-        let (code, stderr) = (out.code, out.diagnostics());
-        assert_eq!(code, 0, "templates/{name} is not conforming:\n{stderr}");
+            let out = validate_in(dir.path());
+            let (code, stderr) = (out.code, out.diagnostics());
+            assert_eq!(
+                code,
+                0,
+                "the {strategy:?} rendering of {} is not conforming:\n{stderr}",
+                role.filename()
+            );
+        }
     }
 }
 

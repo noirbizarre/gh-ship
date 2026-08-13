@@ -48,10 +48,12 @@ src/
   detect.rs        # which branch are we releasing from?
   branches.rs      # base branch -> release line
   render.rs        # PR templating and artifact embedding
+  templates.rs     # rendering the workflows `init` writes
   style / logger / suggest
 schemas/           # the published JSON Schemas — release artifact and config —
                    # embedded via include_str!
-templates/         # workflow templates emitted by `init`
+templates/         # the workflow templates `init` renders and emits, one
+                   # MiniJinja source per role, branching on the token strategy
 ```
 
 Errors are defined per module as `thiserror` enums rather than centrally, so

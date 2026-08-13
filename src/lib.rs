@@ -43,3 +43,4 @@ pub mod logger;
 pub mod render;
 pub mod style;
 pub mod suggest;
+pub mod templates;
