@@ -96,8 +96,11 @@ jobs:
           printf '## What'"'"'s Changed\n\n* ...\n' > "$RUNNER_TEMP/ship-notes.md"
 
       # The numeric id of the App's bot user. Paired with the slug below it
-      # is what makes the release commit attribute to your App, and show as
-      # verified, instead of to github-actions[bot].
+      # is what attributes the release commit to your App instead of to
+      # github-actions[bot]. Attribution is not signing: a commit made on
+      # the runner is never signed, whichever token pushes it. To get a
+      # verified one, see:
+      # https://noirbizarre.github.io/gh-ship/workflows/#getting-a-verified-release-commit
       - name: Get the App's user id
         id: bot
         run: echo "id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"

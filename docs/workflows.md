@@ -439,7 +439,7 @@ attributed to whichever identity `git config` names — usually
 push is authenticated as your App.
 
 The App's bot user has a numeric id, and the pair makes the commit attribute to
-the App and show as verified:
+the App:
 
 ```yaml
 - name: Get the App's user id
@@ -456,6 +456,70 @@ the App and show as verified:
     git commit -m "chore(release): ${{ steps.version.outputs.version }}"
     git push origin HEAD
 ```
+
+That is attribution, not signing. The commit above shows as authored by your App
+and carries no **Verified** badge. See [Getting a verified release
+commit](#getting-a-verified-release-commit).
+
+### Getting a verified release commit
+
+A commit created on the runner is never signed, whichever token pushes it. Git
+signs with a key, and there is no key on the runner; the token only authenticates
+the push. So `git commit` + `git push` yields an unsigned commit under a GitHub
+App token exactly as it does under `GITHUB_TOKEN`.
+
+GitHub will sign a commit it creates *itself* on behalf of a bot — but only when
+the request carries no author, committer or signature of its own. Adding the
+identity is what suppresses the signature, which makes the two goals mutually
+exclusive in a single call. Measured, four routes to the same tree:
+
+| How the commit is made | Verified | Committer |
+|---|---|---|
+| `git commit` + `git push` | no, `unsigned` | the identity you configured |
+| `POST /git/commits` **with** `author`/`committer` | no, `unsigned` | the identity you sent |
+| `POST /git/commits` **without** them | **yes**, `valid` | `GitHub` |
+| GraphQL `createCommitOnBranch` | **yes**, `valid` | `GitHub` |
+
+To take the third route, commit and push as usual, then re-create that commit
+through the API and move the branch onto it. The push has to come first: the API
+can only reference a tree that already exists on the server, and pushing is what
+uploads it.
+
+```yaml
+- name: Commit, then re-create the commit so GitHub signs it
+  run: |
+    git add -A
+    git commit -m "chore(release): ${{ steps.version.outputs.version }}"
+    git push origin HEAD
+
+    signed=$(gh api "repos/$GITHUB_REPOSITORY/git/commits" -X POST \
+      -f message="$(git log -1 --format=%B)" \
+      -f tree="$(git rev-parse 'HEAD^{tree}')" \
+      -f "parents[]=$(git rev-parse HEAD^)" \
+      --jq .sha)
+
+    gh api "repos/$GITHUB_REPOSITORY/git/refs/heads/$GITHUB_REF_NAME" -X PATCH \
+      -f sha="$signed" -F force=true --silent
+  env:
+    GH_TOKEN: ${{ steps.app-token.outputs.token }}
+```
+
+gh-ship needs nothing from you here: it promotes whatever the staging branch
+points at, so moving the tip is enough.
+
+!!! warning "What the re-created commit costs"
+
+    The signed commit is a *new* commit, so the committer becomes `GitHub` and
+    the author becomes the bot the token belongs to — you cannot choose either,
+    since choosing is what stops GitHub signing.
+
+    The snippet assumes your workflow made exactly **one** commit on top of the
+    ref it was dispatched on. If it makes several, replay them or squash them
+    deliberately; `HEAD^` is otherwise the wrong parent.
+
+For a release commit attributed to a person or an organisation rather than a bot,
+import a GPG or SSH signing key and set `commit.gpgsign` instead. That verifies
+without the API round trip, at the cost of a signing key in your secrets.
 
 ### What the token must be allowed to do
 
