@@ -82,7 +82,7 @@ workflows:
   prepare: prepare-release
   publish: publish-release
 pull_request:
-  title: \"Release {{ version }}\"
+  title: \"chore(release): {{ version }}\"
 ";
     check(yaml).expect("the config init generates must validate");
 }

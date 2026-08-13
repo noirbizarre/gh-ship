@@ -27,7 +27,7 @@ fn preview_renders_the_pull_request_without_mutating_anything() {
     assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(out.stdout.contains("## Changes"), "{}", out.stdout);
     assert!(
-        out.diagnostics().contains("Release 1.4.0"),
+        out.diagnostics().contains("chore(release): 1.4.0"),
         "{}",
         out.diagnostics()
     );
@@ -157,7 +157,7 @@ fn preview_json_is_machine_readable() {
     let v: serde_json::Value = serde_json::from_str(&out.stdout)
         .unwrap_or_else(|e| panic!("stdout must be valid JSON ({e}): {}", out.stdout));
     assert_eq!(v["artifact"]["version"], "1.4.0");
-    assert_eq!(v["pull_request"]["title"], "Release 1.4.0");
+    assert_eq!(v["pull_request"]["title"], "chore(release): 1.4.0");
     assert!(
         v["pull_request"]["body"]
             .as_str()

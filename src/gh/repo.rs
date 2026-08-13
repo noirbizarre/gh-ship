@@ -43,6 +43,46 @@ pub fn repository(gh: &Gh) -> Result<Repository, GhError> {
     gh.json(&args)
 }
 
+/// How this repository composes a squash-merge commit.
+///
+/// The Release PR is meant to become exactly one commit on the base
+/// branch, and these three settings decide what that commit says. They
+/// are not gh-ship's to set — changing repository settings needs admin
+/// and is not something a release tool should do behind your back — but
+/// they are gh-ship's to *report*, because the wrong values quietly undo
+/// the `pull_request.title` template.
+#[derive(Debug, Clone, Deserialize)]
+pub struct MergeSettings {
+    /// Whether squash merging is offered at all. When it is off, none of
+    /// the rest applies.
+    #[serde(default)]
+    pub allow_squash_merge: bool,
+
+    /// `PR_TITLE` or `COMMIT_OR_PR_TITLE`.
+    #[serde(default)]
+    pub squash_merge_commit_title: String,
+
+    /// `PR_BODY`, `COMMIT_MESSAGES` or `BLANK`.
+    #[serde(default)]
+    pub squash_merge_commit_message: String,
+}
+
+/// The squash-merge title source that honours `pull_request.title`.
+pub const SQUASH_TITLE_PR: &str = "PR_TITLE";
+
+/// The squash-merge body source that leaves the commit body empty.
+pub const SQUASH_MESSAGE_BLANK: &str = "BLANK";
+
+/// Read the repository's merge settings.
+///
+/// `gh api` has no `--repo` flag, so the slug is interpolated into the
+/// path and the unscoped runner is used — same shape as every other API
+/// call in this module.
+pub fn merge_settings(gh: &Gh) -> Result<MergeSettings, GhError> {
+    let repo = gh.slug()?;
+    gh.json(&["api", &format!("repos/{repo}")])
+}
+
 // --- Branches ------------------------------------------------------------
 
 /// Whether a branch exists on the remote.
@@ -603,6 +643,33 @@ mod tests {
         let r: Repository = serde_json::from_str(json).unwrap();
         assert_eq!(r.name_with_owner, "noirbizarre/gh-ship");
         assert_eq!(r.default_branch.name, "main");
+    }
+
+    /// `gh api repos/{slug}` returns a hundred fields; only three matter,
+    /// and the rest must not break deserialisation.
+    #[test]
+    fn merge_settings_ignore_the_rest_of_the_repository_payload() {
+        let json = r#"{
+            "name": "gh-ship",
+            "private": false,
+            "allow_squash_merge": true,
+            "allow_merge_commit": false,
+            "squash_merge_commit_title": "PR_TITLE",
+            "squash_merge_commit_message": "BLANK"
+        }"#;
+        let m: MergeSettings = serde_json::from_str(json).unwrap();
+        assert!(m.allow_squash_merge);
+        assert_eq!(m.squash_merge_commit_title, SQUASH_TITLE_PR);
+        assert_eq!(m.squash_merge_commit_message, SQUASH_MESSAGE_BLANK);
+    }
+
+    /// An older or restricted response may omit the squash keys
+    /// entirely; that must read as "unknown", not as a panic.
+    #[test]
+    fn merge_settings_tolerate_missing_squash_keys() {
+        let m: MergeSettings = serde_json::from_str("{}").unwrap();
+        assert!(!m.allow_squash_merge);
+        assert!(m.squash_merge_commit_title.is_empty());
     }
 
     #[test]

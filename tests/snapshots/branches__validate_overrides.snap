@@ -7,3 +7,4 @@ expression: out.diagnostics()
   release line: release/* -> next/{{ match }} (per match)
   prepare: prepare-release
 ✔ workflows satisfy the gh-ship contract
+✔ squash merges produce a clean release commit

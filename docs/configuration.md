@@ -49,7 +49,7 @@ workflows:
   publish: publish-release
 
 pull_request:
-  title: "Release {{ version }}"
+  title: "chore(release): {{ version }}"
   header: |
     This PR prepares the next release.
   footer: |
@@ -232,11 +232,65 @@ branches: [develop]
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `title` | template | `Release {{ version }}` | PR title. |
+| `title` | template | `chore(release): {{ version }}` | PR title — and the squash commit subject. |
 | `header` | template | — | Markdown prepended to the release notes. |
 | `footer` | template | — | Markdown appended after the release notes. |
 | `labels` | list | `[]` | Labels applied to the Release PR. |
 | `reuse` | boolean | `true` | Reuse the existing Release PR instead of opening a new one each time. |
+
+### The PR title is the release commit message
+
+When the Release PR is squash-merged, GitHub composes the commit from the PR
+title and appends `(#42)`. The default title is therefore a Conventional Commit:
+
+```
+chore(release): 1.4.0 (#42)
+```
+
+That subject is parseable by the same tooling your prepare workflow already runs
+(git-cliff, commitlint, semantic-release), and the `(#42)` GitHub appends is the
+link back to the pull request — so no commit body is needed.
+
+Two repository settings decide whether GitHub actually uses it. `gh ship
+validate` reports them, and the fix is a one-off:
+
+```console
+$ gh api -X PATCH repos/OWNER/REPO \
+    -f squash_merge_commit_title=PR_TITLE \
+    -f squash_merge_commit_message=BLANK
+```
+
+Without `PR_TITLE`, GitHub prefers the bump commit's own subject whenever the PR
+has a single commit — which a Release PR usually does — and `pull_request.title`
+is silently bypassed. Without `BLANK`, the entire PR body is copied into git
+history: the full release notes *and* the embedded `<!-- ship:artifact -->`
+JSON that gh-ship uses to carry its state.
+
+!!! warning "Your changelog tool must ignore the release commit"
+
+    A Conventional release commit is one your changelog tool will *parse* — so
+    it must also be told to skip it. Otherwise `chore(release): 1.4.0 (#42)`
+    shows up in the next changelog under "Chores", and, worse, counts as an
+    unreleased change: the next prepare then sees something to release and
+    proposes `1.4.1` out of nothing, every time, forever.
+
+    The scaffolded workflow already commits the version bump as
+    `chore(release): <version>`, so this rule is one you need regardless of how
+    the Release PR is merged.
+
+    For [git-cliff](https://git-cliff.org), in `cliff.toml`:
+
+    ```toml
+    [git]
+    commit_parsers = [
+      { message = "^chore\\(release\\):", skip = true },
+      # …
+    ]
+    ```
+
+    For [semantic-release](https://semantic-release.gitbook.io) and
+    [Commitizen](https://commitizen-tools.github.io/commitizen/), `chore` is
+    already a non-releasing type by default.
 
 ### Reusing the Release PR
 
@@ -299,7 +353,7 @@ Examples:
 
 ```yaml
 pull_request:
-  title: "Release {{ version }}"
+  title: "chore(release): {{ version }}"
   header: |
     Shipping `{{ tag }}`.
     {% if release.prerelease %}

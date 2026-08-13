@@ -14,7 +14,7 @@ workflows:
   publish: publish-release
 
 pull_request:
-  title: "Release {{ version }}"
+  title: "chore(release): {{ version }}"
   header: |
     This PR prepares the next release of gh-ship.
 

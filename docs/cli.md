@@ -148,8 +148,11 @@ $ gh ship validate [FILE]
 [artifact schema](specifications/release-artifact.md). Requires **no network, no
 repository, and no GitHub authentication**.
 
-**Without a file** — validates `.github/ship.yml` and checks that the workflows it
-names satisfy the [contract](workflows.md).
+**Without a file** — validates `.github/ship.yml`, checks that the workflows it
+names satisfy the [contract](workflows.md), and reports whether this repository's
+squash-merge settings would spoil the release commit. That last check is
+best-effort: without `gh`, without authentication, or against a repository it
+cannot read, it says nothing rather than failing.
 
 ```console
 $ gh ship validate ship.release.json

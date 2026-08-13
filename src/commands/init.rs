@@ -449,6 +449,15 @@ pub fn render_config(prepare: &str, publish: Option<&str>) -> String {
          # {{ release.notes }}.\n\
          #\n\
          # The PR body is: header + the notes your workflow produced + footer.\n\
+         #\n\
+         # The title is also the commit message: GitHub pre-fills the\n\
+         # \"Squash and merge\" dialog from it and appends `(#42)`, so keep it a\n\
+         # Conventional Commit. `gh ship validate` checks that this repository's\n\
+         # squash settings actually use it.\n\
+         #\n\
+         # Because it is Conventional, your changelog tool will parse it — make\n\
+         # sure it also skips it, or every release will look like an unreleased\n\
+         # change and propose the next one out of nothing.\n\
          pull_request:\n",
     );
     // The default lives in one place; echoing it as a literal here would
@@ -494,7 +503,15 @@ fn next_steps(theme: Theme, has_publish: bool, strategy: TokenStrategy) -> Strin
             ],
         ),
         String::new(),
-        logger::step(theme, 2, &["Run `gh ship validate` to check the setup."]),
+        logger::step(
+            theme,
+            2,
+            &[
+                "Run `gh ship validate` to check the setup — including whether",
+                "this repository squash-merges the Release PR into a clean,",
+                "Conventional release commit.",
+            ],
+        ),
         String::new(),
         logger::step(
             theme,

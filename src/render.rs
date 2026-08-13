@@ -262,7 +262,7 @@ mod tests {
     fn renders_title_from_the_artifact_root_context() {
         let cfg = PullRequestConfig::default();
         let r = render(&cfg, &artifact()).unwrap();
-        assert_eq!(r.title, "Release 1.4.0");
+        assert_eq!(r.title, "chore(release): 1.4.0");
     }
 
     #[test]

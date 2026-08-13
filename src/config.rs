@@ -23,7 +23,18 @@ pub const CONFIG_VERSION: u32 = 1;
 pub const DEFAULT_RELEASE_BRANCH: &str = "release/next";
 
 /// Default Release PR title template.
-pub const DEFAULT_PR_TITLE: &str = "Release {{ version }}";
+///
+/// A Conventional Commit, because **the PR title is the commit message**.
+/// GitHub pre-fills the "Squash and merge" dialog from it and appends
+/// `(#42)`, so this default lands in history as
+/// `chore(release): 1.4.0 (#42)` — parseable by the same changelog
+/// tooling (git-cliff, commitlint, semantic-release) the prepare
+/// workflow already runs, and carrying its own link back to the PR.
+///
+/// `chore(release)` rather than `feat`/`fix`: the release commit is not
+/// itself a change to the software, and typing it otherwise would make
+/// the next release's changelog claim the previous release as a feature.
+pub const DEFAULT_PR_TITLE: &str = "chore(release): {{ version }}";
 
 /// Parsed configuration, plus the source it came from.
 #[derive(Debug, Clone)]

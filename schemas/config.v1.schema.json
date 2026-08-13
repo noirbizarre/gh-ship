@@ -81,10 +81,10 @@
       "type": "object",
       "properties": {
         "title": {
-          "description": "Template for the PR title.",
+          "description": "Template for the PR title. This is also the commit message: GitHub pre-fills the squash-merge dialog from the PR title and appends `(#42)`, so a Conventional Commit here keeps the release commit parseable by changelog tooling.",
           "type": "string",
           "minLength": 1,
-          "default": "Release {{ version }}"
+          "default": "chore(release): {{ version }}"
         },
         "header": {
           "description": "Markdown prepended to the release notes.",
@@ -140,7 +140,7 @@
         "publish": "publish-release"
       },
       "pull_request": {
-        "title": "Release {{ version }}",
+        "title": "chore(release): {{ version }}",
         "header": "This PR prepares the next release.\n",
         "footer": "Generated automatically by gh-ship.\n",
         "labels": ["release"]

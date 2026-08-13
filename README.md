@@ -139,7 +139,7 @@ workflows:
   publish: publish-release
 
 pull_request:
-  title: "Release {{ version }}"
+  title: "chore(release): {{ version }}"
   header: |
     This PR prepares the next release.
   footer: |
@@ -148,6 +148,12 @@ pull_request:
 ```
 
 Only `version` and `workflows.prepare` are required.
+
+The PR title is also the release commit message: GitHub composes the squash
+commit from it and appends `(#42)`, so the default lands in history as
+`chore(release): 1.4.0 (#42)`. `gh ship validate` checks that your repository's
+squash settings actually use it — see
+[The PR title is the release commit message](https://noirbizarre.github.io/gh-ship/configuration/#the-pr-title-is-the-release-commit-message).
 
 Maintaining several release lines at once — a `1.x` branch alive while `main`
 moves on — is a two-line addition; see

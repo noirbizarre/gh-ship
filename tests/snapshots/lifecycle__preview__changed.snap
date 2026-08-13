@@ -16,7 +16,7 @@ expression: out.diagnostics()
 
 ── Pull Request ─────────────────────────────────────────────
 
-  title: Release 1.4.0
+  title: chore(release): 1.4.0
 
 
 ── end ──────────────────────────────────────────────────────
