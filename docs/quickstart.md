@@ -25,8 +25,7 @@ whatever your project already uses — cargo-release, Commitizen, git-cliff,
 semantic-release, a shell script. gh-ship does not care.
 
 The only parts you must keep are the [contract](workflows.md): the
-`workflow_dispatch` trigger, the `ship_id` input, the `run-name`, and the artifact
-upload.
+`workflow_dispatch` trigger, the `dry_run` input, and the artifact upload.
 
 ## 3. Check the setup
 

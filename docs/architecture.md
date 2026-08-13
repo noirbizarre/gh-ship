@@ -80,13 +80,20 @@ and buys a detection story with no `PATH` dependency and no way to fetch.
 `gh workflow run` returns 204 No Content. There is no API that maps a dispatch to a
 run.
 
-gh-ship generates a nonce, passes it as the `ship_id` input, and requires the
-workflow to stamp it into `run-name`. It then polls the run list and matches on that
-nonce. `gh ship validate` refuses a workflow that would break this, so the failure
-surfaces at setup time rather than mid-release.
+gh-ship correlates on three things it controls rather than on anything the
+workflow has to echo back: the **ref** (unique per invocation — a throwaway
+staging branch for prepare, the tag for release), the **event** (only
+`workflow_dispatch` runs are candidates, so a workflow also triggering on push
+does not match its own push run), and **novelty** (the run ids on the ref are
+snapshotted immediately before dispatching; the new one is ours).
 
 The alternative — newest run after the dispatch timestamp — is wrong under
 concurrency, and wrong rarely enough to survive testing.
+
+This asks nothing of the workflow beyond `on: workflow_dispatch`, which is what
+lets a prepare or publish workflow be an ordinary reusable workflow. An earlier
+design passed a nonce as a `ship_id` input and required it in `run-name`; it
+worked, but the cost was borne by every user's workflow file forever.
 
 ### Zero state, via the PR body
 
@@ -154,12 +161,13 @@ stale branch ran a stale copy of the workflow — the sort of thing that produce
 "I fixed it, and it still fails". The staging branch is cut from the base, so the
 definition is always current.
 
-Staging branches are named `ship/prepare-<nonce>`, sharing the correlation nonce
-with the dispatch and the run, and are deleted once the release branch has moved.
+Staging branches are named `ship/prepare-<token>` after a random per-invocation
+token, and are deleted once the release branch has moved. The token is what makes
+the branch — and so the run dispatched on it — belong to exactly one prepare.
 A run that fails part-way leaves one behind, so each prepare sweeps them first.
 
 With [release lines](configuration.md#release-lines) configured the name also
-carries the line — `ship/prepare-<base>-<nonce>` — and the sweep is filtered to
+carries the line — `ship/prepare-<base>-<token>` — and the sweep is filtered to
 that same prefix. Two lines can then prepare concurrently without either one
 deleting the ref the other's `workflow_dispatch` is running on.
 
@@ -206,7 +214,7 @@ not just what happened.
 | `miette`, `thiserror` | diagnostics |
 | `minijinja` | PR templating |
 | `demand` | `init` prompts |
-| `uuid` | correlation nonces |
+| `uuid` | staging branch tokens |
 | `owo-colors`, `strsim` | output and "did you mean?" |
 
 No async runtime. The work is dominated by waiting on GitHub, and a synchronous

@@ -4,20 +4,11 @@ expression: "render(role, strategy)"
 ---
 name: 🚀 Prepare Release
 
-# gh-ship finds the run it started by looking for its nonce here.
-# `gh workflow run` returns no run id, so this is not decorative:
-# remove it and gh-ship cannot correlate the dispatch to a run.
-run-name: 🚀 Prepare Release (ship:${{ inputs.ship_id }})
-
 on:
   # Required. gh-ship starts this workflow through the API, which can
   # only start workflows declaring `workflow_dispatch`.
   workflow_dispatch:
     inputs:
-      ship_id:
-        description: gh-ship correlation nonce
-        required: true
-        type: string
       dry_run:
         description: Produce the artifact but do not commit or push
         required: false
@@ -29,9 +20,6 @@ on:
   # ability for gh-ship to dispatch it.
   workflow_call:
     inputs:
-      ship_id:
-        required: true
-        type: string
       dry_run:
         required: false
         type: boolean

@@ -210,6 +210,23 @@ fn check_workflow(
         return;
     };
 
+    // Reported whether or not the workflow is otherwise valid: it is not a
+    // failure, just dead weight the user can delete.
+    if found.declares_legacy_ship_id() {
+        eprintln!(
+            "{}",
+            logger::skip(
+                theme,
+                &format!(
+                    "{} still declares a `ship_id` input — gh-ship no longer sends it. \
+                     Remove it, along with the `ship:` marker in `run-name`; the \
+                     compatibility shim that fills it in goes away next release.",
+                    found.slug()
+                )
+            )
+        );
+    }
+
     let violations = found.contract_violations_as(role);
     if violations.is_empty() {
         eprintln!("{}", logger::detail(theme, role.key(), &found.describe()));

@@ -1,11 +1,10 @@
 ---
 source: tests/lifecycle.rs
-expression: out.stderr
+expression: out.diagnostics()
 ---
 ▶ preparing acme/widgets
-▶ staging on ship/prepare-[nonce] from main
-▶ dispatching prepare-release on ship/prepare-[nonce]
-  ship id: [nonce]
+▶ staging on ship/prepare-[token] from main
+▶ dispatching prepare-release on ship/prepare-[token]
   run: https://github.com/acme/widgets/actions/runs/42
 ▶ waiting for prepare-release
 ✔ prepare-release succeeded

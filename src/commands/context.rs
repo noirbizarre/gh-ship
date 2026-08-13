@@ -6,6 +6,7 @@
 //! cannot drift in how they wait, how they report, or how strictly they
 //! validate.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use miette::{Diagnostic, Result};
@@ -18,7 +19,7 @@ use gh_ship::cli::Cli;
 use gh_ship::config::Config;
 use gh_ship::detect::{self, Detected, Origin};
 use gh_ship::gh::repo::{self, Repository};
-use gh_ship::gh::run::{self, Run, ShipId};
+use gh_ship::gh::run::{self, Run};
 use gh_ship::gh::workflow::WorkflowRef;
 use gh_ship::gh::{Gh, workflow};
 use gh_ship::logger;
@@ -189,22 +190,8 @@ pub fn run_workflow(
     branch: &str,
     inputs: &[(&str, String)],
 ) -> Result<Artifact> {
-    run_workflow_as(ctx, workflow_name, branch, &ShipId::generate(), inputs)
-}
-
-/// As [`run_workflow`], with a caller-supplied nonce.
-///
-/// `prepare` names its staging branch after the nonce, so it has to choose the
-/// value before dispatching.
-pub fn run_workflow_as(
-    ctx: &Context,
-    workflow_name: &str,
-    branch: &str,
-    ship_id: &ShipId,
-    inputs: &[(&str, String)],
-) -> Result<Artifact> {
     let resolved = ctx.workflow(workflow_name);
-    let finished = dispatch_and_wait(ctx, &resolved, branch, ship_id, inputs)?;
+    let finished = dispatch_and_wait(ctx, &resolved, branch, inputs)?;
     fetch_artifact(ctx, &finished)
 }
 
@@ -213,11 +200,13 @@ pub fn run_workflow_as(
 /// Every dispatch gh-ship makes goes through here, so a publish that
 /// cross-compiles for an hour reports itself exactly like a prepare that
 /// takes twenty seconds.
+///
+/// The run ids on the ref are snapshotted *before* dispatching: that snapshot
+/// is what tells the run we caused from the ones that were already there.
 pub(crate) fn dispatch_and_wait(
     ctx: &Context,
     workflow: &WorkflowRef,
     branch: &str,
-    ship_id: &ShipId,
     inputs: &[(&str, String)],
 ) -> Result<Run> {
     let theme = ctx.theme;
@@ -227,28 +216,45 @@ pub(crate) fn dispatch_and_wait(
         logger::action(theme, "dispatching", &format!("{workflow} on {branch}"))
     );
 
-    let ship_id = run::dispatch_as(&ctx.gh, workflow, branch, ship_id, inputs)?;
-    eprintln!("{}", logger::detail(theme, "ship id", ship_id.as_str()));
+    let known = run::snapshot(&ctx.gh, workflow, branch);
+    if run::dispatch(&ctx.gh, workflow, branch, inputs)? {
+        warn_legacy_ship_id(ctx, workflow);
+    }
 
-    let found = find_run(ctx, workflow, branch, &ship_id)?;
+    let found = find_run(ctx, workflow, branch, &known)?;
     eprintln!("{}", logger::detail_url(theme, "run", &found.url));
 
     wait_for_run(ctx, workflow, &found)
+}
+
+/// Tell the user their workflow is running on a compatibility shim.
+pub(crate) fn warn_legacy_ship_id(ctx: &Context, workflow: &WorkflowRef) {
+    eprintln!(
+        "{}",
+        logger::skip(
+            ctx.theme,
+            &format!(
+                "`{workflow}` still requires a `ship_id` input; gh-ship supplied a placeholder. \
+                 Remove the input and the `ship:` marker from `run-name` — they are no longer \
+                 used, and this compatibility shim goes away next release."
+            )
+        )
+    );
 }
 
 pub(crate) fn find_run(
     ctx: &Context,
     workflow: &WorkflowRef,
     branch: &str,
-    ship_id: &ShipId,
+    known: &HashSet<u64>,
 ) -> Result<Run> {
     let theme = ctx.theme;
     let mut announced = false;
-    let found = run::find(
+    let found = run::find_new(
         &ctx.gh,
         workflow,
         branch,
-        ship_id,
+        known,
         run::appear_timeout(),
         |elapsed| {
             if !announced {

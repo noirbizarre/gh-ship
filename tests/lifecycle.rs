@@ -60,13 +60,66 @@ fn preview_dispatches_with_dry_run() {
 }
 
 #[test]
-fn preview_passes_a_correlation_nonce() {
+fn dispatch_carries_no_correlation_nonce() {
     let repo = Repo::new(CONFIG, GhStub::new().artifact(CHANGED_ARTIFACT));
     repo.ship(&["preview"]);
     assert!(
-        repo.stub.called_with(&["workflow run", "ship_id="]),
-        "every dispatch must carry a nonce: {:?}",
+        !repo.stub.called_with(&["workflow run", "ship_id="]),
+        "correlation is by ref and run id; the nonce input is retired: {:?}",
         repo.stub.calls()
+    );
+}
+
+#[test]
+fn the_run_list_is_snapshotted_before_dispatching() {
+    // Telling our run from the ones already there is the whole correlation
+    // mechanism, so the snapshot must happen before the dispatch, not after.
+    let repo = Repo::new(CONFIG, GhStub::new().artifact(CHANGED_ARTIFACT));
+    repo.ship(&["preview"]);
+    let calls = repo.stub.calls();
+    let list = calls
+        .iter()
+        .position(|c| c.starts_with("run list"))
+        .expect("a run list call");
+    let dispatch = calls
+        .iter()
+        .position(|c| c.starts_with("workflow run"))
+        .expect("a dispatch call");
+    assert!(list < dispatch, "{calls:?}");
+}
+
+#[test]
+fn a_push_triggered_run_is_not_mistaken_for_the_dispatch() {
+    // Creating the staging branch is a push. A prepare workflow that also
+    // declares `on: push` must not have its own push run adopted.
+    let repo = Repo::new(CONFIG, GhStub::new().artifact(CHANGED_ARTIFACT).push_run());
+    let out = repo.ship(&["preview"]);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    assert!(
+        out.diagnostics().contains("actions/runs/42"),
+        "the dispatched run, not the push run 99: {}",
+        out.diagnostics()
+    );
+}
+
+#[test]
+fn a_legacy_workflow_requiring_ship_id_still_dispatches() {
+    let repo = Repo::new(
+        CONFIG,
+        GhStub::new().artifact(CHANGED_ARTIFACT).requires_ship_id(),
+    );
+    let out = repo.ship(&["preview"]);
+
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    assert!(
+        repo.stub.called_with(&["workflow run", "ship_id="]),
+        "the shim must retry with a placeholder: {:?}",
+        repo.stub.calls()
+    );
+    assert!(
+        out.diagnostics().contains("no longer used"),
+        "the user must be told to remove it: {}",
+        out.diagnostics()
     );
 }
 
@@ -118,19 +171,19 @@ fn preview_json_is_machine_readable() {
 /// The failure this whole design exists to prevent: a run that cannot be
 /// found. The message must name the cause, not just report a timeout.
 #[test]
-fn a_run_that_never_appears_explains_the_run_name_contract() {
+fn a_run_that_never_appears_explains_the_likely_causes() {
     let repo = Repo::new(CONFIG, GhStub::new().run_never_appears());
     let out = repo.ship(&["preview"]);
 
     assert_eq!(out.code, 1);
     assert!(
-        out.diagnostics().contains("run-name"),
+        out.diagnostics().contains("workflow_dispatch"),
         "{}",
         out.diagnostics()
     );
     assert!(
-        out.diagnostics().contains("no run id"),
-        "the help must explain why correlation needs run-name: {}",
+        out.diagnostics().contains("from that ref"),
+        "the help must name the ref gotcha, the most common cause: {}",
         out.diagnostics()
     );
 }

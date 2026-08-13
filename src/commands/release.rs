@@ -61,7 +61,7 @@ use thiserror::Error;
 use gh_ship::artifact::Artifact;
 use gh_ship::cli::{Cli, ReleaseArgs};
 use gh_ship::gh::repo::{self, PullRequest};
-use gh_ship::gh::run::{self, ShipId};
+use gh_ship::gh::run::{self};
 use gh_ship::logger;
 use gh_ship::render;
 use gh_ship::style::Theme;
@@ -325,15 +325,11 @@ fn create_release(ctx: &Context, artifact: &Artifact, tag: &str, target: &str) -
 ///
 /// # Why this looks before it dispatches
 ///
-/// Correlation is by nonce, and the nonce is generated per invocation and
-/// never persisted. A publish run that failed and was then re-run from the
-/// GitHub UI keeps its original `run-name`, and so its original nonce: a
-/// re-run of the calling job would match nothing, dispatch a second full
-/// build, and re-upload assets that are already there.
-///
-/// The tag ref makes that unnecessary. It is unique to this release, so
-/// every run of the publish workflow on it belongs to this release — no
-/// matter who started it or which nonce it carries.
+/// The tag ref is unique to this release, so every run of the publish
+/// workflow on it belongs to this release — no matter who started it. A run
+/// that failed and was then re-run from the GitHub UI is therefore visible
+/// here, and dispatching a second full build that re-uploads assets already
+/// attached is avoided.
 fn run_publish(ctx: &Context, workflow_name: &str, tag: &str) -> Result<()> {
     let theme = ctx.theme;
     let workflow = ctx.workflow(workflow_name);
@@ -374,6 +370,6 @@ fn run_publish(ctx: &Context, workflow_name: &str, tag: &str) -> Result<()> {
     // that cross-compiles for an hour must look alive throughout, and it
     // must look the same as every other wait gh-ship does.
     let inputs = [("tag", tag.to_string())];
-    dispatch_and_wait(ctx, &workflow, tag, &ShipId::generate(), &inputs)?;
+    dispatch_and_wait(ctx, &workflow, tag, &inputs)?;
     Ok(())
 }

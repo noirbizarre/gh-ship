@@ -40,7 +40,7 @@ fn rejects_a_workflow_call_only_workflow() {
 on:
   workflow_call:
     inputs:
-      ship_id: { required: true, type: string }
+      dry_run: { required: false, type: boolean, default: false }
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -58,51 +58,54 @@ jobs:
     );
 }
 
-/// Without the nonce in `run-name`, gh-ship cannot correlate a dispatch
-/// to a run — so this must fail at setup time, not at release time.
+/// A plain dispatchable workflow with the one input `preview` needs is all
+/// gh-ship asks for: no `run-name`, no correlation input.
 #[test]
-fn rejects_a_workflow_without_run_name_correlation() {
-    let no_run_name = r#"name: prepare-release
+fn accepts_a_workflow_without_run_name_or_ship_id() {
+    let plain = r#"name: prepare-release
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run: { required: false, type: boolean, default: false }
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps: [{ run: echo hi }]
+"#;
+    let dir = repo(Some(MINIMAL_CONFIG), &[("prepare-release.yml", plain)]);
+    let out = validate_in(dir.path());
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+}
+
+/// A leftover `ship_id` input is dead weight, not a failure: the release
+/// must still go out while the user gets around to deleting it.
+#[test]
+fn reports_but_tolerates_a_leftover_ship_id_input() {
+    let legacy = r#"name: prepare-release
+run-name: prepare-release (ship:${{ inputs.ship_id }})
 on:
   workflow_dispatch:
     inputs:
       ship_id: { required: true, type: string }
+      dry_run: { required: false, type: boolean, default: false }
 jobs:
   prepare:
     runs-on: ubuntu-latest
     steps: [{ run: echo hi }]
 "#;
-    let dir = repo(
-        Some(MINIMAL_CONFIG),
-        &[("prepare-release.yml", no_run_name)],
-    );
+    let dir = repo(Some(MINIMAL_CONFIG), &[("prepare-release.yml", legacy)]);
     let out = validate_in(dir.path());
     let (code, stderr) = (out.code, out.diagnostics());
 
-    assert_eq!(code, 1, "{stderr}");
-    assert!(stderr.contains("run-name"), "{stderr}");
-    assert!(
-        stderr.contains("no run id"),
-        "the help must explain *why* run-name is required: {stderr}"
+    assert_eq!(
+        code, 0,
+        "a retired input must not fail validation: {stderr}"
     );
-}
-
-#[test]
-fn rejects_a_workflow_missing_the_ship_id_input() {
-    let no_input = r#"name: prepare-release
-run-name: prepare-release (ship:${{ inputs.ship_id }})
-on:
-  workflow_dispatch:
-jobs:
-  prepare:
-    runs-on: ubuntu-latest
-    steps: [{ run: echo hi }]
-"#;
-    let dir = repo(Some(MINIMAL_CONFIG), &[("prepare-release.yml", no_input)]);
-    let out = validate_in(dir.path());
-    let (code, stderr) = (out.code, out.diagnostics());
-    assert_eq!(code, 1, "{stderr}");
     assert!(stderr.contains("ship_id"), "{stderr}");
+    assert!(
+        stderr.contains("no longer sends it"),
+        "the user must be told it is safe to delete: {stderr}"
+    );
 }
 
 #[test]
@@ -290,15 +293,13 @@ fn every_generated_workflow_is_conforming() {
 /// the config by its filename slug. Requiring `🚢 Prepare Release` in
 /// YAML would be miserable, and renaming a workflow would break releases.
 const EMOJI_WORKFLOW: &str = r#"name: 🚢 Prepare Release
-run-name: 🚢 Prepare Release (ship:${{ inputs.ship_id }})
 on:
   workflow_dispatch:
     inputs:
-      ship_id: { required: true, type: string }
       dry_run: { required: false, type: boolean, default: false }
   workflow_call:
     inputs:
-      ship_id: { required: true, type: string }
+      dry_run: { required: false, type: boolean, default: false }
 jobs:
   prepare:
     runs-on: ubuntu-latest

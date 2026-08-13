@@ -190,11 +190,11 @@ $ gh ship prepare [--no-wait]
 
 1. Stops if a merged Release PR is still awaiting `gh ship release`.
 2. Sweeps staging branches left behind by earlier runs.
-3. Cuts a throwaway staging branch, `ship/prepare-<nonce>`, from the base branch
+3. Cuts a throwaway staging branch, `ship/prepare-<token>`, from the base branch
    (`workflow_dispatch` needs the ref to exist). With
    [release lines](configuration.md#release-lines) configured the name carries
-   the line — `ship/prepare-<base>-<nonce>`, so `release/1.x` stages on
-   `ship/prepare-release-1.x-<nonce>`.
+   the line — `ship/prepare-<base>-<token>`, so `release/1.x` stages on
+   `ship/prepare-release-1.x-<token>`.
 4. Dispatches the prepare workflow **on that staging branch** and waits.
 5. Downloads and validates the artifact.
 6. Stops with exit 0 if `changed: false`.

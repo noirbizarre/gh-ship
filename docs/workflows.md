@@ -2,8 +2,8 @@
 
 gh-ship dispatches workflows you own. This page is the contract they must satisfy.
 
-`gh ship validate` checks rules 1 to 3 below, so you never have to discover those
-violations during a release. Rule 4 — uploading the artifact — is the one thing it
+`gh ship validate` checks rules 1 and 2 below, so you never have to discover those
+violations during a release. Rule 3 — uploading the artifact — is the one thing it
 cannot check, because it depends on what your job steps actually do at runtime.
 
 ## The contract
@@ -11,17 +11,11 @@ cannot check, because it depends on what your job steps actually do at runtime.
 ```yaml
 name: prepare-release
 
-# 1. Correlation. Required.
-run-name: prepare-release (ship:${{ inputs.ship_id }})
-
 on:
-  # 2. Dispatchable. Required.
+  # 1. Dispatchable. Required.
   workflow_dispatch:
     inputs:
-      # 3. The nonce input. Required.
-      ship_id:
-        required: true
-        type: string
+      # 2. The dry-run input. Required for the prepare workflow.
       dry_run:
         required: false
         type: boolean
@@ -30,9 +24,11 @@ on:
   # Optional, recommended: keeps the workflow reusable too.
   workflow_call:
     inputs:
-      ship_id: { required: true, type: string }
       dry_run: { required: false, type: boolean, default: false }
 ```
+
+That is the whole contract. gh-ship asks for nothing that would stop this being
+an ordinary reusable workflow — no `run-name` convention, no correlation input.
 
 ### 0. gh-ship refers to it by filename slug
 
@@ -70,27 +66,7 @@ declaring `on: workflow_dispatch`.
     Declare **both** triggers to have it both ways: dispatchable by gh-ship, and
     reusable by your other workflows.
 
-### 2. It must stamp the nonce into `run-name`
-
-```yaml
-run-name: prepare-release (ship:${{ inputs.ship_id }})
-```
-
-This looks decorative. It is not.
-
-`gh workflow run` — and the REST endpoint behind it — returns **204 No Content**. No
-run id, no URL. There is no API that says "the dispatch you just made became run
-12345".
-
-The obvious workaround is to list recent runs and take the newest. That is wrong
-whenever a teammate dispatches concurrently, a schedule fires, a push lands at the
-same moment, or GitHub queues the run late. It fails rarely enough to pass testing
-and often enough to corrupt a release.
-
-So gh-ship generates a nonce, passes it as `ship_id`, and finds its run by looking
-for `ship:<nonce>` in the run title. Explicit beats guessing.
-
-### 3. It must accept and respect `dry_run`
+### 2. It must accept and respect `dry_run`
 
 ```yaml
 on:
@@ -109,7 +85,7 @@ workflow does not declare — so without it `gh ship preview` fails mid-command.
 This rule applies to the prepare workflow only, which is the one `preview`
 dispatches.
 
-### 4. It must upload the artifact
+### 3. It must upload the artifact
 
 !!! warning "Not checked by `gh ship validate`"
 
@@ -176,23 +152,19 @@ been notified about yet.
 It receives the `tag` as an input, and should check that out rather than a branch —
 you want to build exactly what is being released.
 
-Rules 1 and 2 apply here exactly as they do to the prepare workflow: it must be
-dispatchable, and it must stamp `ship_id` into its `run-name` or `gh ship release`
-will never find the run it started. Only rule 3 (`dry_run`) is prepare-only.
+Rule 1 applies here exactly as it does to the prepare workflow: it must be
+dispatchable. Rule 2 (`dry_run`) is prepare-only, since `gh ship preview` never
+dispatches publish.
 
 ```yaml
-run-name: 📦 Publish Release (ship:${{ inputs.ship_id }})
-
 on:
   workflow_dispatch:
     inputs:
-      ship_id: { required: true, type: string }
       tag: { required: true, type: string }
   # Optional, recommended: keeps the workflow reusable too. The generated
   # template declares both.
   workflow_call:
     inputs:
-      ship_id: { required: true, type: string }
       tag: { required: true, type: string }
 
 jobs:
@@ -574,7 +546,7 @@ permissions:
 $ gh ship validate
 ```
 
-Rules 1 to 3 are checked, with an explanation of why each exists:
+Rules 1 and 2 are checked, with an explanation of why each exists:
 
 ```
 × workflow `prepare-release` does not declare `on: workflow_dispatch`
@@ -583,3 +555,59 @@ Rules 1 to 3 are checked, with an explanation of why each exists:
         is usually called a reusable workflow — cannot be started this way.
         Declare both triggers to keep it reusable *and* dispatchable.
 ```
+
+## How gh-ship finds the run it started
+
+You do not have to do anything for this to work — it is documented because it
+explains the shape of the contract, and because a workflow that also triggers on
+`push` interacts with it.
+
+`gh workflow run`, and the REST endpoint behind it, returns **204 No Content**. No
+run id, no URL. There is no API that says "the dispatch you just made became run
+12345", and taking the newest run on the branch is wrong whenever a schedule
+fires, a push lands at the same moment, or a teammate dispatches concurrently.
+
+So gh-ship correlates on three things it controls:
+
+1. **The ref.** Every dispatch goes to a ref that identifies the work. `prepare`
+   cuts a throwaway staging branch, `ship/prepare-<token>`, and dispatches on it;
+   `release` dispatches on the tag. Neither is shared with anything else.
+2. **The event.** Only `workflow_dispatch` runs are candidates. This is what stops
+   a workflow that also declares `on: push` from matching the run that creating
+   the staging branch triggered.
+3. **Novelty.** The run ids on the ref are recorded immediately *before*
+   dispatching. The run that was not there before is ours.
+
+The same ref-based reasoning makes `gh ship release` idempotent: a publish run
+that failed and was re-run from the GitHub UI is on the tag, so it is found and
+waited on rather than duplicated.
+
+!!! warning "`gh ship preview` is the one loose end"
+
+    `preview` dispatches on the base branch, which *is* shared. Two people running
+    `gh ship preview` at the same moment may attach to each other's run. It is a
+    dry run producing the same changelog either way, so nothing is corrupted.
+
+## Migrating from the `ship_id` contract
+
+Earlier versions required a `ship_id` input and a `run-name` stamping
+`ship:${{ inputs.ship_id }}`. Neither is used any more.
+
+Nothing breaks if you do nothing: gh-ship detects a workflow that still requires
+`ship_id` and supplies a placeholder, warning as it goes. **That shim is removed
+in the next release**, so tidy up when convenient:
+
+```diff
+-run-name: prepare-release (ship:${{ inputs.ship_id }})
+-
+ on:
+   workflow_dispatch:
+     inputs:
+-      ship_id:
+-        required: true
+-        type: string
+       dry_run: { required: false, type: boolean, default: false }
+```
+
+Keeping a plain `run-name` is fine — it is yours to decorate. `gh ship validate`
+points out a leftover `ship_id` input without failing.

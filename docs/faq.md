@@ -18,13 +18,16 @@ another workflow*, not from the API. `gh workflow run` against one fails.
 Declare both `workflow_dispatch` and `workflow_call` and you get both properties.
 The generated templates do exactly that.
 
-## Why is `run-name` mandatory?
+## Do I still need `run-name` and a `ship_id` input?
 
-Because `gh workflow run` returns no run id, so gh-ship would otherwise have to
-*guess* which run is yours — and any heuristic based on timestamps breaks under
-concurrency.
+No. Earlier versions required both, because `gh workflow run` returns no run id
+and gh-ship needed the workflow to echo a nonce back in its run title.
 
-See [Workflows](workflows.md) for the full explanation.
+It now correlates on the **ref** it dispatched to, the **event**, and the run ids
+that were not there before the dispatch — none of which the workflow has to
+cooperate with. `run-name` is yours to decorate, and a leftover `ship_id` input
+is safe to delete. See [Migrating from the `ship_id`
+contract](workflows.md#migrating-from-the-ship_id-contract).
 
 ## Why an artifact instead of job outputs?
 
@@ -132,7 +135,7 @@ sample workflow in [Workflows](workflows.md) does.
 
 Different [release lines](configuration.md#release-lines) *can* prepare
 concurrently. Their staging branches are named after the line
-(`ship/prepare-release-1.x-<nonce>`) and each sweep is scoped to its own, so
+(`ship/prepare-release-1.x-<token>`) and each sweep is scoped to its own, so
 `main` and `release/1.x` never collide. Key the concurrency group by branch —
 `group: ship-${{ github.ref }}` — to allow it.
 
@@ -173,12 +176,10 @@ publish workflow is dispatched on that tag and checks it out.
 Re-run the job that runs `gh ship release`. It will notice the successful run
 and just make the release visible.
 
-Correlation between a dispatch and its run is by a nonce gh-ship generates per
-invocation, and a re-run keeps the *original* run name — so matching on the
-nonce alone would miss it. gh-ship therefore also looks for runs of the publish
-workflow on the **tag**, which is unique to the release: a run that succeeded
-means the assets are attached, whoever started it. A run still in flight is
-waited on. Only if every run failed does gh-ship dispatch a new one.
+gh-ship looks for runs of the publish workflow on the **tag**, which is unique to
+the release: a run that succeeded means the assets are attached, whoever started
+it. A run still in flight is waited on. Only if every run failed does gh-ship
+dispatch a new one.
 
 Everything else `release` does is already idempotent — the tag is not
 re-created, and neither is the release — so the whole command is safe to re-run.

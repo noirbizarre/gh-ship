@@ -6,22 +6,25 @@
 //! No Content**. No run id, no URL, nothing. There is no API that says
 //! "the dispatch you just made became run 12345".
 //!
-//! The obvious workaround is to list recent runs and take the newest one
-//! created after the dispatch. That is wrong in every interesting case:
-//! a teammate dispatching concurrently, a scheduled run, a push landing
-//! at the same moment, or GitHub queueing the run seconds later. It
-//! fails rarely enough to pass testing and often enough to corrupt a
-//! release.
+//! Taking "the newest run on the ref" is wrong: a scheduled run, a push
+//! landing at the same moment, or a workflow that also triggers on push
+//! would all be mistaken for the dispatch.
 //!
-//! So gh-ship makes correlation explicit and part of the protocol:
+//! So gh-ship correlates on three things it *does* control:
 //!
-//! 1. It generates a nonce and passes it as the `ship_id` input.
-//! 2. The workflow is required to stamp it into its own `run-name`.
-//! 3. gh-ship polls the run list and matches on that nonce.
+//! 1. **The ref.** Every dispatch goes to a ref that identifies the work —
+//!    `prepare` cuts a throwaway staging branch, `release` dispatches on the
+//!    tag. Both are unique to the release.
+//! 2. **The event.** Only `workflow_dispatch` runs are candidates, so a
+//!    workflow that also declares `on: push` does not match the run that
+//!    creating the staging branch triggered.
+//! 3. **Novelty.** The run ids present on the ref are snapshotted before
+//!    dispatching; the run that was not there before is ours.
 //!
-//! This is why `run-name` is mandatory and why `gh ship validate`
-//! refuses a workflow without it: the alternative is a guess.
+//! This asks nothing of the workflow beyond `on: workflow_dispatch`, which
+//! is what lets prepare and publish workflows be ordinary reusable ones.
 
+use std::collections::HashSet;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -64,7 +67,10 @@ const POLL_MAX: Duration = Duration::from_secs(15);
 ///
 /// One constant rather than a literal per call site: `list` and `view` must
 /// agree, since both deserialize into [`Run`].
-const RUN_FIELDS: &str = "databaseId,displayTitle,status,conclusion,url,headBranch";
+const RUN_FIELDS: &str = "databaseId,displayTitle,status,conclusion,url,headBranch,event";
+
+/// The `event` value GitHub reports for a run gh-ship started itself.
+const DISPATCH_EVENT: &str = "workflow_dispatch";
 
 /// A workflow run as reported by `gh run list`.
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -81,6 +87,10 @@ pub struct Run {
     pub url: String,
     #[serde(default, rename = "headBranch")]
     pub head_branch: String,
+    /// What triggered the run. `workflow_dispatch` for anything gh-ship
+    /// started; used to ignore runs the same workflow started for itself.
+    #[serde(default)]
+    pub event: String,
 }
 
 impl Run {
@@ -93,39 +103,10 @@ impl Run {
     pub fn succeeded(&self) -> bool {
         self.is_finished() && self.conclusion == "success"
     }
-}
 
-/// A correlation nonce.
-///
-/// Short enough to read in a run title, long enough not to collide.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ShipId(String);
-
-impl ShipId {
-    /// Generate a fresh nonce.
-    pub fn generate() -> Self {
-        let uuid = uuid::Uuid::new_v4().simple().to_string();
-        Self(uuid[..12].to_string())
-    }
-
-    /// Wrap an existing value, for tests and for resuming.
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    /// The marker a conforming workflow puts in its `run-name`.
-    pub fn marker(&self) -> String {
-        format!("ship:{}", self.0)
-    }
-}
-
-impl std::fmt::Display for ShipId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+    /// Whether the run was started through the API, as gh-ship starts them.
+    pub fn is_dispatched(&self) -> bool {
+        self.event == DISPATCH_EVENT
     }
 }
 
@@ -170,27 +151,46 @@ pub enum RunError {
 /// actually read.
 fn not_found_help(workflow: &WorkflowRef) -> String {
     format!(
-        "the most likely cause is that `{workflow}` does not stamp the nonce into its `run-name`. \
-         gh-ship finds your run by looking for `ship:<id>` in the run title, because dispatching \
-         returns no run id. Check with `gh ship validate`, and confirm the workflow exists on the \
-         dispatched branch — `workflow_dispatch` reads the workflow file from that ref, not from \
-         your default branch."
+        "confirm `{workflow}` exists on the dispatched ref — `workflow_dispatch` reads the \
+         workflow file from that ref, not from your default branch — and that it declares \
+         `on: workflow_dispatch`. Check with `gh ship validate`. If a teammate dispatched the \
+         same workflow on the same ref at the same moment, gh-ship may have attached to their \
+         run instead."
     )
 }
 
-/// Dispatch with a caller-supplied nonce.
+/// The deprecated correlation input.
 ///
-/// `prepare` stages its work on a branch named after the nonce, so the branch,
-/// the dispatch and the resulting run all carry one identifier. That is what
-/// makes an abandoned staging branch traceable to the run that abandoned it.
-pub fn dispatch_as(
+/// gh-ship no longer sends it, but workflows generated by older versions declare
+/// it as *required*, and GitHub rejects a dispatch that omits a required input.
+/// [`dispatch`] retries with a throwaway value so those workflows keep working.
+/// Remove after the next release.
+const LEGACY_SHIP_ID_INPUT: &str = "ship_id";
+
+/// Whether a failed dispatch failed *only* because it omitted `ship_id`.
+///
+/// Deliberately narrow: it must not swallow an unrelated dispatch failure and
+/// retry it with a nonsense input.
+fn needs_legacy_ship_id(err: &GhError) -> bool {
+    let GhError::Failed { stderr, .. } = err else {
+        return false;
+    };
+    let stderr = stderr.to_lowercase();
+    stderr.contains(LEGACY_SHIP_ID_INPUT)
+        && (stderr.contains("required") || stderr.contains("expected"))
+}
+
+/// Dispatch a workflow on a ref.
+///
+/// Returns `true` when the dispatch only succeeded thanks to the legacy
+/// `ship_id` shim, so the caller can warn.
+pub fn dispatch(
     gh: &Gh,
     workflow: &WorkflowRef,
     branch: &str,
-    ship_id: &ShipId,
     inputs: &[(&str, String)],
-) -> Result<ShipId, RunError> {
-    let mut args: Vec<String> = vec![
+) -> Result<bool, RunError> {
+    let base: Vec<String> = vec![
         "workflow".into(),
         "run".into(),
         // The API resolves a workflow by filename, name or numeric id —
@@ -198,27 +198,51 @@ pub fn dispatch_as(
         workflow.id.clone(),
         "--ref".into(),
         branch.into(),
-        "-f".into(),
-        format!("{}={}", super::workflow::SHIP_ID_INPUT, ship_id),
     ];
+    let mut args = base.clone();
     for (key, value) in inputs {
         args.push("-f".into());
         args.push(format!("{key}={value}"));
     }
 
-    gh.run_scoped(&args)?;
-    Ok(ship_id.clone())
+    match gh.run_scoped(&args) {
+        Ok(_) => Ok(false),
+        Err(err) if needs_legacy_ship_id(&err) => {
+            // An older generated workflow. Feed it a value so the release is
+            // not blocked on a migration the user has not made yet.
+            let mut retry = base;
+            for (key, value) in inputs {
+                retry.push("-f".into());
+                retry.push(format!("{key}={value}"));
+            }
+            retry.push("-f".into());
+            retry.push(format!("{LEGACY_SHIP_ID_INPUT}={}", legacy_nonce()));
+            gh.run_scoped(&retry)?;
+            Ok(true)
+        }
+        Err(err) => Err(err.into()),
+    }
 }
 
-/// Poll until a run carrying `ship_id` appears.
+/// A throwaway value for the legacy `ship_id` input. Nothing reads it back.
+fn legacy_nonce() -> String {
+    uuid::Uuid::new_v4().simple().to_string()[..12].to_string()
+}
+
+/// Poll until a `workflow_dispatch` run that was not there before appears.
+///
+/// `known` is the set of run ids observed on `branch` immediately before
+/// dispatching. Anything outside it, triggered by a dispatch, is ours. The
+/// highest id wins, since GitHub allocates them monotonically and the newest
+/// is the one we just caused.
 ///
 /// Transient API failures do not surface here: [`Gh`] retries read-only
 /// calls itself, so a 502 mid-poll costs a second rather than the release.
-pub fn find(
+pub fn find_new(
     gh: &Gh,
     workflow: &WorkflowRef,
     branch: &str,
-    ship_id: &ShipId,
+    known: &HashSet<u64>,
     timeout: Duration,
     mut on_wait: impl FnMut(Duration),
 ) -> Result<Run, RunError> {
@@ -228,7 +252,8 @@ pub fn find(
     loop {
         if let Some(run) = list(gh, workflow, branch)?
             .into_iter()
-            .find(|r| r.title.contains(&ship_id.marker()))
+            .filter(|r| r.is_dispatched() && !known.contains(&r.id))
+            .max_by_key(|r| r.id)
         {
             return Ok(run);
         }
@@ -245,6 +270,18 @@ pub fn find(
         std::thread::sleep(interval);
         interval = backoff(interval);
     }
+}
+
+/// The ids of the runs currently visible for a workflow on a ref.
+///
+/// Taken immediately before a dispatch so [`find_new`] can tell the run it
+/// caused from the ones that were already there. A failure here is not fatal:
+/// an empty snapshot simply means the first dispatched run seen wins, which is
+/// exactly right on the freshly created branch `prepare` dispatches on.
+pub fn snapshot(gh: &Gh, workflow: &WorkflowRef, branch: &str) -> HashSet<u64> {
+    list(gh, workflow, branch)
+        .map(|runs| runs.into_iter().map(|r| r.id).collect())
+        .unwrap_or_default()
 }
 
 /// Poll a known run until it reaches a terminal state.
@@ -343,35 +380,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn nonces_are_short_and_unique() {
-        let a = ShipId::generate();
-        let b = ShipId::generate();
-        assert_ne!(a, b);
-        assert_eq!(a.as_str().len(), 12, "short enough to read in a run title");
-        assert!(a.as_str().chars().all(|c| c.is_ascii_alphanumeric()));
-    }
-
-    #[test]
-    fn marker_is_what_the_workflow_template_emits() {
-        let id = ShipId::new("abc123");
-        assert_eq!(id.marker(), "ship:abc123");
-        // The template interpolates `ship:${{ inputs.ship_id }}`, so a
-        // rendered title looks like this:
-        let title = "prepare-release (ship:abc123)";
-        assert!(title.contains(&id.marker()));
-    }
-
-    #[test]
-    fn markers_do_not_match_a_different_nonce() {
-        let mine = ShipId::new("aaaaaaaaaaaa");
-        let theirs = "prepare-release (ship:bbbbbbbbbbbb)";
-        assert!(
-            !theirs.contains(&mine.marker()),
-            "a concurrent dispatch must never be mistaken for ours"
-        );
-    }
-
-    #[test]
     fn run_status_predicates() {
         let queued = Run {
             id: 1,
@@ -380,6 +388,7 @@ mod tests {
             conclusion: String::new(),
             url: String::new(),
             head_branch: "release/next".into(),
+            event: "workflow_dispatch".into(),
         };
         assert!(!queued.is_finished());
         assert!(!queued.succeeded());
@@ -411,15 +420,17 @@ mod tests {
     fn run_list_json_deserialises() {
         let json = r#"[{
             "databaseId": 42,
-            "displayTitle": "prepare-release (ship:deadbeef1234)",
+            "displayTitle": "prepare-release",
             "status": "completed",
             "conclusion": "success",
             "url": "https://github.com/o/r/actions/runs/42",
-            "headBranch": "release/next"
+            "headBranch": "release/next",
+            "event": "workflow_dispatch"
         }]"#;
         let runs: Vec<Run> = serde_json::from_str(json).unwrap();
         assert_eq!(runs[0].id, 42);
         assert!(runs[0].succeeded());
+        assert!(runs[0].is_dispatched());
     }
 
     #[test]
@@ -444,11 +455,65 @@ mod tests {
     #[test]
     fn not_found_help_names_the_two_real_causes() {
         let help = not_found_help(&WorkflowRef::unresolved("prepare-release"));
-        assert!(help.contains("run-name"), "{help}");
+        assert!(help.contains("workflow_dispatch"), "{help}");
         assert!(
             help.contains("from that ref"),
-            "dispatching a ref whose workflow file lacks the trigger is the second \
-             most common cause and must be mentioned: {help}"
+            "dispatching a ref whose workflow file lacks the trigger is the most \
+             common cause and must be mentioned: {help}"
+        );
+    }
+
+    fn run_at(id: u64, event: &str) -> Run {
+        Run {
+            id,
+            title: "prepare-release".into(),
+            status: "completed".into(),
+            conclusion: "success".into(),
+            url: String::new(),
+            head_branch: "main".into(),
+            event: event.into(),
+        }
+    }
+
+    #[test]
+    fn only_dispatched_runs_are_candidates() {
+        // Creating the staging branch is a push. A prepare workflow that also
+        // declares `on: push` would otherwise match its own push run.
+        let push = run_at(43, "push");
+        assert!(!push.is_dispatched());
+        assert!(run_at(43, "workflow_dispatch").is_dispatched());
+    }
+
+    #[test]
+    fn a_pre_existing_run_is_never_mistaken_for_ours() {
+        let known: HashSet<u64> = [41, 42].into_iter().collect();
+        let candidates: Vec<Run> = vec![
+            run_at(41, "workflow_dispatch"),
+            run_at(42, "workflow_dispatch"),
+        ];
+        assert!(
+            candidates.iter().all(|r| known.contains(&r.id)),
+            "everything visible before the dispatch must be excluded"
+        );
+    }
+
+    #[test]
+    fn legacy_ship_id_shim_only_fires_on_that_error() {
+        let missing = GhError::Failed {
+            args: "workflow run".into(),
+            stderr: "required input 'ship_id' not provided".into(),
+            help: None,
+        };
+        assert!(needs_legacy_ship_id(&missing));
+
+        let unrelated = GhError::Failed {
+            args: "workflow run".into(),
+            stderr: "HTTP 404: Not Found".into(),
+            help: None,
+        };
+        assert!(
+            !needs_legacy_ship_id(&unrelated),
+            "an unrelated failure must not be retried with a bogus input"
         );
     }
 }

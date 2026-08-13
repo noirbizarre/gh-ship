@@ -30,12 +30,11 @@ use miette::Result;
 
 use gh_ship::cli::{Cli, PrepareArgs};
 use gh_ship::gh::repo;
-use gh_ship::gh::run::ShipId;
 use gh_ship::logger;
 use gh_ship::render;
 use gh_ship::style::Theme;
 
-use super::context::{Context, report_nothing_to_release, run_workflow_as};
+use super::context::{Context, report_nothing_to_release, run_workflow};
 use super::short_sha;
 
 pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
@@ -73,8 +72,7 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
 
     // Stage on a throwaway branch cut from the base, rather than resetting the
     // release branch in place. See `stage_branch` for why.
-    let ship_id = ShipId::generate();
-    let staging = stage_branch(&base_branch, &ship_id, scoped);
+    let staging = stage_branch(&base_branch, &stage_token(), scoped);
 
     eprintln!(
         "{}",
@@ -87,10 +85,10 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
     repo::create_branch_at(&ctx.gh, &staging, &base_sha)?;
 
     if args.no_wait {
-        return dispatch_only(&ctx, &staging, &ship_id);
+        return dispatch_only(&ctx, &staging);
     }
 
-    let artifact = run_workflow_as(&ctx, ctx.config.prepare_workflow(), &staging, &ship_id, &[])?;
+    let artifact = run_workflow(&ctx, ctx.config.prepare_workflow(), &staging, &[])?;
 
     if !artifact.changed {
         // Nothing was committed, so there is nothing to promote and no reason
@@ -293,16 +291,21 @@ fn slug(branch: &str) -> String {
         .collect()
 }
 
-/// The staging branch name for a run.
+/// A short random token, unique per prepare.
 ///
-/// Named after the correlation nonce so the branch, the dispatch and the run
-/// all carry one identifier — which is what makes a branch left behind by a
-/// failed run traceable to the run that abandoned it.
-fn stage_branch(base: &str, ship_id: &ShipId, scoped: bool) -> String {
+/// The staging branch is named after it, which is what makes the branch — and
+/// therefore the run dispatched on it — belong to exactly one invocation, and
+/// a branch left behind by a failed run traceable to it.
+fn stage_token() -> String {
+    uuid::Uuid::new_v4().simple().to_string()[..12].to_string()
+}
+
+/// The staging branch name for a run.
+fn stage_branch(base: &str, token: &str, scoped: bool) -> String {
     if scoped {
-        format!("{}{ship_id}", staging_prefix(base))
+        format!("{}{token}", staging_prefix(base))
     } else {
-        format!("{STAGING_PREFIX}{ship_id}")
+        format!("{STAGING_PREFIX}{token}")
     }
 }
 
@@ -440,7 +443,7 @@ fn open_pull_request(
 /// poll later with `gh ship status`. The Release PR is *not* created,
 /// because the artifact it needs does not exist yet — re-running
 /// `gh ship prepare` afterwards completes the job.
-fn dispatch_only(ctx: &Context, branch: &str, ship_id: &ShipId) -> Result<()> {
+fn dispatch_only(ctx: &Context, branch: &str) -> Result<()> {
     let theme = ctx.theme;
     let workflow = ctx.workflow(ctx.config.prepare_workflow());
 
@@ -448,10 +451,11 @@ fn dispatch_only(ctx: &Context, branch: &str, ship_id: &ShipId) -> Result<()> {
         "{}",
         logger::action(theme, "dispatching", &workflow.to_string())
     );
-    let ship_id = gh_ship::gh::run::dispatch_as(&ctx.gh, &workflow, branch, ship_id, &[])?;
+    if gh_ship::gh::run::dispatch(&ctx.gh, &workflow, branch, &[])? {
+        super::context::warn_legacy_ship_id(ctx, &workflow);
+    }
 
     eprintln!("{}", logger::ok(theme, "workflow dispatched"));
-    eprintln!("{}", logger::detail(theme, "ship id", ship_id.as_str()));
     eprintln!("{}", logger::detail(theme, "staged on", branch));
     eprintln!();
     eprintln!(

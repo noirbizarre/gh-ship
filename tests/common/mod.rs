@@ -16,15 +16,13 @@ pub use stub::GhStub;
 
 /// A workflow satisfying the gh-ship contract, used by lifecycle tests.
 pub const CONFORMING_WORKFLOW: &str = r#"name: prepare-release
-run-name: prepare-release (ship:${{ inputs.ship_id }})
 on:
   workflow_dispatch:
     inputs:
-      ship_id: { required: true, type: string }
       dry_run: { required: false, type: boolean, default: false }
   workflow_call:
     inputs:
-      ship_id: { required: true, type: string }
+      dry_run: { required: false, type: boolean, default: false }
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -250,14 +248,11 @@ impl Outcome {
 
 /// Insta filters for values that legitimately change between runs.
 ///
-/// The correlation nonce is random by design, and elapsed times vary, so
+/// The staging branch token is random by design, and elapsed times vary, so
 /// both are redacted rather than allowed to make snapshots flaky.
 pub fn redactions() -> Vec<(&'static str, &'static str)> {
     vec![
-        (r"ship id: [0-9a-f]{12}", "ship id: [nonce]"),
-        (r"ship:[0-9a-f]{12}", "ship:[nonce]"),
-        // The staging branch is named after the nonce.
-        (r"ship/prepare-[0-9a-z]+", "ship/prepare-[nonce]"),
+        (r"ship/prepare-[0-9a-z]+", "ship/prepare-[token]"),
         (r"\d+m \d+s", "[dur]"),
         (r"\d+\.\d{2}s", "[dur]"),
         (r"\d+ms", "[dur]"),

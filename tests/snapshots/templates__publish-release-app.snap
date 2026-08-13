@@ -4,17 +4,9 @@ expression: "render(role, strategy)"
 ---
 name: 📦 Publish Release
 
-# gh-ship correlates the run it started via this nonce. See the
-# prepare-release template for why this is required.
-run-name: 📦 Publish Release (ship:${{ inputs.ship_id }})
-
 on:
   workflow_dispatch:
     inputs:
-      ship_id:
-        description: gh-ship correlation nonce
-        required: true
-        type: string
       tag:
         description: The tag being released
         required: true
@@ -22,9 +14,6 @@ on:
 
   workflow_call:
     inputs:
-      ship_id:
-        required: true
-        type: string
       tag:
         required: true
         type: string

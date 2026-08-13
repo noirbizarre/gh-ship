@@ -5,8 +5,8 @@
 //! release is already in flight.
 //!
 //! 1. Naming a `workflow_call`-only workflow, which the API cannot start.
-//! 2. Omitting the `run-name` nonce, without which gh-ship cannot find
-//!    the run it dispatched.
+//! 2. Omitting the `dry_run` input the prepare workflow is previewed with,
+//!    which GitHub rejects the dispatch over.
 //!
 //! So `init` only ever offers workflows that satisfy the contract, and
 //! explains — rather than silently hides — the ones that do not.
@@ -431,10 +431,9 @@ pub fn render_config(prepare: &str, publish: Option<&str>) -> String {
         "# Workflows gh-ship dispatches.\n\
          #\n\
          # These must declare `on: workflow_dispatch` — a `workflow_call`-only\n\
-         # workflow cannot be started through the API. They must also stamp\n\
-         # `ship_id` into their `run-name`, which is how gh-ship finds the run\n\
-         # it started, and the prepare workflow must accept a `dry_run` input.\n\
-         # `gh ship validate` checks all three.\n\
+         # workflow cannot be started through the API. The prepare workflow must\n\
+         # also accept a `dry_run` input, which `gh ship preview` dispatches with.\n\
+         # `gh ship validate` checks both.\n\
          workflows:\n",
     );
     out.push_str(&format!("  prepare: {prepare}\n"));
@@ -629,7 +628,7 @@ mod tests {
         // The two traps every user hits must be explained in the file
         // itself, not only in the docs.
         assert!(yaml.contains("workflow_dispatch"), "{yaml}");
-        assert!(yaml.contains("run-name"), "{yaml}");
+        assert!(yaml.contains("dry_run"), "{yaml}");
         assert!(yaml.contains("never bumps versions"), "{yaml}");
     }
 

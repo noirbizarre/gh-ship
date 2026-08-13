@@ -1,13 +1,16 @@
 name: 📦 Publish Release
 
+# Transitional. See the prepare-release workflow for why this is here and when
+# it goes away.
 run-name: 📦 Publish Release (ship:${{ inputs.ship_id }})
 
 on:
   workflow_dispatch:
     inputs:
+      # Transitional, and optional on purpose: 0.3.0 sends it, 0.4.0 does not.
       ship_id:
-        description: gh-ship correlation nonce
-        required: true
+        description: Correlation nonce, sent by gh-ship before 0.4.0
+        required: false
         type: string
       tag:
         description: The tag being released
@@ -17,7 +20,7 @@ on:
   workflow_call:
     inputs:
       ship_id:
-        required: true
+        required: false
         type: string
       tag:
         required: true

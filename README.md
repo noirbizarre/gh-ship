@@ -172,14 +172,9 @@ gh-ship starts workflows through the API, which can only start workflows declari
 `on: workflow_dispatch`. A `workflow_call`-only workflow — what people usually mean
 by "reusable" — cannot be started this way. Declare both to have it both ways.
 
-Workflows must also stamp gh-ship's nonce into their name:
-
-```yaml
-run-name: prepare-release (ship:${{ inputs.ship_id }})
-```
-
-`gh workflow run` returns no run id, so this is how gh-ship finds the run it
-started, rather than guessing from timestamps.
+That is the only structural requirement. gh-ship finds the run it started from
+the ref it dispatched to and the run ids that were not there a moment before, so
+your workflows need no `run-name` convention and no correlation input.
 
 Your prepare workflow must also declare a `dry_run` boolean input — it is what
 `gh ship preview` sets to produce the artifact without committing anything.
