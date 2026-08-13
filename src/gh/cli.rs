@@ -139,6 +139,16 @@ impl Gh {
         self.slug.as_deref().ok_or(GhError::Unscoped)
     }
 
+    /// The configured `OWNER/REPO`, before it has been resolved.
+    ///
+    /// For the one caller that must place the repository *positionally*:
+    /// `gh repo view` takes it as an argument and rejects `--repo`, so it
+    /// can use neither [`Self::run_scoped`] nor a resolved [`Self::slug`] —
+    /// resolving is exactly what it is there to do.
+    pub fn configured_repo(&self) -> Option<&str> {
+        self.repo.as_deref()
+    }
+
     /// Run `gh` with the given arguments and capture stdout.
     ///
     /// `--repo` is *not* injected automatically: several `gh` commands

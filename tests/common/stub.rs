@@ -364,6 +364,20 @@ all_labels() {
 case "$1 ${2:-}" in
 
   "repo view")
+    # `gh repo view` takes the repository as a *positional* argument and
+    # exits 1 on `--repo`, exactly as `gh api` does. Reproducing that here is
+    # what catches a call routed through the scoped helper.
+    case " $* " in
+      *" --repo "*)
+        echo "unknown flag: --repo" >&2
+        exit 1
+        ;;
+    esac
+    # A positional repository overrides the ambient one, so a test running
+    # under `--repo` sees the repository it asked for.
+    if [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; then
+      REPO="$3"
+    fi
     printf '{"nameWithOwner":"%s","defaultBranchRef":{"name":"%s"},"url":"https://github.com/%s"}\n' \
       "$REPO" "$DEFAULT_BRANCH" "$REPO"
     ;;

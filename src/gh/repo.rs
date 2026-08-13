@@ -26,13 +26,21 @@ pub struct BranchRef {
 }
 
 /// Resolve the current (or `--repo`) repository.
+///
+/// The repository goes in *positionally*. `gh repo view` takes it as an
+/// argument and exits 1 on `--repo`, so the scoped helper cannot be used
+/// here — and this is the call that resolves the slug every `gh api` path
+/// is then built from, so failing here fails every command that was given
+/// `--repo` or `SHIP_REPO`.
 pub fn repository(gh: &Gh) -> Result<Repository, GhError> {
-    gh.json_scoped(&[
-        "repo",
-        "view",
-        "--json",
-        "nameWithOwner,defaultBranchRef,url",
-    ])
+    let mut args = vec!["repo".to_string(), "view".to_string()];
+    if let Some(repo) = gh.configured_repo() {
+        args.push(repo.to_string());
+    }
+    args.push("--json".to_string());
+    args.push("nameWithOwner,defaultBranchRef,url".to_string());
+
+    gh.json(&args)
 }
 
 // --- Branches ------------------------------------------------------------
