@@ -1,22 +1,8 @@
 name: 🚀 Prepare Release
 
-# Transitional. gh-ship releases gh-ship, and the *published* extension is what
-# runs the next release — which until 0.4.0 is out is 0.3.0. That version passes
-# a `ship_id` nonce and finds its run by looking for this marker in the title.
-# 0.4.0 correlates by ref and ignores both, leaving the marker empty.
-# Remove this line, and the `ship_id` inputs below, once 0.4.0 is published.
-run-name: 🚀 Prepare Release (ship:${{ inputs.ship_id }})
-
 on:
   workflow_dispatch:
     inputs:
-      # Transitional, and optional on purpose: 0.3.0 sends it, 0.4.0 does not.
-      # Declaring it lets 0.3.0 dispatch at all — the API rejects an input the
-      # workflow does not declare — and leaving it optional lets 0.4.0 omit it.
-      ship_id:
-        description: Correlation nonce, sent by gh-ship before 0.4.0
-        required: false
-        type: string
       dry_run:
         description: Produce the artifact but do not commit or push
         required: false
@@ -25,9 +11,6 @@ on:
 
   workflow_call:
     inputs:
-      ship_id:
-        required: false
-        type: string
       dry_run:
         required: false
         type: boolean
