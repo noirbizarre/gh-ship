@@ -157,6 +157,21 @@ closes a pull request whose head becomes contained in its base, and a branch
 reset to its base is exactly that. Every prepare closed the Release PR and
 opened a replacement.
 
+That close can be dodged: reset to the base, add an empty commit so the head is
+never contained in it, and strip the commit again afterwards. The reason not to
+is the ordering rather than the trick. As it stands, the release branch keeps the
+previous release commit until the artifact has been downloaded and validated, and
+then moves once; a workflow that fails, a process that dies, a `--no-wait` that
+walks away all leave it exactly where it was. Resetting up front destroys the
+previous release commit before the run meant to replace it has succeeded, and
+spreads that exposure across a whole CI run — the phase most likely to fail,
+since it runs your tooling. What is left behind then is not merely untidy: the
+release branch holds an empty commit while the Release PR still advertises the
+previous artifact in its body, and `gh ship release` reads that body. Stripping
+the empty commit afterwards also means rewriting a commit your workflow authored,
+where today gh-ship only moves a ref. The staging branch is the backup, kept by
+doing the work somewhere else instead.
+
 Staging avoids the empty state: the release branch moves from its previous
 release commit straight to the new one, and is never equal to the base.
 
