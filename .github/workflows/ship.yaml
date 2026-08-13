@@ -16,12 +16,10 @@ on:
   pull_request:
     types: [closed]
 
-# These apply when falling back to GITHUB_TOKEN; a PAT carries its own scopes.
+# gh-ship authenticates as a GitHub App, so it carries its own permissions and
+# ignores these. They cover `actions/checkout` alone, which only reads.
 permissions:
-  contents: write # create the release branch
-  actions: write # workflow_dispatch, and download its artifact
-  pull-requests: write # create or update the Release PR
-  issues: write # create missing labels
+  contents: read
 
 # One release action at a time. Merging the Release PR fires *both* triggers —
 # the merge is also a push to main — and this queue is what keeps them from
@@ -45,18 +43,25 @@ jobs:
     # that so a stuck run fails visibly.
     timeout-minutes: 30
 
-    # Same pattern as 🚀 Prepare Release: SHIP_TOKEN lives in this
-    # environment, and starting a release is not itself a deployment, so it
-    # stays out of the deployment history. 📦 Publish Release is the only job
-    # that registers one.
+    # Same pattern as 🚀 Prepare Release: APP_CLIENT_ID and APP_PRIVATE_KEY
+    # both live in this environment, and starting a release is not itself a
+    # deployment, so it stays out of the deployment history. 📦 Publish
+    # Release is the only job that registers one.
     environment:
       name: release
       deployment: false
 
-    env:
-      GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
-
     steps:
+      # An installation token, minted for this job and revoked when it ends.
+      # Unlike a PAT it cannot be set once in the job's `env:` — a step output
+      # is not resolvable there — so every `gh` step below sets it itself.
+      # See https://noirbizarre.github.io/gh-ship/workflows/#using-a-github-app
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - uses: actions/checkout@v7
         # A plain shallow checkout is enough: `gh ship prepare` reads
         # .github/ship.yml and discovers workflows from .github/workflows,
@@ -67,9 +72,13 @@ jobs:
       # ever the 0.1.0 bootstrap.
       - name: Install gh-ship
         run: gh extension install noirbizarre/gh-ship
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Prepare the release
         run: gh ship prepare
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
   release:
     name: 🚢 Release
@@ -81,23 +90,31 @@ jobs:
       && github.event.pull_request.head.ref == 'release/next'
     runs-on: ubuntu-latest
     # `gh ship release` waits on the publish workflow, which cross-compiles six
-    # targets.
-    timeout-minutes: 60
+    # targets. Capped below the App installation token's one-hour lifetime:
+    # a longer job would outlive its own credentials.
+    timeout-minutes: 45
 
     environment:
       name: release
       deployment: false
 
-    env:
-      GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
-
     steps:
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - uses: actions/checkout@v7
 
       - name: Install gh-ship
         run: gh extension install noirbizarre/gh-ship
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       # Tags the merge commit, creates the release as a draft, dispatches
       # 📦 Publish Release to attach the binaries, then makes it public.
       - name: Ship the release
         run: gh ship release
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}

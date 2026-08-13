@@ -23,8 +23,10 @@ on:
         required: true
         type: string
 
+# The upload authenticates as a GitHub App and carries its own permissions.
+# These cover `actions/checkout` alone, which only reads.
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -97,10 +99,17 @@ jobs:
       name: release
       url: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ inputs.tag }}
 
-    env:
-      GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
-
     steps:
+      # An installation token, revoked when this job ends. It cannot live in
+      # the job's `env:` — a step output is not resolvable there — so the one
+      # `gh` step below sets it itself.
+      # See https://noirbizarre.github.io/gh-ship/workflows/#using-a-github-app
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag }}
@@ -124,3 +133,5 @@ jobs:
       # That ordering is what lets assets land before anyone is notified.
       - name: Upload assets to the draft release
         run: gh release upload "${{ inputs.tag }}" dist/* --clobber
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
