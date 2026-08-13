@@ -280,15 +280,19 @@ fn classify(display: &str, stderr: &str) -> GhError {
                 .to_string(),
         )
     } else if lower.contains("403") || lower.contains("resource not accessible") {
-        // Name both token models. Saying only "repo and workflow scopes" is
-        // classic-PAT vocabulary and is useless to anyone holding a
-        // fine-grained token, which is the default GitHub now offers.
+        // Name all three token models. Saying only "repo and workflow
+        // scopes" is classic-PAT vocabulary and is useless to anyone
+        // holding a fine-grained token or an App installation token, and
+        // `not accessible by integration` is the App wording specifically.
         Some(
             "the token lacks the required permissions.\n\
              Fine-grained PAT — repository permissions: Actions: read and write, \
              Contents: read and write, Pull requests: read and write, \
              Issues: read and write, Metadata: read.\n\
              Classic PAT — scopes: `repo` and `workflow`.\n\
+             GitHub App — the same permissions, granted to the *installation*: adding \
+             a permission to the App does not grant it to an existing installation \
+             until an account administrator approves it.\n\
              Dispatching a workflow needs Actions: write specifically; content \
              access alone is not enough.\n\
              See https://noirbizarre.github.io/gh-ship/workflows/#what-the-token-must-be-allowed-to-do"

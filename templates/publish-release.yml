@@ -48,6 +48,7 @@ jobs:
       GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
 
     steps:
+      # ship:token-step
       - uses: actions/checkout@v7
         with:
           # gh-ship has already created the tag at this point, so check
