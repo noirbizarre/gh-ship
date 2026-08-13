@@ -139,6 +139,61 @@ concurrently. Their staging branches are named after the line
 `main` and `release/1.x` never collide. Key the concurrency group by branch —
 `group: ship-${{ github.ref }}` — to allow it.
 
+## Can the staging branches be hidden?
+
+Not without giving up something worth more than the tidiness.
+
+The tempting answer is a private namespace — `refs/ship/prepare-*` instead of
+`refs/heads/ship/prepare-*`. Git and GitHub are happy with it: such a ref can be
+created, listed, read, pushed to and deleted, it is not fetched by a normal
+`git clone`, and it never appears in the branch list. Every operation gh-ship
+performs on the staging ref works there.
+
+Every one except the decisive one. `workflow_dispatch` refuses it:
+
+```console
+$ gh api repos/OWNER/REPO/git/refs -f ref=refs/ship/probe-1 -f sha=$SHA
+201 Created
+$ gh workflow run probe.yml --ref refs/ship/probe-1
+HTTP 422: No ref found for: refs/ship/probe-1
+```
+
+The ref exists, and dispatch still cannot see it. The API is explicit that "the
+reference can be a branch or tag name", and a tag is worse in every respect: it
+*is* fetched by default, it *is* listed in the UI, and a tag checkout is detached
+so the workflow's push has nowhere to go.
+
+There is a second reason, and it would survive even if GitHub lifted the first.
+The staging branch is not merely somewhere to put the commit — it is how gh-ship
+recognises its own run. Correlation keys on the ref being unique to one
+invocation, as [Dispatch correlation](architecture.md#dispatch-correlation)
+describes. Hiding the ref means dispatching on a shared one instead, and a
+concurrent dispatch on that shared ref could then be mistaken for yours. `preview`
+accepts that risk because two previews are dry runs producing the same answer;
+`prepare` moves a release branch and opens a pull request, and cannot.
+
+So the branches stay visible. They exist from just before the dispatch until the
+release branch has been promoted — the length of one prepare run — and every
+prepare sweeps whatever an interrupted run left behind.
+
+If the noise in `git fetch` bothers you, exclude them per clone (git 2.29+):
+
+```sh
+git config --add remote.origin.fetch '^refs/heads/ship/*'
+```
+
+This cannot be shipped in the repository for everyone. Git never applies
+configuration found inside a repository, and deliberately so: configuration
+chooses which commands run — `core.pager`, `core.fsmonitor`, `diff.*.textconv` —
+so honouring a tracked config file would make cloning a stranger's repository
+arbitrary code execution. A tracked config file is ignored until someone opts in
+with `git config include.path ../.gitconfig-shared`, which is still one command
+per clone. Worth it if you already share config that way; otherwise the one-liner
+above is simpler.
+
+Nothing suppresses the GitHub branch list. It shows every branch, and there is no
+setting for it.
+
 ## Why does gh-ship create the tag and the release, rather than my workflow?
 
 Most release tooling tags and releases from CI, so this is a fair thing to

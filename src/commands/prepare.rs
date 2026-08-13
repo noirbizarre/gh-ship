@@ -5,12 +5,14 @@
 //! 1. **Refuse to start** while a merged Release PR is still awaiting
 //!    `gh ship release`: a second run would bury the pending release.
 //! 2. **Sweep staging branches** left behind by earlier runs.
-//! 3. **Cut a throwaway staging branch**, `ship/prepare-<nonce>`, from
+//! 3. **Cut a throwaway staging branch**, `ship/prepare-<token>`, from
 //!    the base branch. `workflow_dispatch` reads the workflow definition
 //!    from the ref it is given, so the ref must exist *before*
 //!    dispatching — and cutting it fresh from the base guarantees the
 //!    dispatched copy is the current one, which dispatching on the
-//!    long-lived release branch did not.
+//!    long-lived release branch did not. It has to be a *branch*:
+//!    `workflow_dispatch` accepts a branch or a tag and nothing else, so
+//!    a private ref namespace is not an option however tidy it would be.
 //! 4. **Dispatch on that staging branch and wait.** The workflow bumps
 //!    the version, writes the changelog, commits and pushes there.
 //!    gh-ship does none of this.

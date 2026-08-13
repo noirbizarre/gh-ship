@@ -95,6 +95,11 @@ lets a prepare or publish workflow be an ordinary reusable workflow. An earlier
 design passed a nonce as a `ship_id` input and required it in `run-name`; it
 worked, but the cost was borne by every user's workflow file forever.
 
+Keying on the ref does mean the ref has to be dispatchable, and
+`workflow_dispatch` accepts only a branch or a tag. The per-invocation ref is
+therefore necessarily a visible branch — see [Can the staging branches be
+hidden?](faq.md#can-the-staging-branches-be-hidden).
+
 ### Zero state, via the PR body
 
 `gh ship release` needs the artifact `gh ship prepare` validated, possibly days
@@ -160,6 +165,12 @@ definition from the ref it is given, so dispatching on the release branch meant 
 stale branch ran a stale copy of the workflow — the sort of thing that produces
 "I fixed it, and it still fails". The staging branch is cut from the base, so the
 definition is always current.
+
+That same rule is why the staging ref is a branch rather than something tucked
+away in a private namespace where nobody would have to look at it.
+`workflow_dispatch` takes a branch or a tag and nothing else, so the ref gh-ship
+dispatches on has to be one of them — see [Can the staging branches be
+hidden?](faq.md#can-the-staging-branches-be-hidden).
 
 Staging branches are named `ship/prepare-<token>` after a random per-invocation
 token, and are deleted once the release branch has moved. The token is what makes
