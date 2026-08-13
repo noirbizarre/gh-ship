@@ -4,7 +4,35 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.0](https://github.com/noirbizarre/gh-ship/compare/0.2.2..0.3.0) - 2026-08-04
+## [0.4.0](https://github.com/noirbizarre/gh-ship/compare/0.3.0..0.4.0) - 2026-08-13
+
+### 💫 Features
+
+- **gh** Correlate runs by ref instead of a nonce - ([a9c5619](https://github.com/noirbizarre/gh-ship/commit/a9c56192ada32ad0989e48f3e7f9f6c9c176a56d))
+- **init** Ask which token the generated workflows use - ([4892aec](https://github.com/noirbizarre/gh-ship/commit/4892aec13c8b540b9f4128a2293e730fc4fc0289))
+- **pr** Make the release commit a Conventional Commit - ([61827cd](https://github.com/noirbizarre/gh-ship/commit/61827cde7e87fb38c6f8da584a41afcd9e3f2d8a))
+- **sign** Re-create a commit so GitHub signs it - ([368fb60](https://github.com/noirbizarre/gh-ship/commit/368fb609b39218aae6d9527ea2e9e55288949608))
+
+### 🐛 Bug Fixes
+
+- **gh** Stop sending --repo to gh repo view - ([50fcd6a](https://github.com/noirbizarre/gh-ship/commit/50fcd6a9070b2f1f8a03ac8fa767839705785a23))
+
+### 🔨 Refactor
+
+- **init** Render the workflow templates with MiniJinja - ([f5af34b](https://github.com/noirbizarre/gh-ship/commit/f5af34b21b4b97323922712188da34c6917e7978))
+
+### 📚 Documentation
+
+- **workflows** Stop claiming the release commit is verified - ([5c2c67d](https://github.com/noirbizarre/gh-ship/commit/5c2c67d36db73620b80553e84051343b40bdcd7f))
+- Reject the empty-commit alternative to staging - ([fb4b1c3](https://github.com/noirbizarre/gh-ship/commit/fb4b1c3199eef011194497d1a1a68e51f3252b9b))
+- Say why the staging branches cannot be hidden - ([d701b88](https://github.com/noirbizarre/gh-ship/commit/d701b8889e228b9bdc64ae8a94abf6169bc3c38f))
+- Show how to authenticate with a GitHub App - ([ba768f7](https://github.com/noirbizarre/gh-ship/commit/ba768f779ac39a313b9bdb48ffcec7784067123a))
+
+### 🔧 CI
+
+- Authenticate as a GitHub App - ([b0e9324](https://github.com/noirbizarre/gh-ship/commit/b0e9324a0e3dc2d879082241a245c3e8ea7e82d7))
+
+## [0.3.0](https://github.com/noirbizarre/gh-ship/compare/0.2.2..0.3.0) - 2026-08-12
 
 ### 💫 Features
 
