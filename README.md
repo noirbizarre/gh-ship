@@ -190,8 +190,11 @@ Your prepare workflow must also declare a `dry_run` boolean input — it is what
 
 GitHub's default `GITHUB_TOKEN` **cannot trigger other workflows**. A Release PR it
 authors will not run your CI. If the Release PR must be tested before merging,
-supply a GitHub App token or a fine-grained PAT; the generated workflow prefers
-the `SHIP_TOKEN` secret when present.
+supply a GitHub App token or a fine-grained PAT. `gh ship init` asks which you
+want and generates the matching workflow: an App mints a scoped, self-revoking
+token in the job with
+[`actions/create-github-app-token`](https://noirbizarre.github.io/gh-ship/workflows/#using-a-github-app),
+a PAT lives in the `SHIP_TOKEN` secret.
 
 ## Design notes
 

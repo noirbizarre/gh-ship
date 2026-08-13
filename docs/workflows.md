@@ -281,6 +281,8 @@ jobs:
       name: release
       deployment: false
     # Set once so every `gh` invocation picks up SHIP_TOKEN when configured.
+    # With a GitHub App token this has to move to each step instead — see
+    # [Using a GitHub App](#using-a-github-app).
     env:
       GH_TOKEN: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
     steps:
@@ -350,12 +352,15 @@ A push with nothing to release costs one prepare-release run reporting
 
 Options, best first:
 
-1. **A GitHub App token.** Scoped, rotatable, attributable. Mint it in the workflow
-   with [`actions/create-github-app-token`](https://github.com/actions/create-github-app-token).
+1. **[A GitHub App token](#using-a-github-app).** Scoped, rotatable, attributable, and
+   nothing long-lived is stored. Minted per job with
+   [`actions/create-github-app-token`](https://github.com/actions/create-github-app-token).
 2. **A fine-grained PAT**, stored as the `SHIP_TOKEN` secret.
 3. **Nothing.** Accept that the Release PR shows no CI results.
 
-The generated template prefers `SHIP_TOKEN` when present:
+`gh ship init` asks which of the three you want and generates the matching workflow.
+
+With a PAT, the generated template prefers `SHIP_TOKEN` when present:
 
 ```yaml
 - uses: actions/checkout@v7
@@ -364,6 +369,121 @@ The generated template prefers `SHIP_TOKEN` when present:
 ```
 
 gh-ship never sees, stores, or manages this secret. It is between you and GitHub.
+
+### Using a GitHub App
+
+An App is the best of the three because nothing durable is stored: the workflow
+mints an installation token at the start of the job, and the action revokes it
+when the job ends. What you keep is the private key, which is useless without a
+workflow run to use it in.
+
+Setting one up:
+
+1. [Register a GitHub App](https://docs.github.com/apps/creating-github-apps/setting-up-a-github-app/creating-a-github-app),
+   granting it the repository permissions in the
+   [GitHub App tab](#what-the-token-must-be-allowed-to-do) below.
+2. Install it on the repository you release.
+3. Store its **Client ID** as the `APP_CLIENT_ID` variable — it is not a secret —
+   and its private key as the `APP_PRIVATE_KEY` secret. Put both in the `release`
+   environment, alongside your other release secrets.
+
+```yaml
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    # Well below the token's one-hour lifetime. See the warning below.
+    timeout-minutes: 30
+    # Load-bearing twice over: it gates the secret, and an environment
+    # variable resolves only in a job that declares its environment.
+    environment:
+      name: release
+      deployment: false
+    steps:
+      # An installation token, minted for this job and revoked when it ends.
+      # The private key never leaves the secret.
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      - run: gh extension install noirbizarre/gh-ship
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - run: gh ship prepare
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+```
+
+!!! warning "The App token cannot go in the job's `env:`"
+
+    Everywhere else these docs set `GH_TOKEN` once at the job level, because a
+    per-step `GH_TOKEN` is easy to forget on one step and silently fall back to
+    the default token.
+
+    An App token cannot be set that way. It is a *step output*, and a job-level
+    `env:` block is evaluated before any step has run, so
+    `${{ steps.app-token.outputs.token }}` there resolves to the empty string —
+    and `gh` falls back to `GITHUB_TOKEN` without complaining. Set it on every
+    step that runs `gh`, and check you have not missed one.
+
+!!! danger "Installation tokens expire after one hour"
+
+    `gh ship prepare` and `gh ship release` both block on a dispatched workflow
+    run, for up to `SHIP_RUN_TIMEOUT` — 60 minutes by default. A job that runs
+    that long outlives its own token, and fails at whichever call happens to
+    come after the hour.
+
+    Cap `timeout-minutes` well below 60. `skip-token-revoke` does not help: it
+    stops the action revoking the token early, it does not extend its lifetime.
+
+!!! warning "An environment variable is invisible outside its environment"
+
+    Keeping `APP_CLIENT_ID` in the `release` environment rather than at
+    repository level means a job that does not declare
+    `environment: release` cannot see it. `${{ vars.APP_CLIENT_ID }}` there
+    expands to the empty string, and the mint step fails with a confusing
+    error rather than "variable not set".
+
+    So the `environment:` key is not only about gating: it is what makes the
+    credentials resolve at all. Every job that mints a token needs it.
+
+!!! tip "`app-id` also works"
+
+    `actions/create-github-app-token` accepts the legacy `app-id` input, which
+    takes the App's numeric ID rather than its Client ID. `client-id` is what
+    the action recommends, and what these examples use.
+
+#### Committing as the App
+
+Your prepare workflow commits the version bump. By default that commit is
+attributed to whichever identity `git config` names — usually
+`github-actions[bot]`, copied from an example — which is misleading once the
+push is authenticated as your App.
+
+The App's bot user has a numeric id, and the pair makes the commit attribute to
+the App and show as verified:
+
+```yaml
+- name: Get the App's user id
+  id: bot
+  run: echo "id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+  env:
+    GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+- name: Commit and push
+  run: |
+    git config user.name  '${{ steps.app-token.outputs.app-slug }}[bot]'
+    git config user.email '${{ steps.bot.outputs.id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
+    git add -A
+    git commit -m "chore(release): ${{ steps.version.outputs.version }}"
+    git push origin HEAD
+```
 
 ### What the token must be allowed to do
 
@@ -388,13 +508,22 @@ gh-ship never sees, stores, or manages this secret. It is between you and GitHub
 
 === "GitHub App"
 
-    | Permission | Access |
-    |---|---|
-    | `metadata` | read |
-    | `contents` | write |
-    | `actions` | write |
-    | `pull_requests` | write |
-    | `issues` | write |
+    Repository permissions:
+
+    | Permission | Access | Why |
+    |---|---|---|
+    | `metadata` | read | Resolve the repository |
+    | `contents` | write | Create the release branch, read refs, merge the Release PR, create and edit the release |
+    | `actions` | write | **Dispatch your workflow** and download its artifact |
+    | `pull_requests` | write | List, create and update the Release PR |
+    | `issues` | write | Create missing labels |
+
+    !!! note "Installation permissions are not the App's permissions"
+
+        They are fixed when the App is installed. Adding a permission to the App
+        later does not grant it to existing installations until an account
+        administrator approves it — so an App that looks correctly configured can
+        still mint a token that lacks `actions: write`.
 
 !!! danger "Actions: write is the one people miss"
 

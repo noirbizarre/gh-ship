@@ -101,8 +101,8 @@ not a compatible extension of this one.
 Because GitHub's default `GITHUB_TOKEN` cannot trigger further workflow runs. This
 is a deliberate loop-prevention measure and applies to anything it authors.
 
-Use a GitHub App token or a fine-grained PAT as `SHIP_TOKEN`. See
-[Tokens](workflows.md#tokens).
+Use [a GitHub App token](workflows.md#using-a-github-app), or a fine-grained PAT
+as `SHIP_TOKEN`. See [Tokens](workflows.md#tokens).
 
 ## Does gh-ship store anything locally?
 
