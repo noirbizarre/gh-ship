@@ -251,8 +251,8 @@ That subject is parseable by the same tooling your prepare workflow already runs
 (git-cliff, commitlint, semantic-release), and the `(#42)` GitHub appends is the
 link back to the pull request — so no commit body is needed.
 
-Two repository settings decide whether GitHub actually uses it. `gh ship
-validate` reports them, and the fix is a one-off:
+If you want GitHub to use the PR title verbatim, two repository settings control
+it:
 
 ```console
 $ gh api -X PATCH repos/OWNER/REPO \

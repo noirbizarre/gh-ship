@@ -452,8 +452,7 @@ pub fn render_config(prepare: &str, publish: Option<&str>) -> String {
          #\n\
          # The title is also the commit message: GitHub pre-fills the\n\
          # \"Squash and merge\" dialog from it and appends `(#42)`, so keep it a\n\
-         # Conventional Commit. `gh ship validate` checks that this repository's\n\
-         # squash settings actually use it.\n\
+         # Conventional Commit.\n\
          #\n\
          # Because it is Conventional, your changelog tool will parse it — make\n\
          # sure it also skips it, or every release will look like an unreleased\n\
@@ -503,15 +502,7 @@ fn next_steps(theme: Theme, has_publish: bool, strategy: TokenStrategy) -> Strin
             ],
         ),
         String::new(),
-        logger::step(
-            theme,
-            2,
-            &[
-                "Run `gh ship validate` to check the setup — including whether",
-                "this repository squash-merges the Release PR into a clean,",
-                "Conventional release commit.",
-            ],
-        ),
+        logger::step(theme, 2, &["Run `gh ship validate` to check the setup."]),
         String::new(),
         logger::step(
             theme,

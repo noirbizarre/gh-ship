@@ -56,19 +56,6 @@ impl GhStub {
         Self { env }
     }
 
-    /// How the repository composes a squash-merge commit.
-    ///
-    /// The defaults are the recommended ones, so only a test that cares
-    /// about the warning has to say anything.
-    pub fn squash(mut self, allowed: bool, title: &str, message: &str) -> Self {
-        self.env
-            .insert("STUB_SQUASH_ALLOWED".into(), allowed.to_string());
-        self.env.insert("STUB_SQUASH_TITLE".into(), title.into());
-        self.env
-            .insert("STUB_SQUASH_MESSAGE".into(), message.into());
-        self
-    }
-
     /// The run's terminal state.
     pub fn run_status(mut self, status: &str, conclusion: &str) -> Self {
         self.env.insert("STUB_RUN_STATUS".into(), status.into());
@@ -621,14 +608,6 @@ case "$1 ${2:-}" in
               ;;
           esac
         fi
-        ;;
-      # The repository itself. Only the squash-merge composition matters
-      # to gh-ship, and only `validate` asks for it.
-      "repos/$REPO")
-        printf '{"allow_squash_merge":%s,"squash_merge_commit_title":"%s","squash_merge_commit_message":"%s"}\n' \
-          "${STUB_SQUASH_ALLOWED:-true}" \
-          "${STUB_SQUASH_TITLE:-PR_TITLE}" \
-          "${STUB_SQUASH_MESSAGE:-BLANK}"
         ;;
       *)
         printf '{}\n'
