@@ -12,6 +12,7 @@
 //! violates the workflow contract is exactly the kind of thing `init`
 //! must never write.
 
+use crate::gh::workflow::Role;
 use minijinja::syntax::SyntaxConfig;
 use minijinja::{Environment, UndefinedBehavior, context};
 
@@ -48,29 +49,22 @@ impl TokenStrategy {
     }
 }
 
-/// Which half of the release lifecycle a template covers.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Role {
-    /// Bumps the version and produces the release artifact.
-    Prepare,
-    /// Builds and uploads the release assets.
-    Publish,
+/// The file name `init` writes a role's template to.
+///
+/// `.yml` is a choice, not a requirement: workflow discovery keys off the
+/// file stem, so either extension yields the same slug.
+pub fn filename(role: Role) -> &'static str {
+    match role {
+        Role::Prepare => "prepare-release.yml",
+        Role::Publish => "publish-release.yml",
+    }
 }
 
-impl Role {
-    /// The file name `init` writes this template to.
-    pub fn filename(self) -> &'static str {
-        match self {
-            Self::Prepare => "prepare-release.yml",
-            Self::Publish => "publish-release.yml",
-        }
-    }
-
-    fn source(self) -> &'static str {
-        match self {
-            Self::Prepare => PREPARE,
-            Self::Publish => PUBLISH,
-        }
+/// The unrendered template backing a role.
+fn source(role: Role) -> &'static str {
+    match role {
+        Role::Prepare => PREPARE,
+        Role::Publish => PUBLISH,
     }
 }
 
@@ -124,7 +118,7 @@ fn environment() -> Environment<'static> {
 /// reach a release.
 pub fn render(role: Role, strategy: TokenStrategy) -> String {
     environment()
-        .render_str(role.source(), context! { token => strategy.as_str() })
+        .render_str(source(role), context! { token => strategy.as_str() })
         .expect("a shipped template must render")
 }
 
@@ -150,7 +144,7 @@ mod tests {
         for strategy in STRATEGIES {
             for role in ROLES {
                 let rendered = render(role, strategy);
-                let name = role.filename();
+                let name = filename(role);
                 let w = workflow::parse(Path::new(name), &rendered).unwrap_or_else(|| {
                     panic!("{name} must be parseable YAML for {strategy:?}:\n{rendered}")
                 });
@@ -202,7 +196,7 @@ mod tests {
     fn the_app_variant_authenticates_every_step() {
         for role in ROLES {
             let rendered = render(role, TokenStrategy::App);
-            let name = role.filename();
+            let name = filename(role);
 
             assert!(
                 rendered.contains("actions/create-github-app-token@v3"),

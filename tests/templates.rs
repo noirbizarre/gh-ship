@@ -8,7 +8,8 @@
 //! `{% if %}` that quietly swallows a step, is obvious here and nowhere
 //! else.
 
-use gh_ship::templates::{Role, TokenStrategy, render};
+use gh_ship::gh::workflow::Role;
+use gh_ship::templates::{TokenStrategy, filename, render};
 
 /// Snapshot every combination `init` can produce.
 ///
@@ -25,7 +26,7 @@ fn generated_workflows() {
         for role in [Role::Prepare, Role::Publish] {
             let name = format!(
                 "{}-{}",
-                role.filename().trim_end_matches(".yml"),
+                filename(role).trim_end_matches(".yml"),
                 match strategy {
                     TokenStrategy::App => "app",
                     TokenStrategy::Pat => "pat",

@@ -19,10 +19,10 @@ use thiserror::Error;
 
 use gh_ship::cli::{Cli, InitArgs};
 use gh_ship::config::{CONFIG_VERSION, DEFAULT_PR_TITLE, DEFAULT_RELEASE_BRANCH};
-use gh_ship::gh::workflow::{self, Workflow};
+use gh_ship::gh::workflow::{self, Role, Workflow};
 use gh_ship::logger;
 use gh_ship::style::Theme;
-use gh_ship::templates::{self, Role, TokenStrategy};
+use gh_ship::templates::{self, TokenStrategy};
 
 use super::repo_root;
 
@@ -367,7 +367,7 @@ fn write_template(root: &Path, role: Role, body: &str, theme: Theme) -> Result<(
     let dir = root.join(workflow::WORKFLOW_DIR);
     std::fs::create_dir_all(&dir).map_err(InitError::io("create", &dir))?;
 
-    let path = dir.join(role.filename());
+    let path = dir.join(templates::filename(role));
     if path.exists() {
         let overwrite = Confirm::new(format!("{} exists. Overwrite it?", path.display()))
             .affirmative("Overwrite")
