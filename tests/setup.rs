@@ -198,7 +198,7 @@ fn init_refuses_to_clobber_an_existing_config() {
     let dir = repo(Some(MINIMAL_CONFIG), &[("prepare-release.yml", CONFORMING)]);
     let out = Outcome::run(ship().current_dir(dir.path()).arg("init"));
     let stderr = out.diagnostics();
-    assert_eq!(out.code, 1);
+    assert_eq!(out.code, 1, "{}", out.diagnostics());
     assert!(stderr.contains("already exists"), "{stderr}");
     assert!(stderr.contains("--force"), "{stderr}");
 }

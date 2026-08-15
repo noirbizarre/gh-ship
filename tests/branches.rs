@@ -10,15 +10,13 @@
 
 mod common;
 
-use common::{GhStub, Repo, with_redactions};
+use common::{CHANGED_ARTIFACT, GhStub, Repo, with_redactions};
 
 /// Two release lines: `main` and every `release/*` maintenance branch.
 const LINES: &str = "version: 1\n\
                      branches: [main, \"release/*\"]\n\
                      release_branch: \"next/{{ match }}\"\n\
                      workflows:\n  prepare: prepare-release\n";
-
-const CHANGED_ARTIFACT: &str = r###"{"schemaVersion":1,"changed":true,"version":"1.4.0","tag":"v1.4.0","release":{"notes":"## Changes\n\n* Everything"}}"###;
 
 fn stub() -> GhStub {
     GhStub::new().artifact(CHANGED_ARTIFACT)
