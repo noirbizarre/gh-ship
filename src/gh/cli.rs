@@ -12,6 +12,8 @@ use std::time::Duration;
 use miette::Diagnostic;
 use thiserror::Error;
 
+use crate::logger;
+
 /// How many *extra* attempts a transient failure earns.
 ///
 /// GitHub occasionally answers a perfectly valid query with a 502 or 504,
@@ -457,7 +459,7 @@ fn retried(error: GhError, attempt: u32) -> GhError {
     let note = format!(
         "this looked transient, so it was retried {attempt} more \
          time{} before giving up",
-        if attempt == 1 { "" } else { "s" }
+        logger::plural(attempt as usize)
     );
 
     GhError::Failed {
