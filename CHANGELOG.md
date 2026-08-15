@@ -4,6 +4,44 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0](https://github.com/noirbizarre/gh-ship/compare/0.4.0..0.5.0) - 2026-08-15
+
+### 💫 Features
+
+- **validate** Drop the squash-merge settings check - ([c9c9029](https://github.com/noirbizarre/gh-ship/commit/c9c9029e61ff343a3c55bf7166c7e88bf30dfce1))
+
+### 🐛 Bug Fixes
+
+- **schemas** The workflow slug matches either YAML extension - ([b3c1d76](https://github.com/noirbizarre/gh-ship/commit/b3c1d767e21b494f310056acb5e61c1da2dd2662))
+
+### 🔨 Refactor
+
+- **commands** Share repository resolution with `sign` - ([0bf1d86](https://github.com/noirbizarre/gh-ship/commit/0bf1d866a8aaf84343e6e843f5eccbd9a023b7b5))
+- **gh** Use `logger::plural` for the retry note - ([cde5cc8](https://github.com/noirbizarre/gh-ship/commit/cde5cc8d8d642a81e02279564f5722f9809d0844))
+- **gh** Single short-token generator - ([921372d](https://github.com/noirbizarre/gh-ship/commit/921372d90b58056d93760e8724a00b2d0889cf85))
+- **gh** Single `LEGACY_SHIP_ID_INPUT` definition - ([22add30](https://github.com/noirbizarre/gh-ship/commit/22add309eadbf5f6744724ceb2ecb4f471cfc67c))
+- **init** Carry paths as `PathBuf` in `InitError` - ([6f9fd7b](https://github.com/noirbizarre/gh-ship/commit/6f9fd7be878e9327326b44b899277ea07263ffdb))
+- **templates** Merge `templates::Role` into `gh::workflow::Role` - ([fda2619](https://github.com/noirbizarre/gh-ship/commit/fda26196d9dd059a79a2d2b1bd1eb9da598a8ae7))
+- Unify derive style, suggestions, env knobs and imports - ([71de5e5](https://github.com/noirbizarre/gh-ship/commit/71de5e5cef8ecd94f6ecbe62d7c2303358108c0a))
+
+### 📚 Documentation
+
+- **render** Correct the "single MiniJinja entry point" claim - ([7d21753](https://github.com/noirbizarre/gh-ship/commit/7d217531188059045ed303a7474fa7caa96d93a0))
+- Fix CLI reference drift - ([b6c513d](https://github.com/noirbizarre/gh-ship/commit/b6c513d4afe60ace427fa8316d35b995aacc2803))
+- Align the README with what `gh ship validate` actually checks - ([45c9bb8](https://github.com/noirbizarre/gh-ship/commit/45c9bb802baefdc82ac57ef80e82dbe58bdc79cb))
+- Drop the removed `ship id:` line from the sample output - ([eaba759](https://github.com/noirbizarre/gh-ship/commit/eaba759f0e9c2bb52ed9b5bd32eee79002383f53))
+
+### 🧪 Tests
+
+- **sign** Use the shared `MINIMAL_CONFIG` fixture - ([8188d8d](https://github.com/noirbizarre/gh-ship/commit/8188d8dc2994062092e6f2d06ffa9cd9d38c96e7))
+- Share `CHANGED_ARTIFACT` and report diagnostics on failed assertions - ([c4a6a79](https://github.com/noirbizarre/gh-ship/commit/c4a6a79256ba8468ffe17f304ba851c1661adf59))
+
+### 🔧 CI
+
+- **git-cliff** Avoid `git-cliff` GitHub integration rate limiting by using a token - ([b8b5d02](https://github.com/noirbizarre/gh-ship/commit/b8b5d02af1aba8c8a7dfa5d36b1caf9438da66c3))
+- **mise** Scope resvg and cargo-insta to their tasks - ([2975b40](https://github.com/noirbizarre/gh-ship/commit/2975b409aa8513a9b051559d4dcea1b98420bac3))
+- Drop the transitional ship_id bootstrap bridge - ([d649cbf](https://github.com/noirbizarre/gh-ship/commit/d649cbfc93db826ac0e3212bbe4b705eb5ce857e))
+
 ## [0.4.0](https://github.com/noirbizarre/gh-ship/compare/0.3.0..0.4.0) - 2026-08-13
 
 ### 💫 Features
@@ -32,6 +70,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - Authenticate as a GitHub App - ([b0e9324](https://github.com/noirbizarre/gh-ship/commit/b0e9324a0e3dc2d879082241a245c3e8ea7e82d7))
 
+## ❤️ New Contributors
+
+* @noirbizbot[bot] made their first contribution in [#9](https://github.com/noirbizarre/gh-ship/pull/9)
 ## [0.3.0](https://github.com/noirbizarre/gh-ship/compare/0.2.2..0.3.0) - 2026-08-12
 
 ### 💫 Features
