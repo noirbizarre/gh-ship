@@ -209,17 +209,12 @@ pub fn dispatch(
                 retry.push(format!("{key}={value}"));
             }
             retry.push("-f".into());
-            retry.push(format!("{LEGACY_SHIP_ID_INPUT}={}", legacy_nonce()));
+            retry.push(format!("{LEGACY_SHIP_ID_INPUT}={}", super::short_token()));
             gh.run_scoped(&retry)?;
             Ok(true)
         }
         Err(err) => Err(err.into()),
     }
-}
-
-/// A throwaway value for the legacy `ship_id` input. Nothing reads it back.
-fn legacy_nonce() -> String {
-    uuid::Uuid::new_v4().simple().to_string()[..12].to_string()
 }
 
 /// Poll until a `workflow_dispatch` run that was not there before appears.

@@ -16,6 +16,22 @@ pub mod workflow;
 
 pub use cli::{Gh, GhError};
 
+/// A short random token, unique per invocation.
+///
+/// Twelve hex characters of a v4 UUID: short enough to read back in a branch
+/// name or a log line, wide enough that two concurrent releases cannot
+/// collide.
+///
+/// Two things need one, and they need the same one. `prepare` names its
+/// staging branch after it, which is what makes the branch — and therefore
+/// the run dispatched on it — belong to exactly one invocation, and a branch
+/// left behind by a failed run traceable to it. [`run::dispatch`] uses it as
+/// the throwaway value for the legacy `ship_id` input, which nothing reads
+/// back.
+pub fn short_token() -> String {
+    uuid::Uuid::new_v4().simple().to_string()[..12].to_string()
+}
+
 /// Read a `SHIP_*` knob expressed in whole seconds.
 ///
 /// Every duration knob gh-ship exposes is seconds-as-integer, so the parsing
