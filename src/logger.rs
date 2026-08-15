@@ -88,7 +88,7 @@ pub fn note_url(theme: Theme, url: &str) -> String {
 
 /// The plural `s`, or nothing.
 ///
-/// Four messages count problems; they all agree on how to say "1 problem".
+/// Several messages count things; they all agree on how to say "1 problem".
 pub fn plural(n: usize) -> &'static str {
     if n == 1 { "" } else { "s" }
 }

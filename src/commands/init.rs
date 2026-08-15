@@ -11,7 +11,7 @@
 //! So `init` only ever offers workflows that satisfy the contract, and
 //! explains — rather than silently hides — the ones that do not.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use demand::{Confirm, DemandOption, Select};
 use miette::{Diagnostic, IntoDiagnostic, Result};
@@ -19,10 +19,10 @@ use thiserror::Error;
 
 use gh_ship::cli::{Cli, InitArgs};
 use gh_ship::config::{CONFIG_VERSION, DEFAULT_PR_TITLE, DEFAULT_RELEASE_BRANCH};
-use gh_ship::gh::workflow::{self, Workflow};
+use gh_ship::gh::workflow::{self, Role, Workflow};
 use gh_ship::logger;
 use gh_ship::style::Theme;
-use gh_ship::templates::{self, Role, TokenStrategy};
+use gh_ship::templates::{self, TokenStrategy};
 
 use super::repo_root;
 
@@ -33,12 +33,12 @@ use super::repo_root;
 /// ReleaseError`] exists.
 #[derive(Debug, Error, Diagnostic)]
 pub enum InitError {
-    #[error("{path} already exists")]
+    #[error("{} already exists", path.display())]
     #[diagnostic(
         code(ship::init::exists),
         help("pass `--force` to overwrite it, or edit it directly")
     )]
-    Exists { path: String },
+    Exists { path: PathBuf },
 
     /// `gh ship init` is the one interactive command. Every other command is
     /// scriptable, so this never blocks automation — and a CI job that
@@ -57,14 +57,14 @@ pub enum InitError {
     ///
     /// `init` is the command a newcomer meets first, so its failures carry
     /// the same code and help as everything else gh-ship reports.
-    #[error("could not {verb} {path}: {source}")]
+    #[error("could not {verb} {}: {source}", path.display())]
     #[diagnostic(
         code(ship::init::io),
         help("check the path exists and is writable, then re-run `gh ship init`")
     )]
     Io {
         verb: &'static str,
-        path: String,
+        path: PathBuf,
         #[source]
         source: std::io::Error,
     },
@@ -74,7 +74,7 @@ impl InitError {
     fn io<'a>(verb: &'static str, path: &'a Path) -> impl FnOnce(std::io::Error) -> Self + 'a {
         move |source| Self::Io {
             verb,
-            path: path.display().to_string(),
+            path: path.to_path_buf(),
             source,
         }
     }
@@ -86,7 +86,7 @@ pub fn run(cli: &Cli, args: &InitArgs, theme: Theme) -> Result<()> {
 
     if config_path.exists() && !args.force {
         return Err(InitError::Exists {
-            path: config_path.display().to_string(),
+            path: config_path.clone(),
         }
         .into());
     }
@@ -367,7 +367,7 @@ fn write_template(root: &Path, role: Role, body: &str, theme: Theme) -> Result<(
     let dir = root.join(workflow::WORKFLOW_DIR);
     std::fs::create_dir_all(&dir).map_err(InitError::io("create", &dir))?;
 
-    let path = dir.join(role.filename());
+    let path = dir.join(templates::filename(role));
     if path.exists() {
         let overwrite = Confirm::new(format!("{} exists. Overwrite it?", path.display()))
             .affirmative("Overwrite")

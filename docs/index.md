@@ -12,7 +12,6 @@ $ gh ship prepare
 ▶ preparing acme/widgets
 ▶ staging on ship/prepare-8f2c1a9e4b07 from main
 ▶ dispatching prepare-release on ship/prepare-8f2c1a9e4b07
-  ship id: 8f2c1a9e4b07
   run: https://github.com/acme/widgets/actions/runs/42
 ▶ waiting for prepare-release
 ✔ prepare-release succeeded

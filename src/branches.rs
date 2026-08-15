@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 use miette::Diagnostic;
 use thiserror::Error;
 
-use crate::config::Config;
+use crate::config::{BranchRule, Config};
 use crate::render::{self, TemplateError};
 use crate::suggest;
 
@@ -239,7 +239,7 @@ pub fn check(config: &Config) -> Result<(), BranchError> {
 /// template that uses `{{ branch }}` then comes out different, because
 /// the two globs have different literal parts, and is left alone.
 fn check_glob_pairs(config: &Config) -> Result<(), BranchError> {
-    let globs: Vec<(usize, &crate::config::BranchRule)> = config
+    let globs: Vec<(usize, &BranchRule)> = config
         .branches()
         .iter()
         .enumerate()
@@ -279,11 +279,11 @@ fn check_glob_pairs(config: &Config) -> Result<(), BranchError> {
 }
 
 /// A branch the glob really matches, with `capture` in the `*` position.
-fn probe_branch(rule: &crate::config::BranchRule, capture: &str) -> String {
+fn probe_branch(rule: &BranchRule, capture: &str) -> String {
     rule.branch.replacen('*', capture, 1)
 }
 
-fn constant_glob(config: &Config, rule: &crate::config::BranchRule, template: &str) -> BranchError {
+fn constant_glob(config: &Config, rule: &BranchRule, template: &str) -> BranchError {
     BranchError::ConstantGlobReleaseBranch {
         pattern: rule.branch.clone(),
         help: format!(
@@ -299,7 +299,7 @@ fn constant_glob(config: &Config, rule: &crate::config::BranchRule, template: &s
 
 fn release_branch_is_base(
     config: &Config,
-    rule: &crate::config::BranchRule,
+    rule: &BranchRule,
     name: &str,
     base: &str,
 ) -> BranchError {
@@ -378,8 +378,8 @@ fn no_match_help(config: &Config, base: &str) -> String {
         "`branches` lists {listed}. Add `{base}` to it, or pass `--base` to release from a \
          branch that is listed"
     );
-    if let Some(closest) = suggest::suggest(base, &selectors) {
-        help = format!("{help}\ndid you mean `{closest}`?");
+    if let Some(hint) = suggest::did_you_mean(base, &selectors) {
+        help = format!("{help}\n{hint}");
     }
     help
 }

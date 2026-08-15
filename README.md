@@ -32,7 +32,6 @@ $ gh ship prepare
 ▶ preparing acme/widgets
 ▶ staging on ship/prepare-8f2c1a9e4b07 from main
 ▶ dispatching prepare-release on ship/prepare-8f2c1a9e4b07
-  ship id: 8f2c1a9e4b07
   run: https://github.com/acme/widgets/actions/runs/42
 ▶ waiting for prepare-release
 ✔ prepare-release succeeded
@@ -168,6 +167,7 @@ moves on — is a two-line addition; see
 | `gh ship prepare` | Run the prepare workflow, open or update the Release PR. |
 | `gh ship status` | Where the release stands. A pure query. |
 | `gh ship release` | Tag the merge commit, draft the release, publish assets, then make it visible. Requires the Release PR to be merged, or pass `--merge`. |
+| `gh ship sign` | Re-create a commit so GitHub signs it. Meant for your prepare workflow, not for you. |
 
 ## Two things worth knowing
 
@@ -177,14 +177,16 @@ gh-ship starts workflows through the API, which can only start workflows declari
 `on: workflow_dispatch`. A `workflow_call`-only workflow — what people usually mean
 by "reusable" — cannot be started this way. Declare both to have it both ways.
 
-That is the only structural requirement. gh-ship finds the run it started from
-the ref it dispatched to and the run ids that were not there a moment before, so
-your workflows need no `run-name` convention and no correlation input.
+gh-ship finds the run it started from the ref it dispatched to and the run ids
+that were not there a moment before, so your workflows need no `run-name`
+convention and no correlation input.
 
 Your prepare workflow must also declare a `dry_run` boolean input — it is what
-`gh ship preview` sets to produce the artifact without committing anything.
+`gh ship preview` sets to produce the artifact without committing anything — and
+upload the release artifact `gh ship` reads.
 
-`gh ship validate` checks all three.
+`gh ship validate` checks the first two offline. Whether a run actually uploads
+the artifact depends on what your job steps do, so that one it cannot check.
 
 ### The token
 

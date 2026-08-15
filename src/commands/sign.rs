@@ -34,7 +34,6 @@ use thiserror::Error;
 
 use gh_ship::cli::{Cli, SignArgs};
 use gh_ship::detect;
-use gh_ship::gh::cli::Gh;
 use gh_ship::gh::repo;
 use gh_ship::logger;
 use gh_ship::style::Theme;
@@ -73,11 +72,7 @@ pub fn run(cli: &Cli, args: &SignArgs, theme: Theme) -> Result<()> {
     let branch =
         detect::checked_out_branch(args.reference.as_deref(), &root).ok_or(SignError::NoRef)?;
 
-    // `gh api` cannot take `--repo`, so the repository has to be resolved
-    // into the URL path before anything else.
-    let gh = Gh::new(cli.repo.clone());
-    let repository = repo::repository(&gh)?;
-    let gh = gh.scoped_to(&repository.name_with_owner);
+    let (gh, _repository) = super::context::resolve_repo(cli)?;
 
     let head = repo::commit_at(&gh, &branch)?;
 

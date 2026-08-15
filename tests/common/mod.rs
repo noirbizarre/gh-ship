@@ -33,6 +33,12 @@ jobs:
 /// The smallest configuration gh-ship accepts.
 pub const MINIMAL_CONFIG: &str = "version: 1\nworkflows:\n  prepare: prepare-release\n";
 
+/// An artifact reporting a release worth making.
+///
+/// The shape most tests need: `changed`, so the lifecycle proceeds, with
+/// the version, tag and notes a prepare workflow would have produced.
+pub const CHANGED_ARTIFACT: &str = r###"{"schemaVersion":1,"changed":true,"version":"1.4.0","tag":"v1.4.0","release":{"notes":"## Changes\n\n* Everything"}}"###;
+
 /// Lay out a repository on disk, without installing a `gh` stub.
 ///
 /// Setup tests need only the files; lifecycle tests wrap this with a stub.

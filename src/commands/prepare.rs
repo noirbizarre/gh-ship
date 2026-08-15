@@ -31,7 +31,7 @@
 use miette::Result;
 
 use gh_ship::cli::{Cli, PrepareArgs};
-use gh_ship::gh::repo;
+use gh_ship::gh::{repo, short_token};
 use gh_ship::logger;
 use gh_ship::render;
 use gh_ship::style::Theme;
@@ -74,7 +74,7 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
 
     // Stage on a throwaway branch cut from the base, rather than resetting the
     // release branch in place. See `stage_branch` for why.
-    let staging = stage_branch(&base_branch, &stage_token(), scoped);
+    let staging = stage_branch(&base_branch, &short_token(), scoped);
 
     eprintln!(
         "{}",
@@ -291,15 +291,6 @@ fn slug(branch: &str) -> String {
             }
         })
         .collect()
-}
-
-/// A short random token, unique per prepare.
-///
-/// The staging branch is named after it, which is what makes the branch — and
-/// therefore the run dispatched on it — belong to exactly one invocation, and
-/// a branch left behind by a failed run traceable to it.
-fn stage_token() -> String {
-    uuid::Uuid::new_v4().simple().to_string()[..12].to_string()
 }
 
 /// The staging branch name for a run.

@@ -66,7 +66,7 @@ fn invalid_artifact_diagnostics_are_stable() {
 fn missing_file_reports_a_readable_error() {
     let out = Outcome::run(ship().arg("validate").arg("does-not-exist.json"));
     let stderr = out.diagnostics();
-    assert_eq!(out.code, 1);
+    assert_eq!(out.code, 1, "{}", out.diagnostics());
     assert!(stderr.contains("failed to read"), "{stderr}");
     assert!(
         stderr.contains("ship-release"),
@@ -82,7 +82,7 @@ fn validate_without_a_target_checks_the_setup() {
     let dir = tempfile::tempdir().unwrap();
     let out = Outcome::run(ship().current_dir(dir.path()).arg("validate"));
     let stderr = out.diagnostics();
-    assert_eq!(out.code, 1);
+    assert_eq!(out.code, 1, "{}", out.diagnostics());
     assert!(stderr.contains("no gh-ship configuration"), "{stderr}");
     assert!(stderr.contains("gh ship init"), "{stderr}");
 }

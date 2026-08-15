@@ -14,7 +14,8 @@ use common::{
     CONFORMING_WORKFLOW as CONFORMING, MINIMAL_CONFIG, Outcome, layout as repo, ship,
     with_redactions,
 };
-use gh_ship::templates::{self, Role, TokenStrategy};
+use gh_ship::gh::workflow::Role;
+use gh_ship::templates::{self, TokenStrategy};
 
 fn validate_in(dir: &Path) -> Outcome {
     Outcome::run(ship().current_dir(dir).arg("validate"))
@@ -197,7 +198,7 @@ fn init_refuses_to_clobber_an_existing_config() {
     let dir = repo(Some(MINIMAL_CONFIG), &[("prepare-release.yml", CONFORMING)]);
     let out = Outcome::run(ship().current_dir(dir.path()).arg("init"));
     let stderr = out.diagnostics();
-    assert_eq!(out.code, 1);
+    assert_eq!(out.code, 1, "{}", out.diagnostics());
     assert!(stderr.contains("already exists"), "{stderr}");
     assert!(stderr.contains("--force"), "{stderr}");
 }
@@ -281,7 +282,7 @@ fn every_generated_workflow_is_conforming() {
                 code,
                 0,
                 "the {strategy:?} rendering of {} is not conforming:\n{stderr}",
-                role.filename()
+                templates::filename(role)
             );
         }
     }

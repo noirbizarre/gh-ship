@@ -136,9 +136,14 @@ fn render_optional(
 
 /// Render a template against a context.
 ///
-/// This is the crate's single MiniJinja entry point: the engine stays
-/// confined to this module, so every template failure gets the same
-/// span, the same language tag and the same shape of help.
+/// This is the crate's single entry point for templates *users* write, so
+/// every failure in one gets the same span, the same language tag and the
+/// same shape of help. [`crate::templates`] has a second, separately
+/// configured MiniJinja environment for the workflow templates gh-ship
+/// ships; the two differ deliberately on undefined names. Here an unset
+/// optional field must render empty, because that is what an omitted
+/// `header` or `footer` means. There it is a bug in a shipped template and
+/// fails the test suite.
 pub fn render_template(
     field: &str,
     template: &str,

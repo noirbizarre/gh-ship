@@ -36,6 +36,8 @@ execution. Your workflows do the work.
 
 ```
 src/
+  main.rs          # entry point: parse, dispatch, render diagnostics
+  cli.rs           # the whole clap surface
   artifact/        # the protocol: model, embedded schema, validation, span lookup
   gh/              # everything that talks to GitHub, via the gh CLI
     cli.rs         #   subprocess wrapper and error classification

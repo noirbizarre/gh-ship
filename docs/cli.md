@@ -39,8 +39,9 @@ source it used.
 
 ## Waiting
 
-`preview`, `prepare` and `release` all block on a workflow run they dispatched.
-Two environment variables cap how long they wait:
+`preview`, `prepare` and `release` all block on a workflow run they dispatched,
+unless `prepare` is given [`--no-wait`](#gh-ship-prepare). Two environment
+variables cap how long they wait:
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -66,6 +67,12 @@ gh-ship retries those rather than failing the release:
 |---|---|---|
 | `SHIP_GH_RETRIES` | `3` | Extra attempts for a read-only `gh` call that fails transiently. `0` disables. |
 | `SHIP_GH_RETRY_DELAY` | `1` | Seconds before the first retry. Doubles per attempt, capped at 8. |
+
+## Diagnostics
+
+| Variable | Meaning |
+|---|---|
+| `RUST_BACKTRACE` | When set to anything, prints the full cause chain behind a diagnostic — the same as passing `-v`. |
 
 Only **read-only** calls are retried — `list`, `view`, `status`, `download`,
 `diff`, `checks` and `GET` requests to `gh api`. A gateway timeout means GitHub
@@ -345,7 +352,7 @@ branch — read from `GITHUB_REF`, or from the checkout outside CI.
 
 ```console
 $ gh ship sign
-▸ signing ship/prepare-8f2c1a9e4b07 at c0ffee0
+▶ signing ship/prepare-8f2c1a9e4b07 at c0ffee0
 ✔ signed as 51c8ed0
 ```
 

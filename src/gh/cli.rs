@@ -12,6 +12,8 @@ use std::time::Duration;
 use miette::Diagnostic;
 use thiserror::Error;
 
+use crate::logger;
+
 /// How many *extra* attempts a transient failure earns.
 ///
 /// GitHub occasionally answers a perfectly valid query with a 502 or 504,
@@ -29,10 +31,7 @@ const RETRY_MAX_DELAY: Duration = Duration::from_secs(8);
 
 /// The retry count, overridable via `SHIP_GH_RETRIES`. `0` disables retrying.
 fn retries() -> u32 {
-    std::env::var("SHIP_GH_RETRIES")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(RETRIES)
+    super::env_parsed("SHIP_GH_RETRIES").unwrap_or(RETRIES)
 }
 
 /// The initial retry delay, overridable via `SHIP_GH_RETRY_DELAY` (seconds).
@@ -457,7 +456,7 @@ fn retried(error: GhError, attempt: u32) -> GhError {
     let note = format!(
         "this looked transient, so it was retried {attempt} more \
          time{} before giving up",
-        if attempt == 1 { "" } else { "s" }
+        logger::plural(attempt as usize)
     );
 
     GhError::Failed {

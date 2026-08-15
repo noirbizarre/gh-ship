@@ -13,9 +13,7 @@ mod common;
 
 use common::{GhStub, Repo, with_redactions};
 
-use common::MINIMAL_CONFIG as CONFIG;
-
-const CHANGED_ARTIFACT: &str = r###"{"schemaVersion":1,"changed":true,"version":"1.4.0","tag":"v1.4.0","release":{"notes":"## Changes\n\n* Everything"}}"###;
+use common::{CHANGED_ARTIFACT, MINIMAL_CONFIG as CONFIG};
 
 // --- Happy path ----------------------------------------------------------
 
@@ -175,7 +173,7 @@ fn a_run_that_never_appears_explains_the_likely_causes() {
     let repo = Repo::new(CONFIG, GhStub::new().run_never_appears());
     let out = repo.ship(&["preview"]);
 
-    assert_eq!(out.code, 1);
+    assert_eq!(out.code, 1, "{}", out.diagnostics());
     assert!(
         out.diagnostics().contains("workflow_dispatch"),
         "{}",
@@ -193,7 +191,7 @@ fn a_failed_run_reports_the_conclusion_and_a_link() {
     let repo = Repo::new(CONFIG, GhStub::new().run_status("completed", "failure"));
     let out = repo.ship(&["preview"]);
 
-    assert_eq!(out.code, 1);
+    assert_eq!(out.code, 1, "{}", out.diagnostics());
     assert!(
         out.diagnostics().contains("failure"),
         "{}",
@@ -210,7 +208,7 @@ fn a_failed_run_reports_the_conclusion_and_a_link() {
 fn a_cancelled_run_is_treated_as_a_failure() {
     let repo = Repo::new(CONFIG, GhStub::new().run_status("completed", "cancelled"));
     let out = repo.ship(&["preview"]);
-    assert_eq!(out.code, 1);
+    assert_eq!(out.code, 1, "{}", out.diagnostics());
     assert!(
         out.diagnostics().contains("cancelled"),
         "{}",
@@ -225,7 +223,7 @@ fn a_run_without_an_artifact_names_the_protocol() {
     let repo = Repo::new(CONFIG, GhStub::new().no_artifact());
     let out = repo.ship(&["preview"]);
 
-    assert_eq!(out.code, 1);
+    assert_eq!(out.code, 1, "{}", out.diagnostics());
     assert!(
         out.diagnostics().contains("ship-release"),
         "{}",
@@ -249,7 +247,7 @@ fn an_artifact_with_the_wrong_filename_is_rejected() {
     );
     let out = repo.ship(&["preview"]);
 
-    assert_eq!(out.code, 1);
+    assert_eq!(out.code, 1, "{}", out.diagnostics());
     assert!(
         out.diagnostics().contains("ship.release.json"),
         "{}",
@@ -272,7 +270,7 @@ fn an_invalid_artifact_gets_the_full_diagnostic() {
     );
     let out = repo.ship(&["preview"]);
 
-    assert_eq!(out.code, 1);
+    assert_eq!(out.code, 1, "{}", out.diagnostics());
     assert!(
         out.diagnostics().contains("version"),
         "{}",
@@ -293,7 +291,7 @@ fn unauthenticated_gh_is_reported_actionably() {
     let repo = Repo::new(CONFIG, GhStub::new().unauthenticated());
     let out = repo.ship(&["preview"]);
 
-    assert_eq!(out.code, 1);
+    assert_eq!(out.code, 1, "{}", out.diagnostics());
     assert!(
         out.diagnostics().contains("gh auth login"),
         "{}",
@@ -389,7 +387,7 @@ fn a_missing_config_suggests_init() {
     std::fs::remove_file(repo.path().join(".github/ship.yml")).unwrap();
     let out = repo.ship(&["preview"]);
 
-    assert_eq!(out.code, 1);
+    assert_eq!(out.code, 1, "{}", out.diagnostics());
     assert!(
         out.diagnostics().contains("gh ship init"),
         "{}",
@@ -931,7 +929,7 @@ fn release_refuses_an_open_pull_request() {
     let repo = Repo::new(CONFIG, GhStub::new().pr_body(&body).pr_state("OPEN"));
     let out = repo.ship(&["release"]);
 
-    assert_eq!(out.code, 1);
+    assert_eq!(out.code, 1, "{}", out.diagnostics());
     assert!(
         out.diagnostics().contains("still open"),
         "{}",
@@ -987,7 +985,7 @@ fn release_refuses_a_closed_pull_request() {
     let repo = Repo::new(CONFIG, GhStub::new().pr_body(&body).pr_state("CLOSED"));
     let out = repo.ship(&["release"]);
 
-    assert_eq!(out.code, 1);
+    assert_eq!(out.code, 1, "{}", out.diagnostics());
     assert!(
         out.diagnostics().contains("closed without merging"),
         "{}",
@@ -1005,7 +1003,7 @@ fn release_without_an_embedded_artifact_explains_the_mechanism() {
     );
     let out = repo.ship(&["release"]);
 
-    assert_eq!(out.code, 1);
+    assert_eq!(out.code, 1, "{}", out.diagnostics());
     assert!(
         out.diagnostics()
             .contains("does not carry a release artifact"),
@@ -1021,7 +1019,7 @@ fn release_without_a_pull_request_points_at_status() {
     let repo = Repo::new(CONFIG, GhStub::new().pr_exists(false));
     let out = repo.ship(&["release"]);
 
-    assert_eq!(out.code, 1);
+    assert_eq!(out.code, 1, "{}", out.diagnostics());
     assert!(
         out.diagnostics().contains("no Release PR found"),
         "{}",
