@@ -22,7 +22,7 @@
     },
 
     "branches": {
-      "description": "The base branches gh-ship releases from, one release line each, so a project can maintain release/1.x while main moves on. An entry is either a branch name — a glob if it contains a single `*` — or a mapping with `branch` and its own `release_branch` template, for a line that deviates from the top-level one. Exact entries are matched before globs, and globs in the order listed. When omitted, the repository's own default branch is the only release line. gh-ship detects which branch it runs on from --base, the GitHub Actions environment, the local checkout, or the repository's default branch, in that order. Note that `uniqueItems` cannot see `main` and `{branch: main}` as the same line; gh-ship rejects that itself.",
+      "description": "The base branches gh-ship releases from, one release line each, so a project can maintain release/1.x while main moves on. An entry is either a branch name — a glob if it contains a single `*` — or a mapping with `branch` and its own `release_branch` template, for a line that deviates from the top-level one. Exact entries are matched before globs, and globs in the order listed. When omitted, the repository's own default branch is the only release line. Omit the key rather than passing an empty list, which says nothing. gh-ship detects which branch it runs on from --base, the GitHub Actions environment, the local checkout, or the repository's default branch, in that order. Note that `uniqueItems` cannot see `main` and `{branch: main}` as the same line; gh-ship rejects that itself.",
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
@@ -58,7 +58,7 @@
     },
 
     "workflows": {
-      "description": "The workflows gh-ship dispatches. These must declare `on: workflow_dispatch` — a `workflow_call`-only (so-called reusable) workflow cannot be started through the API at all. They are referenced by filename slug, so `prepare-release` means `.github/workflows/prepare-release.yaml`.",
+      "description": "The workflows gh-ship dispatches. These must declare `on: workflow_dispatch` — a `workflow_call`-only (so-called reusable) workflow cannot be started through the API at all. They are referenced by filename slug — the file name without its extension — so `prepare-release` matches `.github/workflows/prepare-release.yml` or `.yaml`, whichever the repository uses.",
       "type": "object",
       "required": ["prepare"],
       "properties": {
