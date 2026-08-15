@@ -31,10 +31,7 @@ const RETRY_MAX_DELAY: Duration = Duration::from_secs(8);
 
 /// The retry count, overridable via `SHIP_GH_RETRIES`. `0` disables retrying.
 fn retries() -> u32 {
-    std::env::var("SHIP_GH_RETRIES")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(RETRIES)
+    super::env_parsed("SHIP_GH_RETRIES").unwrap_or(RETRIES)
 }
 
 /// The initial retry delay, overridable via `SHIP_GH_RETRY_DELAY` (seconds).

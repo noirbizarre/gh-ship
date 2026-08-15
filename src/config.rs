@@ -691,7 +691,7 @@ fn unknown_field_suggestion(message: &str) -> Option<String> {
     let field = quoted(found.split_once("unknown field")?.1)
         .into_iter()
         .next()?;
-    crate::suggest::did_you_mean(&field, &quoted(expected))
+    suggest::did_you_mean(&field, &quoted(expected))
 }
 
 #[cfg(test)]

@@ -16,6 +16,9 @@ use std::path::{Path, PathBuf};
 use miette::{Diagnostic, NamedSource, SourceSpan};
 use thiserror::Error;
 
+use crate::logger;
+use crate::suggest;
+
 use super::span::{self, Step};
 use super::{Artifact, SCHEMA_VERSION};
 
@@ -77,7 +80,7 @@ pub enum ArtifactError {
         help: String,
     },
 
-    #[error("`{name}` is not a valid release artifact ({n} problem{s})", n = issues.len(), s = crate::logger::plural(issues.len()))]
+    #[error("`{name}` is not a valid release artifact ({n} problem{s})", n = issues.len(), s = logger::plural(issues.len()))]
     #[diagnostic(
         code(ship::artifact::invalid),
         help("see https://noirbizarre.github.io/gh-ship/specifications/release-artifact/")
@@ -256,7 +259,7 @@ fn describe(
             let known = known_siblings(pointer);
             let help = names
                 .first()
-                .and_then(|n| crate::suggest::did_you_mean(n, &known))
+                .and_then(|n| suggest::did_you_mean(n, &known))
                 .or_else(|| {
                     Some(
                         "unknown fields are rejected so typos cannot silently do nothing; \
@@ -269,7 +272,7 @@ fn describe(
             (
                 format!(
                     "{at} has unknown field{} {}",
-                    crate::logger::plural(names.len()),
+                    logger::plural(names.len()),
                     join(&quoted)
                 ),
                 "not allowed here".into(),

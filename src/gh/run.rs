@@ -24,15 +24,16 @@
 //! This asks nothing of the workflow beyond `on: workflow_dispatch`, which
 //! is what lets prepare and publish workflows be ordinary reusable ones.
 
-use super::workflow::LEGACY_SHIP_ID_INPUT;
 use std::collections::HashSet;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+use miette::Diagnostic;
 use serde::Deserialize;
+use thiserror::Error;
 
 use super::cli::{Gh, GhError};
-use super::workflow::WorkflowRef;
+use super::workflow::{LEGACY_SHIP_ID_INPUT, WorkflowRef};
 
 /// How long to wait for a dispatched run to *appear* in the run list.
 ///
@@ -51,13 +52,13 @@ pub fn appear_timeout() -> Duration {
     super::env_duration("SHIP_APPEAR_TIMEOUT").unwrap_or(APPEAR_TIMEOUT)
 }
 
+/// How long to wait for a run to *finish*, by default.
+pub const RUN_TIMEOUT: Duration = Duration::from_secs(60 * 60);
+
 /// The run timeout, overridable via `SHIP_RUN_TIMEOUT` (seconds).
 pub fn run_timeout() -> Duration {
     super::env_duration("SHIP_RUN_TIMEOUT").unwrap_or(RUN_TIMEOUT)
 }
-
-/// How long to wait for a run to *finish*, by default.
-pub const RUN_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 
 /// Polling interval bounds. Starts tight so short runs feel immediate,
 /// backs off so a long run does not hammer the API.
@@ -112,7 +113,7 @@ impl Run {
 }
 
 /// Errors specific to dispatching and tracking runs.
-#[derive(Debug, thiserror::Error, miette::Diagnostic)]
+#[derive(Debug, Error, Diagnostic)]
 pub enum RunError {
     #[error(transparent)]
     #[diagnostic(transparent)]

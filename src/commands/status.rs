@@ -13,6 +13,7 @@
 use miette::Result;
 use serde::Serialize;
 
+use gh_ship::artifact::Artifact;
 use gh_ship::cli::{Cli, StatusArgs};
 use gh_ship::gh::{repo, run};
 use gh_ship::logger;
@@ -43,7 +44,7 @@ pub struct Status {
     pub release_branch: String,
     pub release_branch_exists: bool,
     pub pull_request: Option<PullRequestStatus>,
-    pub artifact: Option<gh_ship::artifact::Artifact>,
+    pub artifact: Option<Artifact>,
     pub last_run: Option<RunStatus>,
     pub release_exists: bool,
     /// What to do next, in plain language.
@@ -178,7 +179,7 @@ fn collect(ctx: &Context) -> Result<Status> {
 fn next_step(
     branch_exists: bool,
     pr: Option<&PullRequestStatus>,
-    artifact: Option<&gh_ship::artifact::Artifact>,
+    artifact: Option<&Artifact>,
     release_exists: bool,
 ) -> String {
     if release_exists {
@@ -306,8 +307,8 @@ mod tests {
         }
     }
 
-    fn artifact() -> gh_ship::artifact::Artifact {
-        gh_ship::artifact::Artifact {
+    fn artifact() -> Artifact {
+        Artifact {
             schema_version: 1,
             changed: true,
             version: Some("1.0.0".into()),
