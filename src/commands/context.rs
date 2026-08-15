@@ -80,16 +80,27 @@ pub struct Context {
     origin: Origin,
 }
 
+/// Resolve the repository and return a `gh` invoker scoped to it.
+///
+/// `gh api` cannot take `--repo`, so the repository has to be resolved into
+/// the URL path before anything else. From here on the repository is known,
+/// so the `gh api` helpers read it off the invoker instead of having it
+/// threaded through every call.
+///
+/// Every command that talks to GitHub starts here: through [`Context::load`]
+/// for the lifecycle commands, and directly for `sign`, which needs neither
+/// configuration nor a release line.
+pub fn resolve_repo(cli: &Cli) -> Result<(Gh, Repository)> {
+    let gh = Gh::new(cli.repo.clone());
+    let repository = repo::repository(&gh)?;
+    Ok((gh.scoped_to(&repository.name_with_owner), repository))
+}
+
 impl Context {
     /// Resolve configuration, repository and release line.
     pub fn load(cli: &Cli, base: Option<&str>, theme: Theme) -> Result<Self> {
         let config = Config::load(&cli.config)?;
-        let gh = Gh::new(cli.repo.clone());
-        let repository = repo::repository(&gh)?;
-        // From here on the repository is known, so the `gh api` helpers can
-        // read it off the invoker instead of having it threaded through
-        // every call.
-        let gh = gh.scoped_to(&repository.name_with_owner);
+        let (gh, repository) = resolve_repo(cli)?;
         let root = repo_root(&cli.config);
 
         let (line, origin) = resolve_line(&config, &repository, base, &root)?;
