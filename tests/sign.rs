@@ -8,14 +8,12 @@
 
 mod common;
 
-use common::{Repo, stub::GhStub};
-
-const CONFIG: &str = "version: 1.0.0\nworkflows:\n  prepare: prepare-release\n";
+use common::{MINIMAL_CONFIG, Repo, stub::GhStub};
 
 /// The happy path: an unsigned tip is re-created and the branch moved.
 #[test]
 fn signs_the_tip_and_moves_the_branch() {
-    let repo = Repo::new(CONFIG, GhStub::new()).in_ci("ship/prepare-abc123");
+    let repo = Repo::new(MINIMAL_CONFIG, GhStub::new()).in_ci("ship/prepare-abc123");
 
     let out = repo.ship(&["sign"]);
 
@@ -37,7 +35,7 @@ fn signs_the_tip_and_moves_the_branch() {
 /// a signature they chose with one they did not.
 #[test]
 fn an_already_signed_commit_is_left_alone() {
-    let repo = Repo::new(CONFIG, GhStub::new().head_already_signed()).in_ci("release/next");
+    let repo = Repo::new(MINIMAL_CONFIG, GhStub::new().head_already_signed()).in_ci("release/next");
 
     let out = repo.ship(&["sign"]);
 
@@ -64,7 +62,7 @@ fn an_already_signed_commit_is_left_alone() {
 /// change the author for no benefit at all.
 #[test]
 fn an_unsigned_result_aborts_without_moving_the_branch() {
-    let repo = Repo::new(CONFIG, GhStub::new().cannot_sign()).in_ci("release/next");
+    let repo = Repo::new(MINIMAL_CONFIG, GhStub::new().cannot_sign()).in_ci("release/next");
 
     let out = repo.ship(&["sign"]);
 
@@ -85,7 +83,7 @@ fn an_unsigned_result_aborts_without_moving_the_branch() {
 /// needs no argument at all.
 #[test]
 fn the_branch_defaults_to_the_dispatched_ref() {
-    let repo = Repo::new(CONFIG, GhStub::new()).in_ci("ship/prepare-deadbeef");
+    let repo = Repo::new(MINIMAL_CONFIG, GhStub::new()).in_ci("ship/prepare-deadbeef");
 
     let out = repo.ship(&["sign"]);
 
@@ -102,7 +100,7 @@ fn the_branch_defaults_to_the_dispatched_ref() {
 /// pushes somewhere other than the ref it was dispatched on.
 #[test]
 fn an_explicit_branch_overrides_the_environment() {
-    let repo = Repo::new(CONFIG, GhStub::new()).in_ci("ship/prepare-abc123");
+    let repo = Repo::new(MINIMAL_CONFIG, GhStub::new()).in_ci("ship/prepare-abc123");
 
     let out = repo.ship(&["sign", "release/next"]);
 
@@ -119,7 +117,7 @@ fn an_explicit_branch_overrides_the_environment() {
 /// names no branch. Guessing the PR's target would sign the wrong thing.
 #[test]
 fn a_ref_that_names_no_branch_is_refused() {
-    let repo = Repo::new(CONFIG, GhStub::new()).in_pr("main", "feature");
+    let repo = Repo::new(MINIMAL_CONFIG, GhStub::new()).in_pr("main", "feature");
 
     let out = repo.ship(&["sign"]);
 
@@ -139,7 +137,7 @@ fn a_ref_that_names_no_branch_is_refused() {
 /// Outside CI the checkout is the only thing left to read.
 #[test]
 fn the_branch_falls_back_to_the_checkout() {
-    let repo = Repo::new(CONFIG, GhStub::new()).with_git_head("release/next");
+    let repo = Repo::new(MINIMAL_CONFIG, GhStub::new()).with_git_head("release/next");
 
     let out = repo.ship(&["sign"]);
 
@@ -156,7 +154,7 @@ fn the_branch_falls_back_to_the_checkout() {
 /// the URL. The stub exits non-zero if the flag ever appears.
 #[test]
 fn signing_works_under_an_explicit_repo() {
-    let repo = Repo::new(CONFIG, GhStub::new()).in_ci("release/next");
+    let repo = Repo::new(MINIMAL_CONFIG, GhStub::new()).in_ci("release/next");
 
     let out = repo.ship(&["--repo", "acme/widgets", "sign"]);
 
