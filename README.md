@@ -176,14 +176,16 @@ gh-ship starts workflows through the API, which can only start workflows declari
 `on: workflow_dispatch`. A `workflow_call`-only workflow — what people usually mean
 by "reusable" — cannot be started this way. Declare both to have it both ways.
 
-That is the only structural requirement. gh-ship finds the run it started from
-the ref it dispatched to and the run ids that were not there a moment before, so
-your workflows need no `run-name` convention and no correlation input.
+gh-ship finds the run it started from the ref it dispatched to and the run ids
+that were not there a moment before, so your workflows need no `run-name`
+convention and no correlation input.
 
 Your prepare workflow must also declare a `dry_run` boolean input — it is what
-`gh ship preview` sets to produce the artifact without committing anything.
+`gh ship preview` sets to produce the artifact without committing anything — and
+upload the release artifact `gh ship` reads.
 
-`gh ship validate` checks all three.
+`gh ship validate` checks the first two offline. Whether a run actually uploads
+the artifact depends on what your job steps do, so that one it cannot check.
 
 ### The token
 
