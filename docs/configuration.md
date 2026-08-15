@@ -71,8 +71,8 @@ release:
 | `release_branch` | template | `release/next` | Branch the release is staged on. |
 | `branches` | list | repo default | Base branches to release from, one release line each — see [Release lines](#release-lines). Entries are branch names, or mappings with `branch` and an optional `release_branch`. |
 | `workflows` | object | — | **Required.** See below. |
-| `pull_request` | object | — | Release PR rendering. |
-| `release` | object | — | GitHub Release behaviour. |
+| `pull_request` | object | [see below](#pull_request) | Release PR rendering. Every key defaults. |
+| `release` | object | [see below](#release) | GitHub Release behaviour. Every key defaults. |
 
 ### `workflows`
 

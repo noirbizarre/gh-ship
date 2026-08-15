@@ -167,6 +167,7 @@ moves on — is a two-line addition; see
 | `gh ship prepare` | Run the prepare workflow, open or update the Release PR. |
 | `gh ship status` | Where the release stands. A pure query. |
 | `gh ship release` | Tag the merge commit, draft the release, publish assets, then make it visible. Requires the Release PR to be merged, or pass `--merge`. |
+| `gh ship sign` | Re-create a commit so GitHub signs it. Meant for your prepare workflow, not for you. |
 
 ## Two things worth knowing
 
