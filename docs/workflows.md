@@ -143,6 +143,34 @@ Nothing to release? Say so, and gh-ship stops cleanly with exit 0:
 jq -n '{schemaVersion: 1, changed: false}' > ship.release.json
 ```
 
+!!! warning "Your versioning tool does not read `GH_TOKEN`"
+
+    `GH_TOKEN` is the `gh` CLI's variable. The tools that compute the version
+    and write the changelog have their own, and they usually look for
+    `GITHUB_TOKEN`. [git-cliff](https://git-cliff.org) does, as soon as
+    `cliff.toml` declares `[remote.github]`: it calls the GitHub API even for
+    `--bumped-version`.
+
+    Setting `GH_TOKEN` is not enough. The tool then sends anonymous requests,
+    which are limited to 60 per hour *per IP* — and GitHub-hosted runners share
+    IPs, so the budget can be spent before your job starts. It fails
+    intermittently, and a re-run on another runner passes, which makes it look
+    like a fluke. git-cliff reports it as a panic about GitHub metadata, not as
+    an authentication problem.
+
+    Pass the token to every step that runs the tool:
+
+    ```yaml
+    - name: Compute the next version
+      env:
+        GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+      run: git cliff --bumped-version
+    ```
+
+    With a GitHub App, set it per step for the same reason as `GH_TOKEN`: the
+    token is a [step output](#using-a-github-app), not available in a job-level
+    `env:`. With the default token, use `${{ github.token }}`.
+
 ## The publish workflow
 
 Optional. Dispatched by `gh ship release` **after** the release exists as a draft
