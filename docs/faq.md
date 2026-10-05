@@ -247,6 +247,20 @@ the publish workflow, then run a plain `gh ship release` from a `workflow_run`
 job when the build succeeds. See
 [Long publish builds](workflows.md#long-publish-builds).
 
+## The release job was cancelled by `timeout-minutes` and the release is still a draft
+
+Your publish workflow most likely takes longer than a GitHub App installation
+token lives. The token expires after an hour, so the job's `timeout-minutes` has
+to stay below that, and a publish workflow over about 50 minutes cannot be waited
+on in one go with a single token.
+
+Re-run the job that runs `gh ship release`. It adopts the publish run, whether it
+is still going or has succeeded, and only makes the release public.
+
+To avoid the manual re-run, use `--no-wait` as described in
+[Long publish builds](workflows.md#long-publish-builds), or retry with a fresh
+token as in [Retrying with a fresh token](workflows.md#retrying-with-a-fresh-token).
+
 ## Why tag the merge commit rather than the branch tip?
 
 Because a squash or rebase merge creates a **new** commit. The release branch tip

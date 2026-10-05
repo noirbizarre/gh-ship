@@ -49,10 +49,14 @@ variables cap how long they wait:
 | `SHIP_APPEAR_TIMEOUT` | `90` | Seconds to wait for a dispatched run to *appear*. |
 | `SHIP_RUN_TIMEOUT` | `3600` | Seconds to wait for a run to *finish*. |
 
-Both take a whole number of seconds. Raise `SHIP_RUN_TIMEOUT` if your publish
-workflow legitimately takes more than an hour; the appear timeout only covers
-the gap between dispatching and GitHub queueing the run, so it rarely needs
-touching.
+Both take a whole number of seconds. The appear timeout only covers the gap
+between dispatching and GitHub queueing the run, so it rarely needs touching.
+
+Raising `SHIP_RUN_TIMEOUT` past an hour only makes sense with a PAT. With a
+GitHub App, a publish workflow that takes longer than about 50 minutes cannot be
+waited on with a single installation token. Use
+[`gh ship release --no-wait`](workflows.md#long-publish-builds) instead, or
+[retry with a fresh token](workflows.md#retrying-with-a-fresh-token).
 
 When a command runs inside a workflow of your own, set `timeout-minutes` on the
 job *below* these values, so a stuck run fails the job visibly rather than

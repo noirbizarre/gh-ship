@@ -448,8 +448,15 @@ jobs:
     A second job can therefore mint a fresh token and retry on that code
     alone, leaving real failures (exit `1`) alone.
 
-    If the build is expected to outlast the token, skip the wait entirely with
-    [`gh ship release --no-wait`](#long-publish-builds).
+    **A publish workflow that takes more than about 50 minutes cannot be waited
+    on with a single App token.** The job is cancelled by its `timeout-minutes`
+    (or fails on an expired token), and the release is left as a draft. Nothing
+    is lost: re-run the Release job. `gh ship release` is idempotent — it adopts
+    the publish run, in flight or succeeded, and only makes the release public.
+
+    To avoid holding a token for the whole build, skip the wait entirely with
+    [`gh ship release --no-wait`](#long-publish-builds), or retry with a fresh
+    token as in [Retrying with a fresh token](#retrying-with-a-fresh-token).
 
 !!! warning "An environment variable is invisible outside its environment"
 
@@ -541,6 +548,75 @@ Things to know:
   is already visible, and `--no-wait` only skips the wait.
 - `workflow_run` is matched on the publish workflow's `name:`, and it triggers
   from the workflow file on your default branch.
+
+#### Retrying with a fresh token
+
+[`--no-wait`](#long-publish-builds) needs a second trigger and keeps no runner
+busy. If you would rather keep a single job that waits for the build, make two
+`gh ship release` attempts in it, each with a freshly minted token. No single
+token has to outlive an hour, so the job itself may run longer — at the cost of
+a runner idling for the whole build.
+
+```yaml
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Two attempts of about 45 minutes each, plus headroom.
+    timeout-minutes: 100
+    environment:
+      name: release
+      deployment: false
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v7
+
+      - run: gh extension install noirbizarre/gh-ship
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      # Give up waiting before the token expires. Exit 75 means the publish
+      # run is still going; any other failure is real and fails the step.
+      - id: attempt-1
+        run: |
+          status=0
+          gh ship release || status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          if [ "$status" -ne 0 ] && [ "$status" -ne 75 ]; then exit "$status"; fi
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SHIP_RUN_TIMEOUT: "2700" # 45 minutes
+
+      # Only when the first attempt timed out: a fresh token, and the same
+      # command, which adopts the run that is still going.
+      - uses: actions/create-github-app-token@v3
+        id: app-token-retry
+        if: steps.attempt-1.outputs.status == '75'
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - run: gh ship release
+        if: steps.attempt-1.outputs.status == '75'
+        env:
+          GH_TOKEN: ${{ steps.app-token-retry.outputs.token }}
+          SHIP_RUN_TIMEOUT: "2700"
+```
+
+- Each attempt waits about 45 minutes, which leaves room for the calls around the
+  wait. Two attempts cover a publish workflow of roughly 90 minutes. A third
+  attempt follows the same shape.
+- Raising `timeout-minutes` is safe here only because the token is replaced
+  before it expires. Never raise `SHIP_RUN_TIMEOUT` itself to 60 minutes or more
+  with an App token.
+- The attempts can also be separate jobs. Each job that mints a token needs
+  `environment: release`, as [above](#using-a-github-app).
+- `gh ship prepare` exits with code `75` in the same way, so a very long
+  prepare-release workflow can use the same pattern.
 
 #### Committing as the App
 
