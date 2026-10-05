@@ -204,6 +204,67 @@ fn a_failed_run_reports_the_conclusion_and_a_link() {
     );
 }
 
+/// Giving up on a run that is still going is resumable, so it must not look
+/// like a failure to a workflow deciding whether to retry.
+#[test]
+fn a_run_that_outlives_the_timeout_exits_75() {
+    let repo = Repo::new(CONFIG, GhStub::new().run_status("in_progress", ""))
+        .with_env("SHIP_RUN_TIMEOUT", "0");
+    let out = repo.ship(&["preview"]);
+
+    assert_eq!(out.code, 75, "{}", out.diagnostics());
+    assert!(
+        out.diagnostics().contains("did not finish"),
+        "{}",
+        out.diagnostics()
+    );
+    assert!(
+        out.diagnostics().contains("re-run"),
+        "{}",
+        out.diagnostics()
+    );
+}
+
+#[test]
+fn a_release_that_outlives_the_timeout_exits_75() {
+    let repo = publishing_repo(GhStub::new().existing_run("in_progress", ""))
+        .with_env("SHIP_RUN_TIMEOUT", "0");
+    let out = repo.ship(&["release"]);
+
+    assert_eq!(out.code, 75, "{}", out.diagnostics());
+}
+
+#[test]
+fn a_timeout_of_an_hour_warns_about_the_app_token_in_actions() {
+    let repo = Repo::new(CONFIG, GhStub::new().artifact(CHANGED_ARTIFACT))
+        .with_env("GITHUB_ACTIONS", "true")
+        .with_env("SHIP_RUN_TIMEOUT", "3600");
+    let out = repo.ship(&["preview"]);
+
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    assert!(
+        out.diagnostics().contains("installation token"),
+        "{}",
+        out.diagnostics()
+    );
+}
+
+#[test]
+fn a_shorter_timeout_or_a_local_run_does_not_warn() {
+    let shorter = Repo::new(CONFIG, GhStub::new().artifact(CHANGED_ARTIFACT))
+        .with_env("GITHUB_ACTIONS", "true")
+        .with_env("SHIP_RUN_TIMEOUT", "3000");
+    let out = shorter.ship(&["preview"]);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    assert!(!out.diagnostics().contains("installation token"));
+
+    let local = Repo::new(CONFIG, GhStub::new().artifact(CHANGED_ARTIFACT))
+        .with_env("SHIP_RUN_TIMEOUT", "3600");
+    let out = local.ship(&["preview"]);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    assert!(!out.diagnostics().contains("installation token"));
+}
+
 #[test]
 fn a_cancelled_run_is_treated_as_a_failure() {
     let repo = Repo::new(CONFIG, GhStub::new().run_status("completed", "cancelled"));

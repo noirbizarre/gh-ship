@@ -8,6 +8,7 @@ use clap::Parser;
 use miette::{MietteHandlerOpts, Result};
 
 use gh_ship::cli::{Cli, Command};
+use gh_ship::gh::run::RunError;
 use gh_ship::style::Theme;
 
 mod commands;
@@ -21,6 +22,20 @@ mod exit {
     pub const OK: u8 = 0;
     /// Something went wrong.
     pub const FAILURE: u8 = 1;
+    /// Gave up waiting for a dispatched run that is still in flight.
+    ///
+    /// `EX_TEMPFAIL` from `sysexits.h`. Re-running the command resumes the
+    /// run, so a workflow can retry on this code alone without treating a
+    /// real failure as retryable.
+    pub const TIMEOUT: u8 = 75;
+}
+
+/// The exit code a failure maps to.
+fn exit_code(report: &miette::Report) -> u8 {
+    match report.downcast_ref::<RunError>() {
+        Some(err) if err.is_timeout() => exit::TIMEOUT,
+        _ => exit::FAILURE,
+    }
 }
 
 fn main() -> ExitCode {
@@ -32,7 +47,7 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::from(exit::OK),
         Err(report) => {
             eprintln!("{report:?}");
-            ExitCode::from(exit::FAILURE)
+            ExitCode::from(exit_code(&report))
         }
     }
 }
