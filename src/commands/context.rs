@@ -292,30 +292,41 @@ pub(crate) fn wait_for_run(ctx: &Context, workflow: &WorkflowRef, found: &Run) -
         logger::action(theme, "waiting for", &workflow.to_string())
     );
 
+    let timeout = run::run_timeout();
+    if run::outlives_app_token(timeout) && std::env::var("GITHUB_ACTIONS").as_deref() == Ok("true")
+    {
+        eprintln!(
+            "{}",
+            logger::warn(
+                theme,
+                &format!(
+                    "SHIP_RUN_TIMEOUT is {}m, at or above the 60m lifetime of a GitHub App \
+                     installation token; lower it, and the job's `timeout-minutes`, below 60. \
+                     A timeout exits with code 75, so the job can be retried with a fresh token",
+                    timeout.as_secs() / 60
+                )
+            )
+        );
+    }
+
     let mut last_status = String::new();
-    let finished = run::wait(
-        &ctx.gh,
-        workflow,
-        found,
-        run::run_timeout(),
-        |elapsed, current| {
-            // Report on transitions rather than on every poll: a status
-            // line per two seconds is noise, a line per state change is
-            // information.
-            if current.status != last_status {
-                last_status = current.status.clone();
-                eprintln!("{}", logger::detail(theme, "status", &current.status));
-            } else if elapsed.as_secs().is_multiple_of(30) {
-                eprintln!(
-                    "{}",
-                    logger::skip(
-                        theme,
-                        &format!("still running ({})", logger::duration(elapsed))
-                    )
-                );
-            }
-        },
-    )?;
+    let finished = run::wait(&ctx.gh, workflow, found, timeout, |elapsed, current| {
+        // Report on transitions rather than on every poll: a status
+        // line per two seconds is noise, a line per state change is
+        // information.
+        if current.status != last_status {
+            last_status = current.status.clone();
+            eprintln!("{}", logger::detail(theme, "status", &current.status));
+        } else if elapsed.as_secs().is_multiple_of(30) {
+            eprintln!(
+                "{}",
+                logger::skip(
+                    theme,
+                    &format!("still running ({})", logger::duration(elapsed))
+                )
+            );
+        }
+    })?;
 
     eprintln!("{}", logger::ok(theme, &format!("{workflow} succeeded")));
     Ok(finished)

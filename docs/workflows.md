@@ -442,6 +442,12 @@ jobs:
     Cap `timeout-minutes` well below 60. `skip-token-revoke` does not help: it
     stops the action revoking the token early, it does not extend its lifetime.
 
+    gh-ship warns when `SHIP_RUN_TIMEOUT` is at or above 60 minutes inside
+    Actions. When the timeout expires with the run still going, the command
+    exits with code `75` rather than `1`, and re-running it adopts that run.
+    A second job can therefore mint a fresh token and retry on that code
+    alone, leaving real failures (exit `1`) alone.
+
 !!! warning "An environment variable is invisible outside its environment"
 
     Keeping `APP_CLIENT_ID` in the `release` environment rather than at

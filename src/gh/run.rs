@@ -60,6 +60,16 @@ pub fn run_timeout() -> Duration {
     super::env_duration("SHIP_RUN_TIMEOUT").unwrap_or(RUN_TIMEOUT)
 }
 
+/// Lifetime of a GitHub App installation token.
+///
+/// A wait that lasts this long outlives the token a job minted at its start.
+pub const APP_TOKEN_LIFETIME: Duration = Duration::from_secs(60 * 60);
+
+/// Whether waiting for `timeout` could outlive a GitHub App installation token.
+pub fn outlives_app_token(timeout: Duration) -> bool {
+    timeout >= APP_TOKEN_LIFETIME
+}
+
 /// Polling interval bounds. Starts tight so short runs feel immediate,
 /// backs off so a long run does not hammer the API.
 const POLL_MIN: Duration = Duration::from_secs(2);
@@ -138,13 +148,26 @@ pub enum RunError {
     #[error("`{workflow}` did not finish within {}m", timeout.as_secs() / 60)]
     #[diagnostic(
         code(ship::run::timeout),
-        help("the run is still going — watch it at {url}, then re-run this command")
+        help(
+            "the run is still going — watch it at {url}, then re-run this command \
+             (exits with code 75, distinct from a failure)"
+        )
     )]
     Timeout {
         workflow: String,
         timeout: Duration,
         url: String,
     },
+}
+
+impl RunError {
+    /// Whether gh-ship gave up *waiting* while the run was still in flight.
+    ///
+    /// Unlike every other variant this is resumable: re-running the command
+    /// adopts the run. It is what the distinct exit code is derived from.
+    pub fn is_timeout(&self) -> bool {
+        matches!(self, Self::Timeout { .. })
+    }
 }
 
 /// Standard guidance when a dispatched run cannot be found.
@@ -429,6 +452,37 @@ mod tests {
         let run: Run = serde_json::from_str(json).unwrap();
         assert_eq!(run.id, 7);
         assert!(!run.is_finished());
+    }
+
+    #[test]
+    fn only_a_timeout_is_resumable() {
+        let timeout = RunError::Timeout {
+            workflow: "w".into(),
+            timeout: Duration::from_secs(1),
+            url: String::new(),
+        };
+        assert!(timeout.is_timeout());
+
+        let failed = RunError::Failed {
+            workflow: "w".into(),
+            conclusion: "failure".into(),
+            url: String::new(),
+        };
+        assert!(!failed.is_timeout());
+
+        let not_found = RunError::NotFound {
+            workflow: "w".into(),
+            timeout: Duration::from_secs(1),
+            help: String::new(),
+        };
+        assert!(!not_found.is_timeout());
+    }
+
+    #[test]
+    fn app_token_lifetime_boundary() {
+        assert!(!outlives_app_token(Duration::from_secs(3599)));
+        assert!(outlives_app_token(Duration::from_secs(3600)));
+        assert!(outlives_app_token(RUN_TIMEOUT));
     }
 
     #[test]

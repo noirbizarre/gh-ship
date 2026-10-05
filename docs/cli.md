@@ -57,6 +57,12 @@ When a command runs inside a workflow of your own, set `timeout-minutes` on the
 job *below* these values, so a stuck run fails the job visibly rather than
 sitting until GitHub's own six-hour limit.
 
+The `SHIP_RUN_TIMEOUT` default of 3600 s is exactly the lifetime of a GitHub App
+installation token. Inside GitHub Actions, gh-ship warns when the timeout is at
+or above that, since a wait that long outlives the token. Lower it, and when it
+expires the command exits with [code `75`](#exit-codes), which a workflow can
+retry with a fresh token.
+
 ## Transient failures
 
 GitHub occasionally answers a valid query with a 502 or 504 — most often on the
@@ -112,6 +118,13 @@ machine-readable payloads — `--json`, and the rendered PR body from
 |---|---|
 | `0` | Success. **Including `changed: false`.** |
 | `1` | Failure. |
+| `75` | Timed out waiting for a run (`SHIP_RUN_TIMEOUT`) that is **still in flight**. Re-run the command to resume it. |
+
+Code `75` is `EX_TEMPFAIL` from `sysexits.h`. It is distinct from `1` so a
+workflow can retry on this case alone — for instance with a fresh token —
+without treating a real failure, such as a failed or cancelled run, as
+retryable. A run that never *appeared* (`SHIP_APPEAR_TIMEOUT`) is not
+resumable and still exits `1`.
 
 !!! note "`nothing to release` is not a failure"
 
