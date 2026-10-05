@@ -984,6 +984,102 @@ fn release_dispatches_the_publish_workflow_when_nothing_ran_yet() {
     );
 }
 
+/// The point of `--no-wait`: the build outlives the token that started it, so
+/// the command must return with the release still a draft.
+#[test]
+fn release_no_wait_dispatches_and_leaves_the_release_a_draft() {
+    let repo = publishing_repo(GhStub::new());
+    let out = repo.ship(&["release", "--no-wait"]);
+
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    assert!(
+        repo.stub.called_with(&["workflow run", "tag=v1.4.0"]),
+        "{:?}",
+        repo.stub.calls()
+    );
+    assert!(
+        !repo.stub.called_with(&["run view"]),
+        "--no-wait must not poll the run: {:?}",
+        repo.stub.calls()
+    );
+    assert!(
+        !repo.stub.called_with(&["release edit", "--draft=false"]),
+        "assets are not attached yet, the release must stay a draft: {:?}",
+        repo.stub.calls()
+    );
+    assert!(
+        out.diagnostics().contains("not waiting"),
+        "{}",
+        out.diagnostics()
+    );
+}
+
+#[test]
+fn release_no_wait_does_not_wait_on_a_run_already_in_flight() {
+    let repo = publishing_repo(GhStub::new().existing_run("in_progress", ""));
+    let out = repo.ship(&["release", "--no-wait"]);
+
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    assert!(
+        !repo.stub.called_with(&["workflow run"]),
+        "{:?}",
+        repo.stub.calls()
+    );
+    assert!(
+        !repo.stub.called_with(&["run view"]),
+        "{:?}",
+        repo.stub.calls()
+    );
+    assert!(!repo.stub.called_with(&["release edit", "--draft=false"]));
+}
+
+/// The companion `workflow_run` job: the build is done, only visibility is left.
+#[test]
+fn release_no_wait_still_publishes_when_a_run_already_succeeded() {
+    let repo = publishing_repo(GhStub::new().existing_run("completed", "success"));
+    let out = repo.ship(&["release", "--no-wait"]);
+
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    assert!(
+        !repo.stub.called_with(&["workflow run"]),
+        "{:?}",
+        repo.stub.calls()
+    );
+    assert!(
+        repo.stub.called_with(&["release edit", "--draft=false"]),
+        "{:?}",
+        repo.stub.calls()
+    );
+}
+
+#[test]
+fn release_no_wait_redispatches_after_a_failed_run() {
+    let repo = publishing_repo(GhStub::new().existing_run("completed", "failure"));
+    let out = repo.ship(&["release", "--no-wait"]);
+
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    assert!(
+        repo.stub.called_with(&["workflow run"]),
+        "{:?}",
+        repo.stub.calls()
+    );
+    assert!(!repo.stub.called_with(&["release edit", "--draft=false"]));
+}
+
+/// Nothing to wait for, so the flag changes nothing.
+#[test]
+fn release_no_wait_without_a_publish_workflow_still_undrafts() {
+    let repo = merged_repo(GhStub::new());
+    let out = repo.ship(&["release", "--no-wait"]);
+
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    assert!(
+        repo.stub.called_with(&["release edit", "--draft=false"]),
+        "{:?}",
+        repo.stub.calls()
+    );
+}
+
 #[test]
 fn release_refuses_an_open_pull_request() {
     let body = format!("Notes\n\n<!-- ship:artifact\n{CHANGED_ARTIFACT}\n-->");

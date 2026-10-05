@@ -40,7 +40,8 @@ source it used.
 ## Waiting
 
 `preview`, `prepare` and `release` all block on a workflow run they dispatched,
-unless `prepare` is given [`--no-wait`](#gh-ship-prepare). Two environment
+unless `prepare` or `release` is given `--no-wait` ([`prepare`](#gh-ship-prepare),
+[`release`](#gh-ship-release)). Two environment
 variables cap how long they wait:
 
 | Variable | Default | Meaning |
@@ -302,7 +303,7 @@ embedded in the PR body — so the answer is the same on any machine.
 Tag, publish, and release the merged Release PR.
 
 ```console
-$ gh ship release [--merge]
+$ gh ship release [--merge] [--no-wait]
 ```
 
 1. Finds the Release PR and recovers the artifact from its body.
@@ -342,8 +343,27 @@ $ gh ship release [--merge]
 | Option | Meaning |
 |---|---|
 | `--merge` | Merge the Release PR if it is still open. |
+| `--no-wait` | Dispatch the publish workflow but do not wait for it. The release is left as a draft. |
 
 Idempotent: if the release already exists, it is not recreated.
+
+!!! tip "`--no-wait`: don't hold a token for the whole build"
+
+    With `--no-wait`, `release` tags, creates the draft release, dispatches the
+    publish workflow and returns. The release stays a draft, because its assets
+    are not attached yet.
+
+    Running `gh ship release` again once the publish run has succeeded finds
+    that run on the tag, skips the dispatch, and only makes the release visible.
+    A run still in flight is reported, not waited on; a run that already
+    succeeded is honoured even with `--no-wait`.
+
+    Without `--no-wait`, a wait that outlasts `SHIP_RUN_TIMEOUT` exits with
+    [code `75`](#exit-codes), which a workflow can retry with a fresh token.
+    That keeps a runner idle for the whole build; `--no-wait` does not.
+
+    This decouples build time from the one-hour lifetime of a GitHub App token.
+    See [Long publish builds](workflows.md#long-publish-builds).
 
 ---
 

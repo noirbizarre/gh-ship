@@ -448,6 +448,9 @@ jobs:
     A second job can therefore mint a fresh token and retry on that code
     alone, leaving real failures (exit `1`) alone.
 
+    If the build is expected to outlast the token, skip the wait entirely with
+    [`gh ship release --no-wait`](#long-publish-builds).
+
 !!! warning "An environment variable is invisible outside its environment"
 
     Keeping `APP_CLIENT_ID` in the `release` environment rather than at
@@ -464,6 +467,80 @@ jobs:
     `actions/create-github-app-token` accepts the legacy `app-id` input, which
     takes the App's numeric ID rather than its Client ID. `client-id` is what
     the action recommends, and what these examples use.
+
+#### Long publish builds
+
+When the publish workflow can take close to an hour or more, do not hold a
+token for the whole build. Split `release` in two:
+
+1. The job on the merged Release PR runs `gh ship release --no-wait`: it tags,
+   creates the draft release, dispatches the publish workflow and returns. The
+   release stays a draft.
+2. A second job, triggered when the publish workflow completes successfully, runs
+   a plain `gh ship release`. It finds the successful run on the tag, skips the
+   dispatch, and only makes the release visible.
+
+```yaml
+on:
+  pull_request:
+    types: [closed]
+  workflow_run:
+    # The `name:` of your publish workflow.
+    workflows: ["📦 Publish Release"]
+    types: [completed]
+
+jobs:
+  release:
+    if: >-
+      github.event_name == 'pull_request'
+      && github.event.pull_request.merged
+      && github.event.pull_request.head.ref == 'release/next'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: release
+      deployment: false
+    steps:
+      # ... mint a token, install gh-ship
+      - run: gh ship release --no-wait
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+  publish:
+    # A failed publish run must not make the release visible.
+    if: >-
+      github.event_name == 'workflow_run'
+      && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: release
+      deployment: false
+    steps:
+      # ... mint a *fresh* token, install gh-ship
+      - run: gh ship release
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+```
+
+Things to know:
+
+- **The second job mints its own token.** That is the point: nothing is held
+  while the build runs, so build time is no longer bound to the token lifetime.
+- **A failed publish run is skipped, not retried.** The `conclusion == 'success'`
+  guard keeps the second job from running; the failure is visible on the publish
+  run itself. Re-running that run from the GitHub UI fires `workflow_run` again
+  once it succeeds, and the release is then made visible.
+- **`--no-wait` or exit code 75?** Waiting with a lowered `SHIP_RUN_TIMEOUT`
+  exits with [code `75`](cli.md#exit-codes) when the run is still in flight, and
+  a retry job can resume it with a fresh token. That still keeps a runner idle
+  for the whole build; `--no-wait` is the choice when you do not want that.
+- **The second run is idempotent.** The publish run is looked up on the tag, so
+  `gh ship release` also works if the publish workflow was started by hand.
+- **Draft stays a draft until then.** If `release.draft` is `false` the release
+  is already visible, and `--no-wait` only skips the wait.
+- `workflow_run` is matched on the publish workflow's `name:`, and it triggers
+  from the workflow file on your default branch.
 
 #### Committing as the App
 

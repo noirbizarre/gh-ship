@@ -86,6 +86,13 @@ pub struct ReleaseArgs {
     #[arg(long)]
     pub merge: bool,
 
+    /// Dispatch the publish workflow but do not wait for it to finish.
+    ///
+    /// The release is left as a draft. Run `gh ship release` again once the
+    /// publish run has succeeded to make it visible.
+    #[arg(long)]
+    pub no_wait: bool,
+
     #[command(flatten)]
     pub base: BaseArgs,
 }
@@ -206,6 +213,21 @@ mod tests {
             };
             assert_eq!(base.as_deref(), Some("release/1.x"));
         }
+    }
+
+    #[test]
+    fn no_wait_is_accepted_by_prepare_and_release() {
+        let cli = Cli::try_parse_from(["gh-ship", "release", "--no-wait"]).unwrap();
+        let Command::Release(a) = cli.command else {
+            panic!("expected release")
+        };
+        assert!(a.no_wait);
+
+        let cli = Cli::try_parse_from(["gh-ship", "release"]).unwrap();
+        let Command::Release(a) = cli.command else {
+            panic!("expected release")
+        };
+        assert!(!a.no_wait);
     }
 
     #[test]
