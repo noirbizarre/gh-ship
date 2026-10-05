@@ -47,6 +47,16 @@
 //! then something gh-ship does rather than a side effect it hopes for, and the
 //! step is idempotent so a partial failure is recoverable by re-running.
 //!
+//! # Why `--no-wait` exists
+//!
+//! Waiting holds the caller's credentials for the whole build. A GitHub App
+//! installation token lives one hour, so a longer build cannot be waited on
+//! from the job that holds it. With `--no-wait` the command tags, drafts,
+//! dispatches the publish workflow and returns, leaving the release a draft.
+//! A second, plain `gh ship release` — typically from a `workflow_run` job with
+//! a freshly minted token — then finds the successful run on the tag, skips the
+//! dispatch, and only makes the release visible.
+//!
 //! # Why the merge commit, not the branch tip
 //!
 //! The release branch tip that `prepare` saw is **not** what lands on
@@ -66,7 +76,9 @@ use gh_ship::logger;
 use gh_ship::render;
 use gh_ship::style::Theme;
 
-use super::context::{Context, dispatch_and_wait, report_nothing_to_release, wait_for_run};
+use super::context::{
+    Context, dispatch_and_wait, report_nothing_to_release, wait_for_run, warn_legacy_ship_id,
+};
 use super::short_sha;
 
 /// Everything that can stop a release before it starts.
@@ -204,7 +216,10 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
 
     match ctx.config.publish_workflow() {
         Some(publish) if draft => {
-            run_publish(&ctx, publish, tag)?;
+            if run_publish(&ctx, publish, tag, args.no_wait)? == PublishOutcome::Pending {
+                report_pending(theme, tag, true);
+                return Ok(());
+            }
             eprintln!("{}", logger::action(theme, "publishing", tag));
             repo::publish_release(&ctx.gh, tag)?;
             eprintln!("{}", logger::ok(theme, "release published"));
@@ -220,7 +235,10 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
                     "release.draft is false — watchers were notified before assets were uploaded"
                 )
             );
-            run_publish(&ctx, publish, tag)?;
+            if run_publish(&ctx, publish, tag, args.no_wait)? == PublishOutcome::Pending {
+                report_pending(theme, tag, false);
+                return Ok(());
+            }
         }
         None if draft => {
             // A draft with no publish workflow would sit invisible
@@ -235,6 +253,37 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
     eprintln!();
     eprintln!("{}", logger::ok(theme, &format!("shipped {tag}")));
     Ok(())
+}
+
+/// Where the publish workflow stands once `run_publish` returns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PublishOutcome {
+    /// The assets are attached: nothing left to wait for.
+    Done,
+    /// A run was dispatched or is in flight, and `--no-wait` said not to wait.
+    Pending,
+}
+
+/// Say what `--no-wait` left undone.
+fn report_pending(theme: Theme, tag: &str, draft: bool) {
+    eprintln!();
+    if draft {
+        eprintln!(
+            "{}",
+            logger::skip(
+                theme,
+                &format!(
+                    "not waiting — {tag} is left as a draft; re-run `gh ship release` once the \
+                     publish run has succeeded to make it visible"
+                )
+            )
+        );
+    } else {
+        eprintln!(
+            "{}",
+            logger::skip(theme, "not waiting for the publish workflow to finish")
+        );
+    }
 }
 
 /// Read the artifact back out of the Release PR body.
@@ -330,7 +379,19 @@ fn create_release(ctx: &Context, artifact: &Artifact, tag: &str, target: &str) -
 /// that failed and was then re-run from the GitHub UI is therefore visible
 /// here, and dispatching a second full build that re-uploads assets already
 /// attached is avoided.
-fn run_publish(ctx: &Context, workflow_name: &str, tag: &str) -> Result<()> {
+///
+/// # `--no-wait`
+///
+/// With `no_wait`, a run that has to be dispatched or is still in flight is
+/// reported and left alone, and the caller leaves the release a draft. A
+/// success already on record is still honoured: that is the path a later
+/// plain `gh ship release` takes to make the release visible.
+fn run_publish(
+    ctx: &Context,
+    workflow_name: &str,
+    tag: &str,
+    no_wait: bool,
+) -> Result<PublishOutcome> {
     let theme = ctx.theme;
     let workflow = ctx.workflow(workflow_name);
 
@@ -345,7 +406,7 @@ fn run_publish(ctx: &Context, workflow_name: &str, tag: &str) -> Result<()> {
             logger::skip(theme, &format!("{workflow} already succeeded for {tag}"))
         );
         eprintln!("{}", logger::detail_url(theme, "run", &done.url));
-        return Ok(());
+        return Ok(PublishOutcome::Done);
     }
 
     eprintln!(
@@ -362,14 +423,30 @@ fn run_publish(ctx: &Context, workflow_name: &str, tag: &str) -> Result<()> {
             logger::skip(theme, &format!("{workflow} is already running for {tag}"))
         );
         eprintln!("{}", logger::detail_url(theme, "run", &running.url));
+        if no_wait {
+            return Ok(PublishOutcome::Pending);
+        }
         wait_for_run(ctx, &workflow, running)?;
-        return Ok(());
+        return Ok(PublishOutcome::Done);
+    }
+
+    let inputs = [("tag", tag.to_string())];
+
+    if no_wait {
+        eprintln!(
+            "{}",
+            logger::action(theme, "dispatching", &format!("{workflow} on {tag}"))
+        );
+        if run::dispatch(&ctx.gh, &workflow, tag, &inputs)? {
+            warn_legacy_ship_id(ctx, &workflow);
+        }
+        eprintln!("{}", logger::ok(theme, "workflow dispatched"));
+        return Ok(PublishOutcome::Pending);
     }
 
     // The shared dispatch/find/wait helper does the reporting: a publish
     // that cross-compiles for an hour must look alive throughout, and it
     // must look the same as every other wait gh-ship does.
-    let inputs = [("tag", tag.to_string())];
     dispatch_and_wait(ctx, &workflow, tag, &inputs)?;
-    Ok(())
+    Ok(PublishOutcome::Done)
 }

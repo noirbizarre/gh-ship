@@ -239,6 +239,14 @@ dispatch a new one.
 Everything else `release` does is already idempotent — the tag is not
 re-created, and neither is the release — so the whole command is safe to re-run.
 
+## My publish build takes more than an hour. What do I do?
+
+An App installation token lives one hour, and `gh ship release` normally holds it
+for the whole build. Use `gh ship release --no-wait` to tag, draft and dispatch
+the publish workflow, then run a plain `gh ship release` from a `workflow_run`
+job when the build succeeds. See
+[Long publish builds](workflows.md#long-publish-builds).
+
 ## Why tag the merge commit rather than the branch tip?
 
 Because a squash or rebase merge creates a **new** commit. The release branch tip
