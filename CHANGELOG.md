@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0](https://github.com/noirbizarre/gh-ship/compare/0.5.0..0.6.0) - 2026-10-06
+
+### 💫 Features
+
+- **auth** Mint and refresh GitHub App installation tokens ([#21](https://github.com/noirbizarre/gh-ship/issues/21)) - ([20b726b](https://github.com/noirbizarre/gh-ship/commit/20b726bb3c541e2f0862645ed293593e331c7a99))
+- **release** Add --no-wait to dispatch the publish workflow and return ([#19](https://github.com/noirbizarre/gh-ship/issues/19)) - ([4bd6f99](https://github.com/noirbizarre/gh-ship/commit/4bd6f9997d777702d1e738f9d536cf10830089a7))
+- **run** Exit with code 75 when waiting for a run times out ([#18](https://github.com/noirbizarre/gh-ship/issues/18)) - ([65bec41](https://github.com/noirbizarre/gh-ship/commit/65bec416ebd517a3cf67c12a407c3aae984dfde7))
+
+### 📚 Documentation
+
+- **workflows** Document the 50 minute App-token wait limit ([#20](https://github.com/noirbizarre/gh-ship/issues/20)) - ([a45ad3c](https://github.com/noirbizarre/gh-ship/commit/a45ad3c517668eb18faba206c239159cadc4cdd0))
+- **workflows** Warn that versioning tools read GITHUB_TOKEN, not GH_TOKEN ([#12](https://github.com/noirbizarre/gh-ship/issues/12)) - ([65ca8a7](https://github.com/noirbizarre/gh-ship/commit/65ca8a7211d3afc9e6b6f1fc6549aabe2d0c6c17))
+
 ## [0.5.0](https://github.com/noirbizarre/gh-ship/compare/0.4.0..0.5.0) - 2026-08-15
 
 ### 💫 Features
