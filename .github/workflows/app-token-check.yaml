@@ -44,7 +44,7 @@ jobs:
       - name: App credentials - token refresh during a real wait
         run: |
           set +e
-          ./target/debug/gh-ship --base main preview > out.log 2> err.log
+          ./target/debug/gh-ship preview --base main > out.log 2> err.log
           code=$?
           set -e
           cat err.log
