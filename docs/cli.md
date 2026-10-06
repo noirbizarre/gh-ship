@@ -52,9 +52,11 @@ variables cap how long they wait:
 Both take a whole number of seconds. The appear timeout only covers the gap
 between dispatching and GitHub queueing the run, so it rarely needs touching.
 
-Raising `SHIP_RUN_TIMEOUT` past an hour only makes sense with a PAT. With a
-GitHub App, a publish workflow that takes longer than about 50 minutes cannot be
-waited on with a single installation token. Use
+Raising `SHIP_RUN_TIMEOUT` past an hour only makes sense with a PAT, or with a
+GitHub App whose credentials are given to gh-ship
+([see Authentication](#authentication)), which then replaces its own token. With
+an installation token minted by a workflow step, a publish workflow that takes
+longer than about 50 minutes cannot be waited on with a single token. Use
 [`gh ship release --no-wait`](workflows.md#long-publish-builds) instead, or
 [retry with a fresh token](workflows.md#retrying-with-a-fresh-token).
 
@@ -66,7 +68,24 @@ The `SHIP_RUN_TIMEOUT` default of 3600 s is exactly the lifetime of a GitHub App
 installation token. Inside GitHub Actions, gh-ship warns when the timeout is at
 or above that, since a wait that long outlives the token. Lower it, and when it
 expires the command exits with [code `75`](#exit-codes), which a workflow can
-retry with a fresh token.
+retry with a fresh token. The warning does not appear when gh-ship mints its own
+token, since that one is replaced before it expires.
+
+## Authentication
+
+Authentication is `gh`'s job: `gh auth login` locally, `GH_TOKEN` in CI. gh-ship
+can instead act as a GitHub App, given its credentials:
+
+| Variable | Meaning |
+|---|---|
+| `SHIP_APP_CLIENT_ID` | The App's Client ID (or numeric App ID). |
+| `SHIP_APP_PRIVATE_KEY` | The contents of the App's private key, in PEM format. |
+| `SHIP_APP_INSTALLATION_ID` | Optional. The installation to use, skipping the lookup. |
+
+gh-ship then mints an installation token, scoped to the repository, sets it as
+`GH_TOKEN` on every `gh` it runs, and replaces it before its one hour is up. Set
+both of the first two or neither. See
+[Letting gh-ship mint the token](workflows.md#letting-gh-ship-mint-the-token).
 
 ## Transient failures
 

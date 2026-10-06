@@ -6,8 +6,9 @@ to do.
 ## Principles
 
 **GitHub-first.** Every GitHub interaction goes through the `gh` CLI. gh-ship
-implements no REST client and handles no tokens, because `gh` already solves
-authentication, enterprise hosts, SSO, and rate limiting.
+implements no REST client and, by default, handles no tokens, because `gh` already
+solves authentication, enterprise hosts, SSO, and rate limiting. The one opt-in
+exception is [minting a GitHub App token](#app-authentication).
 
 **Convention over configuration.** The only required config is `version` and
 `workflows.prepare`.
@@ -15,9 +16,39 @@ authentication, enterprise hosts, SSO, and rate limiting.
 **Never execute user release logic.** gh-ship has no `run:` key and no shell
 execution. Your workflows do the work.
 
-**Never manage secrets.**
+**Never store secrets.** gh-ship keeps nothing on disk and reads no secret unless
+you hand it one in the environment. See [App authentication](#app-authentication)
+for the one place it does.
 
 **Zero local state.** Everything is reconstructed from GitHub.
+
+## App authentication
+
+An installation token minted by a workflow step expires after an hour, which caps
+any wait gh-ship does. So, opt-in only, gh-ship can take a GitHub App's Client ID
+and private key from the environment, mint the installation token itself, and
+replace it before it expires.
+
+This bends "never manage secrets", and the line is drawn where it stays defensible:
+
+- **It is opt-in.** With `SHIP_APP_CLIENT_ID` and `SHIP_APP_PRIVATE_KEY` unset,
+  none of it runs and `gh` authenticates as before.
+- **The key is read, never kept.** It lives in the process environment and in
+  memory, and is not written, cached across runs, or logged. There are no config
+  file keys for it, so it cannot be committed by accident.
+- **Still no REST client.** The two calls it needs go through `gh api`, with the
+  JWT as an explicit `Authorization: Bearer` header. The new dependencies are
+  an RSA signer and a base64 encoder, not an HTTP stack.
+- **It does not reimplement the action.** The token is scoped to the one
+  repository and is not revoked at the end of the run; it simply expires. Use
+  `actions/create-github-app-token` where that matters, or where nothing waits
+  long enough to need a refresh.
+
+The signing uses the `rsa` crate, which has a known timing side channel
+([RUSTSEC-2023-0071](https://rustsec.org/advisories/RUSTSEC-2023-0071)) with no
+fix available. It matters for a service answering untrusted signing requests;
+here a short-lived CI process signs a handful of JWTs locally, and nothing
+observes its timing.
 
 ## The anti-goal
 
@@ -41,6 +72,7 @@ src/
   artifact/        # the protocol: model, embedded schema, validation, span lookup
   gh/              # everything that talks to GitHub, via the gh CLI
     cli.rs         #   subprocess wrapper and error classification
+    app.rs         #   opt-in GitHub App token minting and refresh
     workflow.rs    #   workflow discovery and contract checking
     run.rs         #   dispatch, correlation, polling
     repo.rs        #   branches, PRs, releases

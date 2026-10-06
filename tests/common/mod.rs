@@ -161,6 +161,16 @@ const SCRUBBED: &[&str] = &[
     "SHIP_CONFIG",
     "SHIP_REPO",
     "SHIP_BASE_BRANCH",
+    "SHIP_APP_CLIENT_ID",
+    "SHIP_APP_PRIVATE_KEY",
+    "SHIP_APP_INSTALLATION_ID",
+    "SHIP_APP_TOKEN_TTL",
+    // Credentials: a stub that never sees a real token cannot leak one, and a
+    // test that asserts on `GH_TOKEN` must not inherit CI's.
+    "GH_TOKEN",
+    "GITHUB_TOKEN",
+    "GH_ENTERPRISE_TOKEN",
+    "GITHUB_REPOSITORY",
     "RUST_BACKTRACE",
     "GITHUB_ACTIONS",
     "GITHUB_REF",

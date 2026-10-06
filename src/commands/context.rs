@@ -293,7 +293,11 @@ pub(crate) fn wait_for_run(ctx: &Context, workflow: &WorkflowRef, found: &Run) -
     );
 
     let timeout = run::run_timeout();
-    if run::outlives_app_token(timeout) && std::env::var("GITHUB_ACTIONS").as_deref() == Ok("true")
+    // With built-in App authentication the token is replaced before it
+    // expires, so the lifetime is no ceiling and there is nothing to warn of.
+    if !ctx.gh.uses_app_auth()
+        && run::outlives_app_token(timeout)
+        && std::env::var("GITHUB_ACTIONS").as_deref() == Ok("true")
     {
         eprintln!(
             "{}",
@@ -301,8 +305,10 @@ pub(crate) fn wait_for_run(ctx: &Context, workflow: &WorkflowRef, found: &Run) -
                 theme,
                 &format!(
                     "SHIP_RUN_TIMEOUT is {}m, at or above the 60m lifetime of a GitHub App \
-                     installation token; lower it, and the job's `timeout-minutes`, below 60. \
-                     A timeout exits with code 75, so the job can be retried with a fresh token",
+                     installation token; lower it, and the job's `timeout-minutes`, below 60, \
+                     or let gh-ship mint its own token with SHIP_APP_CLIENT_ID and \
+                     SHIP_APP_PRIVATE_KEY. A timeout exits with code 75, so the job can be \
+                     retried with a fresh token",
                     timeout.as_secs() / 60
                 )
             )

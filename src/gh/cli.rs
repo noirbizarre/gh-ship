@@ -7,11 +7,13 @@
 
 use std::ffi::OsStr;
 use std::process::Command;
+use std::sync::Arc;
 use std::time::Duration;
 
 use miette::Diagnostic;
 use thiserror::Error;
 
+use super::app::AppAuth;
 use crate::logger;
 
 /// How many *extra* attempts a transient failure earns.
@@ -57,9 +59,20 @@ pub enum GhError {
     #[error("not authenticated with GitHub")]
     #[diagnostic(
         code(ship::gh::auth),
-        help("run `gh auth login`, or set GH_TOKEN in CI")
+        help(
+            "run `gh auth login`, or set GH_TOKEN in CI. A GitHub App can be used directly by \
+             setting SHIP_APP_CLIENT_ID and SHIP_APP_PRIVATE_KEY"
+        )
     )]
     NotAuthenticated,
+
+    #[error("GitHub App authentication failed: {message}")]
+    #[diagnostic(code(ship::gh::app_auth))]
+    AppAuth {
+        message: String,
+        #[help]
+        help: Option<String>,
+    },
 
     #[error("not inside a GitHub repository")]
     #[diagnostic(
@@ -115,11 +128,24 @@ pub struct Gh {
     /// helper is what stops the two conventions from diverging — the bug
     /// noted in `repo::matching_branches` came from exactly that split.
     slug: Option<String>,
+    /// Built-in GitHub App authentication, when its credentials are in the
+    /// environment. Shared between clones so they share one token.
+    app: Option<Arc<AppAuth>>,
 }
 
 impl Gh {
     pub fn new(repo: Option<String>) -> Self {
-        Self { repo, slug: None }
+        let app = AppAuth::from_env(repo.as_deref()).map(Arc::new);
+        Self {
+            repo,
+            slug: None,
+            app,
+        }
+    }
+
+    /// Whether gh-ship is minting (and refreshing) its own installation token.
+    pub fn uses_app_auth(&self) -> bool {
+        self.app.is_some()
     }
 
     /// Pin this invoker to a resolved `OWNER/REPO`.
@@ -167,8 +193,10 @@ impl Gh {
 
         let attempts = retries();
         let mut delay = retry_delay();
+        let mut attempt = 0;
+        let mut reauthenticated = false;
 
-        for attempt in 0..=attempts {
+        loop {
             // A `Command` cannot be reused after `output()`, so it is built
             // fresh per attempt. The arguments are identical every time: a
             // retry must ask the same question, not a slightly different one.
@@ -176,6 +204,11 @@ impl Gh {
             cmd.args(args);
             if let Some(repo) = repo {
                 cmd.arg("--repo").arg(repo);
+            }
+            // Asked for on every attempt, not once: a wait loop can outlive
+            // the token it started with, and this is what swaps it.
+            if let Some(app) = &self.app {
+                apply_token(&mut cmd, &app.token()?);
             }
 
             // A spawn failure is never retried: `gh` being missing or
@@ -191,16 +224,28 @@ impl Gh {
 
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
 
+            // GitHub rejected a token we thought was good — revoked, or its
+            // clock disagrees with ours. Mint another and ask once more. A
+            // 401 means the request was not processed, so this is safe for
+            // writes too, unlike a retry after a 5xx.
+            if let Some(app) = &self.app
+                && !reauthenticated
+                && is_bad_credentials(&stderr)
+            {
+                app.invalidate();
+                reauthenticated = true;
+                continue;
+            }
+
             if attempt < attempts && is_retryable(args, &stderr) {
                 std::thread::sleep(delay);
                 delay = std::cmp::min(delay * 2, RETRY_MAX_DELAY);
+                attempt += 1;
                 continue;
             }
 
             return Err(retried(classify(&display, &stderr), attempt));
         }
-
-        unreachable!("the loop returns on its last iteration")
     }
 
     /// Run `gh` and parse stdout as JSON.
@@ -235,6 +280,20 @@ impl Gh {
             message: e.to_string(),
         })
     }
+}
+
+/// Hand an installation token to a `gh` subprocess.
+///
+/// `GH_ENTERPRISE_TOKEN` as well as `GH_TOKEN`: `gh` reads the former instead
+/// of the latter for any host that is not github.com.
+pub(super) fn apply_token(cmd: &mut Command, token: &str) {
+    cmd.env("GH_TOKEN", token).env("GH_ENTERPRISE_TOKEN", token);
+}
+
+/// Whether GitHub refused the token itself, as opposed to what it asked for.
+fn is_bad_credentials(stderr: &str) -> bool {
+    let lower = stderr.to_lowercase();
+    lower.contains("bad credentials") || lower.contains("http 401")
 }
 
 /// Map a failure to *spawn* `gh` onto an error.

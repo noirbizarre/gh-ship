@@ -46,7 +46,9 @@ gh-ship orchestrates. Your workflows perform the work.
 - It does not replace GitHub Actions.
 - It does not replace Commitizen, git-cliff, cargo-release, semantic-release, or
   Changesets. Keep using them.
-- It never manages secrets — authentication is `gh`'s job.
+- It never stores secrets — authentication is `gh`'s job. The one opt-in
+  exception is [minting a GitHub App token](workflows.md#letting-gh-ship-mint-the-token)
+  from credentials you put in the environment.
 - It never knows how your project versions itself.
 - It never generates changelogs.
 

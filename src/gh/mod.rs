@@ -1,14 +1,21 @@
 //! Everything that talks to GitHub.
 //!
 //! gh-ship shells out to the GitHub CLI for **all** GitHub access. It
-//! implements no REST client and handles no tokens: `gh` already solves
+//! implements no REST client and stores no secrets: `gh` already solves
 //! authentication, enterprise hosts, SSO, and rate limiting, and
 //! reimplementing that would be a second product.
+//!
+//! The one exception is opt-in. Given a GitHub App's credentials in the
+//! environment, [`app`] mints and refreshes the installation token and hands
+//! it to `gh` per invocation, which lifts the one-hour ceiling of a token
+//! minted up front by a workflow step. The calls it makes still go through
+//! `gh api`.
 //!
 //! The one thing gh-ship reads directly from disk is workflow files,
 //! because their trigger configuration is not exposed by any API in a
 //! usable form.
 
+pub mod app;
 pub mod cli;
 pub mod repo;
 pub mod run;

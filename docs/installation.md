@@ -44,7 +44,8 @@ already have `gh` and a token, so installing is one line:
 ## Requirements
 
 - The [GitHub CLI](https://cli.github.com).
-- Authentication: `gh auth login` locally, or `GH_TOKEN` in CI. See
+- Authentication: `gh auth login` locally, or `GH_TOKEN` in CI (or a GitHub App's
+  credentials, which gh-ship turns into a self-refreshing token). See
   [what the token must be allowed to do](workflows.md#what-the-token-must-be-allowed-to-do).
 - Release workflows that declare `on: workflow_dispatch` — see
   [Workflows](workflows.md).
