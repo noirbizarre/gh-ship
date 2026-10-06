@@ -39,7 +39,7 @@ jobs:
           SHIP_APP_CLIENT_ID: ${{ vars.APP_CLIENT_ID }}
           SHIP_APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 
-      # A real dispatch-and-wait with a 90 s token lifetime: the token has to
+      # A real dispatch-and-wait with a 40 s token lifetime: the token has to
       # be replaced several times while prepare-release runs.
       - name: App credentials - token refresh during a real wait
         run: |
@@ -57,4 +57,4 @@ jobs:
         env:
           SHIP_APP_CLIENT_ID: ${{ vars.APP_CLIENT_ID }}
           SHIP_APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
-          SHIP_APP_TOKEN_TTL: 90
+          SHIP_APP_TOKEN_TTL: 40
