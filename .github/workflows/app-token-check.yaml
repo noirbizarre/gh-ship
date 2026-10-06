@@ -1,0 +1,60 @@
+name: 🧪 App token check (temporary)
+
+# Throwaway: proves built-in App authentication against the real GitHub API.
+# Never merged. Delete together with its branch.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: release
+      deployment: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build
+
+      # No credentials of any kind: this must fail. It proves the next step
+      # does not borrow an ambient token.
+      - name: Control - unauthenticated status must fail
+        run: |
+          if ./target/debug/gh-ship --repo "$GITHUB_REPOSITORY" status; then
+            echo "::error::status succeeded without credentials"
+            exit 1
+          fi
+
+      - name: App credentials - status
+        run: ./target/debug/gh-ship --repo "$GITHUB_REPOSITORY" status
+        env:
+          SHIP_APP_CLIENT_ID: ${{ vars.APP_CLIENT_ID }}
+          SHIP_APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+
+      # A real dispatch-and-wait with a 90 s token lifetime: the token has to
+      # be replaced several times while prepare-release runs.
+      - name: App credentials - token refresh during a real wait
+        run: |
+          set +e
+          ./target/debug/gh-ship --base main preview > out.log 2> err.log
+          code=$?
+          set -e
+          cat err.log
+          echo "--- stdout ---"
+          cat out.log
+          test "$code" -eq 0
+          mints=$(grep -c '::add-mask::' err.log || true)
+          echo "tokens minted: $mints"
+          test "$mints" -ge 3
+        env:
+          SHIP_APP_CLIENT_ID: ${{ vars.APP_CLIENT_ID }}
+          SHIP_APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+          SHIP_APP_TOKEN_TTL: 90
