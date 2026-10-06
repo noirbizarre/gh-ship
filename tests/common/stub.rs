@@ -249,6 +249,25 @@ impl GhStub {
         self
     }
 
+    /// Make GitHub reject the App's JWT, as it does for a wrong key or ID.
+    pub fn app_rejects_jwt(mut self) -> Self {
+        self.env.insert("STUB_APP_REJECTS_JWT".into(), "1".into());
+        self
+    }
+
+    /// Make the installation lookup 404, as for an App not installed here.
+    pub fn app_not_installed(mut self) -> Self {
+        self.env.insert("STUB_APP_NOT_INSTALLED".into(), "1".into());
+        self
+    }
+
+    /// Make GitHub answer 401 to this installation token, as it does for a
+    /// revoked one. The first token minted is `ghs_stub_1`.
+    pub fn rejects_token(mut self, token: &str) -> Self {
+        self.env.insert("STUB_BAD_TOKEN".into(), token.into());
+        self
+    }
+
     /// Write the stub into `dir/bin/gh` and return that bin directory,
     /// plus the environment the stub needs.
     pub fn install(self, dir: &Path) -> Installed {
@@ -293,6 +312,29 @@ impl Installed {
             .collect()
     }
 
+    /// The `GH_TOKEN` each invocation ran with, in step with [`Self::calls`].
+    /// Empty where none was set.
+    pub fn tokens(&self) -> Vec<String> {
+        let mut path = self.log.clone().into_os_string();
+        path.push(".tokens");
+        std::fs::read_to_string(path)
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// The tokens used by calls that are not the App's own JWT calls, i.e.
+    /// by the `gh` invocations gh-ship makes for itself.
+    pub fn installation_tokens(&self) -> Vec<String> {
+        self.calls()
+            .into_iter()
+            .zip(self.tokens())
+            .filter(|(call, _)| !call.contains("Authorization: Bearer"))
+            .map(|(_, token)| token)
+            .collect()
+    }
+
     /// Whether any invocation contains all the given fragments.
     pub fn called_with(&self, fragments: &[&str]) -> bool {
         self.calls()
@@ -320,6 +362,48 @@ set -eu
 if [ -n "${STUB_LOG:-}" ]; then
   printf '%s' "$*" | tr '\n' ' ' >> "$STUB_LOG"
   printf '\n' >> "$STUB_LOG"
+  # The token each invocation ran with, one per line and in step with the
+  # log above, so a test can tell which token authenticated which call.
+  printf '%s\n' "${GH_TOKEN:-}" >> "$STUB_LOG.tokens"
+fi
+
+# A GitHub App asking to be authenticated *as the App*: the JWT travels in an
+# explicit `Authorization: Bearer` header. These are the two calls gh-ship
+# makes to mint an installation token.
+case " $* " in
+  *" Authorization: Bearer "*)
+    if [ "${STUB_APP_REJECTS_JWT:-0}" = "1" ]; then
+      echo "gh: Bad credentials (HTTP 401)" >&2
+      exit 1
+    fi
+    case "$*" in
+      *"access_tokens"*)
+        MINT_FILE="${STUB_LOG:-/tmp/stub}.mint"
+        N="$(cat "$MINT_FILE" 2>/dev/null || echo 0)"
+        N=$((N + 1))
+        printf '%s\n' "$N" > "$MINT_FILE"
+        printf '{"token":"ghs_stub_%s","expires_at":"2099-01-01T00:00:00Z"}\n' "$N"
+        ;;
+      *"/installation"*)
+        if [ "${STUB_APP_NOT_INSTALLED:-0}" = "1" ]; then
+          echo "gh: Not Found (HTTP 404)" >&2
+          exit 1
+        fi
+        printf '{"id":4242}\n'
+        ;;
+      *)
+        echo "gh stub: unexpected App call: $*" >&2
+        exit 127
+        ;;
+    esac
+    exit 0
+    ;;
+esac
+
+# An installation token GitHub has stopped honouring.
+if [ -n "${STUB_BAD_TOKEN:-}" ] && [ "${GH_TOKEN:-}" = "$STUB_BAD_TOKEN" ]; then
+  echo "gh: Bad credentials (HTTP 401)" >&2
+  exit 1
 fi
 
 if [ "${STUB_UNAUTHENTICATED:-0}" = "1" ]; then

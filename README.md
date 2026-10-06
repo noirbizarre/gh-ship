@@ -64,7 +64,9 @@ gh-ship orchestrates. Your workflows do the work.
 - **Not a replacement for GitHub Actions.** It dispatches your workflows.
 - **Not a replacement for** Commitizen, git-cliff, cargo-release, semantic-release,
   Changesets, or anything else. Keep using them.
-- **It never manages secrets.** Authentication is `gh`'s job.
+- **It never stores secrets.** Authentication is `gh`'s job. The one opt-in
+  exception: given a GitHub App's credentials in the environment, it mints and
+  refreshes the installation token itself, so a long wait outlives no token.
 - **It never knows how you version.** `1.4.0`, `2026.08.1`, `banana` — all fine.
 - **It never generates changelogs.**
 
@@ -197,6 +199,11 @@ want and generates the matching workflow: an App mints a scoped, self-revoking
 token in the job with
 [`actions/create-github-app-token`](https://noirbizarre.github.io/gh-ship/workflows/#using-a-github-app),
 a PAT lives in the `SHIP_TOKEN` secret.
+
+An installation token lasts an hour, which caps how long a job can wait on a long
+publish build. To lift that, give gh-ship the App's credentials
+(`SHIP_APP_CLIENT_ID` and `SHIP_APP_PRIVATE_KEY`) and it
+[mints and refreshes the token itself](https://noirbizarre.github.io/gh-ship/workflows/#letting-gh-ship-mint-the-token).
 
 ## Design notes
 

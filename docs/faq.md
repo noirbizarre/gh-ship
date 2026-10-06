@@ -242,7 +242,9 @@ re-created, and neither is the release — so the whole command is safe to re-ru
 ## My publish build takes more than an hour. What do I do?
 
 An App installation token lives one hour, and `gh ship release` normally holds it
-for the whole build. Use `gh ship release --no-wait` to tag, draft and dispatch
+for the whole build. The simplest fix is to give gh-ship the App's credentials, so
+it [mints and refreshes its own token](workflows.md#letting-gh-ship-mint-the-token)
+and the hour stops mattering. Otherwise use `gh ship release --no-wait` to tag, draft and dispatch
 the publish workflow, then run a plain `gh ship release` from a `workflow_run`
 job when the build succeeds. See
 [Long publish builds](workflows.md#long-publish-builds).

@@ -354,7 +354,9 @@ Options, best first:
 
 1. **[A GitHub App token](#using-a-github-app).** Scoped, rotatable, attributable, and
    nothing long-lived is stored. Minted per job with
-   [`actions/create-github-app-token`](https://github.com/actions/create-github-app-token).
+   [`actions/create-github-app-token`](https://github.com/actions/create-github-app-token),
+   or by [gh-ship itself](#letting-gh-ship-mint-the-token) when a step has to
+   outlive the token's one hour.
 2. **A fine-grained PAT**, stored as the `SHIP_TOKEN` secret.
 3. **Nothing.** Accept that the Release PR shows no CI results.
 
@@ -368,7 +370,8 @@ With a PAT, the generated template prefers `SHIP_TOKEN` when present:
     token: ${{ secrets.SHIP_TOKEN || secrets.GITHUB_TOKEN }}
 ```
 
-gh-ship never sees, stores, or manages this secret. It is between you and GitHub.
+With a PAT, gh-ship never sees, stores, or manages the secret: `gh` reads
+`GH_TOKEN` and that is the end of it. It is between you and GitHub.
 
 ### Using a GitHub App
 
@@ -434,6 +437,10 @@ jobs:
 
 !!! danger "Installation tokens expire after one hour"
 
+    This applies to a token minted by `actions/create-github-app-token` and
+    handed to gh-ship as `GH_TOKEN`. To lift the ceiling instead, let
+    [gh-ship mint and refresh its own token](#letting-gh-ship-mint-the-token).
+
     `gh ship prepare` and `gh ship release` both block on a dispatched workflow
     run, for up to `SHIP_RUN_TIMEOUT` — 60 minutes by default. A job that runs
     that long outlives its own token, and fails at whichever call happens to
@@ -475,7 +482,92 @@ jobs:
     takes the App's numeric ID rather than its Client ID. `client-id` is what
     the action recommends, and what these examples use.
 
+#### Letting gh-ship mint the token
+
+Give gh-ship the App's credentials instead of a token, and it mints the
+installation token itself and replaces it a few minutes before it expires. A
+`gh ship release` that waits two hours on the publish build then keeps working
+the whole time: there is no one-hour ceiling.
+
+```yaml
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # No longer bound by the token: allow the publish build, plus a margin.
+    timeout-minutes: 150
+    environment:
+      name: release
+      deployment: false
+    steps:
+      - uses: actions/checkout@v7
+
+      - run: gh extension install noirbizarre/gh-ship
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - run: gh ship release
+        env:
+          SHIP_APP_CLIENT_ID: ${{ vars.APP_CLIENT_ID }}
+          SHIP_APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+          # Also raise the wait: it defaults to 60 minutes.
+          SHIP_RUN_TIMEOUT: 7200
+```
+
+The variables:
+
+| Variable | Meaning |
+|---|---|
+| `SHIP_APP_CLIENT_ID` | The App's Client ID. Its numeric App ID works too. |
+| `SHIP_APP_PRIVATE_KEY` | The full contents of the App's `.pem` file. A key flattened onto one line with literal `\n` is accepted. |
+| `SHIP_APP_INSTALLATION_ID` | Optional. Skips the installation lookup. |
+
+Set both of the first two, or neither: one alone is an error rather than a quiet
+fallback to another credential. With neither set nothing changes, and `gh`
+authenticates as it always did.
+
+How it works:
+
+- gh-ship signs a short-lived JWT with the key, finds the installation on the
+  repository (`GET /repos/{owner}/{repo}/installation`), and exchanges the JWT for
+  an installation token (`POST /app/installations/{id}/access_tokens`). Both calls
+  go through `gh api`, so enterprise hosts and `GH_HOST` behave as for any other
+  call.
+- The token is scoped to the one repository gh-ship operates on, and carries the
+  permissions granted to the installation, as the action's default does.
+- That token is set as `GH_TOKEN` on every `gh` it runs, **overriding** any
+  `GH_TOKEN` already in the environment, and replaced five minutes before it
+  expires. If GitHub rejects a token anyway, a new one is minted and the call
+  repeated once.
+- Inside Actions, a minted token is registered with the runner for log masking.
+- The repository is taken from `--repo`, `SHIP_REPO` or, in Actions,
+  `GITHUB_REPOSITORY`. Outside those, set `SHIP_APP_INSTALLATION_ID`.
+
+Things to know:
+
+- **The private key is in the step's environment.** With the action, the key is
+  read by the action alone and the token it mints is revoked when the job ends.
+  Here the key is visible to the step that runs `gh ship`, and to the processes
+  that step starts. Set the variables on that step, not at the job level.
+- **gh-ship never stores the key.** It is read from the environment, held in
+  memory for the length of the command, and not logged.
+- **The JWT is passed to `gh api` as an argument,** so it is visible in the
+  process list on the runner for the moment each call takes. It lasts nine
+  minutes at most, and it can only call the App-level API. That includes
+  minting tokens, so treat it as sensitive for those minutes.
+- **The action is still useful for anything that is not gh-ship.** A checkout
+  whose pushes must trigger CI, for instance. The default `github.token` is
+  enough for installing the extension and for a read-only checkout.
+- **gh-ship has to be new enough.** A workflow that installs the extension from
+  a release older than this feature ignores these variables, and fails with
+  `gh`'s own authentication error.
+
 #### Long publish builds
+
+!!! tip "With gh-ship minting its own token"
+
+    This section is for a token handed to gh-ship from outside. When
+    [gh-ship mints its own](#letting-gh-ship-mint-the-token), a single job can
+    wait for any build, and splitting it is optional.
 
 When the publish workflow can take close to an hour or more, do not hold a
 token for the whole build. Split `release` in two:
