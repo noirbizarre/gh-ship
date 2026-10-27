@@ -121,12 +121,20 @@ fn validate_setup(cli: &Cli, theme: Theme) -> Result<()> {
         &available,
         config.prepare_workflow(),
         Role::Prepare,
+        config.release().publish_input,
         &mut issues,
         theme,
     );
 
     if let Some(publish) = config.publish_workflow() {
-        check_workflow(&available, publish, Role::Publish, &mut issues, theme);
+        check_workflow(
+            &available,
+            publish,
+            Role::Publish,
+            config.release().publish_input,
+            &mut issues,
+            theme,
+        );
     }
 
     if issues.is_empty() {
@@ -186,6 +194,7 @@ fn check_workflow(
     available: &[Workflow],
     name: &str,
     role: Role,
+    publish_input: gh_ship::config::PublisherInput,
     issues: &mut Vec<WorkflowIssue>,
     theme: Theme,
 ) {
@@ -227,7 +236,10 @@ fn check_workflow(
         );
     }
 
-    let violations = found.contract_violations_as(role);
+    let violations = match role {
+        Role::Prepare => found.contract_violations_as(role),
+        Role::Publish => found.publisher_violations(publish_input),
+    };
     if violations.is_empty() {
         eprintln!("{}", logger::detail(theme, role.key(), &found.describe()));
         return;

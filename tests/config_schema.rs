@@ -94,6 +94,32 @@ fn the_minimal_config_validates() {
 }
 
 #[test]
+fn publisher_input_modes_match_the_rust_model() {
+    use gh_ship::config::{Config, PublisherInput};
+    for (setting, expected) in [
+        ("", Some(PublisherInput::Tag)),
+        (
+            "release:\n  publish_input: tag\n",
+            Some(PublisherInput::Tag),
+        ),
+        (
+            "release:\n  publish_input: ref\n",
+            Some(PublisherInput::Ref),
+        ),
+        ("release:\n  publish_input: auto\n", None),
+        ("release:\n  publish_input: true\n", None),
+    ] {
+        let yaml = format!("version: 1\nworkflows:\n  prepare: prepare-release\n{setting}");
+        assert_eq!(check(&yaml).is_ok(), expected.is_some(), "{yaml}");
+        let parsed = Config::parse("ship.yml", &yaml);
+        assert_eq!(parsed.is_ok(), expected.is_some(), "{yaml}");
+        if let Some(expected) = expected {
+            assert_eq!(parsed.unwrap().release().publish_input, expected);
+        }
+    }
+}
+
+#[test]
 fn every_documented_example_validates() {
     let schema = schema_source();
     let examples = schema["examples"].as_array().expect("schema has examples");

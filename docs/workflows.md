@@ -177,8 +177,10 @@ Optional. Dispatched by `gh ship release` **after** the release exists as a draf
 and **before** it becomes visible, so it can attach assets to a release nobody has
 been notified about yet.
 
-It receives the `tag` as an input, and should check that out rather than a branch —
-you want to build exactly what is being released.
+By default it receives the `tag` as an input, and should check that out rather than
+a branch — you want to build exactly what is being released. This tag contract
+remains fully supported; generated workflows use it too. A ref-based publisher
+can be selected explicitly as described below.
 
 Rule 1 applies here exactly as it does to the prepare workflow: it must be
 dispatchable. Rule 2 (`dry_run`) is prepare-only, since `gh ship preview` never
@@ -209,6 +211,66 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ inputs.tag }}" dist/* --clobber
 ```
+
+### Opting into ref inputs
+
+For a publisher shared with development builds, select the `ref` contract in
+`.github/ship.yml`:
+
+```yaml
+release:
+  publish_input: ref
+```
+
+For release `v1.4.0`, gh-ship dispatches with `--ref v1.4.0 -f ref=refs/tags/v1.4.0`.
+The execution ref stays the release tag; the named input is a fully qualified tag
+ref. The default (or explicit `publish_input: tag`) instead sends
+`--ref v1.4.0 -f tag=v1.4.0`, preserving the original tag value.
+
+Configuration controls the input: gh-ship does not infer it from the workflow and
+never sends both. If you declare both inputs, make the unselected one optional
+or give it a default. `gh ship validate` checks that the selected input exists
+under `workflow_dispatch.inputs`; declaring it only under `workflow_call` does
+not satisfy the dispatch contract.
+
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      ref: { required: true, type: string }
+  workflow_call:
+    inputs:
+      ref: { required: true, type: string }
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - run: ./build.sh
+
+      # Checkout takes the qualified ref, but release uploads and asset names
+      # take the bare tag. Development builds do not upload to a stable release.
+      - if: startsWith(inputs.ref, 'refs/tags/')
+        env:
+          BUILD_REF: ${{ inputs.ref }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${BUILD_REF#refs/tags/}"
+          tar -czf "package-${tag}.tar.gz" -C dist .
+          gh release upload "$tag" "package-${tag}.tar.gz" --clobber
+```
+
+Reusable callers can supply branch refs or commit SHAs for development builds
+and choose their own development artifact policy. `gh ship release` always
+publishes version tags and supplies `refs/tags/<tag>` in this mode. The prepare
+artifact's `tag` field remains a bare tag in either mode.
 
 ## The `release` environment
 

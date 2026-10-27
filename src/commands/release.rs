@@ -430,7 +430,19 @@ fn run_publish(
         return Ok(PublishOutcome::Done);
     }
 
-    let inputs = [("tag", tag.to_string())];
+    let input = ctx.config.release().publish_input;
+    let available = gh_ship::gh::workflow::discover(&ctx.root);
+    if let Some(found) = gh_ship::gh::workflow::find(&available, workflow_name)
+        && let Some(violation) = found.publisher_violations(input).first()
+    {
+        return Err(miette::miette!(
+            help = violation.help(),
+            "publisher `{}` {}",
+            found.slug(),
+            violation.message()
+        ));
+    }
+    let inputs = [(input.name(), input.value(tag))];
 
     if no_wait {
         eprintln!(

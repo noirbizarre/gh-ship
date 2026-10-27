@@ -59,6 +59,7 @@ pull_request:
 
 release:
   draft: true
+  publish_input: tag
 ```
 
 ## Reference
@@ -321,6 +322,13 @@ Parts that are absent or empty are omitted, with no stray blank lines.
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `draft` | boolean | `true` | Create the release as a draft, then publish it after the publish workflow succeeds. |
+| `publish_input` | `tag` or `ref` | `tag` | Publisher input contract: send `tag=<tag>` or `ref=refs/tags/<tag>`. Workflow execution stays on the release tag in both modes. |
+
+Use `release.publish_input: ref` to opt into a ref-based publisher. The selected
+input must be declared under `workflow_dispatch.inputs`; gh-ship sends only that
+input, even if the workflow declares both. It never infers the mode from workflow
+inputs. Existing tag-based publishers need no changes. See the
+[ref-based publisher example](workflows.md#opting-into-ref-inputs).
 
 !!! tip "Leave `draft` alone unless you have a reason"
 

@@ -114,6 +114,12 @@
       "description": "GitHub Release behaviour.",
       "type": "object",
       "properties": {
+        "publish_input": {
+          "description": "Publisher dispatch input contract: tag sends the bare release tag; ref sends refs/tags/<tag>. Workflow execution stays on the release tag.",
+          "type": "string",
+          "enum": ["tag", "ref"],
+          "default": "tag"
+        },
         "draft": {
           "description": "Create the release as a draft, then publish it once the publish workflow succeeds. This is the default because it is the only ordering that lets the publish workflow attach assets before anyone watching the repository is notified.",
           "type": "boolean",
