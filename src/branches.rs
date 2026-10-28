@@ -54,8 +54,8 @@ pub enum BranchError {
         code(ship::branches::colliding_release_branches),
         help(
             "two release lines sharing a branch share a Release PR, so each prepare would \
-             overwrite the other. Give them release branches that differ — `{{ match }}` in the \
-             template is usually enough"
+             overwrite the other. Use distinct release branches, for example by including the \
+             full base branch in the template"
         )
     )]
     CollidingReleaseBranches {
@@ -153,7 +153,7 @@ pub fn resolve(config: &Config, base: &str) -> Result<Line, BranchError> {
         });
     };
 
-    Ok(Line {
+    let line = Line {
         base: base.to_string(),
         release: render_release_branch(
             config.release_branch_template_for(Some(index)),
@@ -161,7 +161,9 @@ pub fn resolve(config: &Config, base: &str) -> Result<Line, BranchError> {
             capture,
         )?,
         entry: Some(index),
-    })
+    };
+    check_line(config, &line)?;
+    Ok(line)
 }
 
 /// The single release line of a config without `branches`.
@@ -169,11 +171,47 @@ pub fn resolve(config: &Config, base: &str) -> Result<Line, BranchError> {
 /// `match` is the branch itself here, so one template works whether or
 /// not release lines are configured.
 pub fn single(config: &Config, base: &str) -> Result<Line, BranchError> {
-    Ok(Line {
+    let line = Line {
         base: base.to_string(),
         release: render_release_branch(config.release_branch_template(), base, base)?,
         entry: None,
-    })
+    };
+    check_line(config, &line)?;
+    Ok(line)
+}
+
+fn check_line(config: &Config, line: &Line) -> Result<(), BranchError> {
+    if line.release == line.base {
+        return Err(BranchError::ReleaseBranchIsBaseBranch {
+            release: line.release.clone(),
+            help: "give the release line a branch distinct from its base".into(),
+            src: config.source.named(),
+            span: config
+                .source
+                .locate(config.release_branch_template_for(line.entry)),
+        });
+    }
+    for (i, rule) in config.branches().iter().enumerate() {
+        if rule.branch == line.release || glob_match(&rule.branch, &line.release).is_some() {
+            return Err(release_branch_is_base(
+                config,
+                rule,
+                &line.release,
+                &rule.branch,
+            ));
+        }
+        if Some(i) != line.entry && !rule.is_pattern() {
+            let other = render_release_branch(
+                config.release_branch_template_for(Some(i)),
+                &rule.branch,
+                &rule.branch,
+            )?;
+            if other == line.release {
+                return Err(collision(config, &line.base, &rule.branch, &other));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Config checks that need the template engine.
@@ -211,6 +249,23 @@ pub fn check(config: &Config) -> Result<(), BranchError> {
             if a == b {
                 return Err(constant_glob(config, rule, template));
             }
+            for capture in [PROBE_A, PROBE_B].into_iter().chain(
+                config
+                    .branches()
+                    .iter()
+                    .filter(|r| !r.is_pattern())
+                    .map(|r| r.branch.as_str()),
+            ) {
+                let base = probe_branch(rule, capture);
+                check_line(
+                    config,
+                    &Line {
+                        release: render_release_branch(template, &base, capture)?,
+                        base,
+                        entry: Some(i),
+                    },
+                )?;
+            }
             continue;
         }
 
@@ -218,7 +273,10 @@ pub fn check(config: &Config) -> Result<(), BranchError> {
 
         // A release branch that is also a base branch would have gh-ship
         // open a pull request from a branch into itself.
-        if let Some(base) = selectors.iter().find(|s| **s == name) {
+        if let Some(base) = selectors
+            .iter()
+            .find(|s| **s == name || glob_match(s, &name).is_some())
+        {
             return Err(release_branch_is_base(config, rule, &name, base));
         }
 
@@ -436,17 +494,17 @@ mod tests {
 
     #[test]
     fn patterns_are_tried_in_declaration_order() {
-        let c = config("[\"release/*\", \"*\"]", "next/{{ match }}");
+        let c = config("[\"release/1*\", \"release/*\"]", "next/{{ branch }}");
         assert_eq!(resolve(&c, "release/1.x").unwrap().entry, Some(0));
-        assert_eq!(resolve(&c, "anything").unwrap().entry, Some(1));
+        assert_eq!(resolve(&c, "release/2.x").unwrap().entry, Some(1));
     }
 
     #[test]
     fn both_template_variables_render() {
-        let c = config("[\"release/*\"]", "{{ branch }}+{{ match }}");
+        let c = config("[\"release/*\"]", "next/{{ branch }}+{{ match }}");
         assert_eq!(
             resolve(&c, "release/1.x").unwrap().release,
-            "release/1.x+1.x"
+            "next/release/1.x+1.x"
         );
     }
 
@@ -605,7 +663,7 @@ mod tests {
 
     #[test]
     fn a_varying_release_branch_passes() {
-        check(&config("[main, \"release/*\"]", "next/{{ match }}")).unwrap();
+        assert!(check(&config("[main, \"release/*\"]", "next/{{ match }}")).is_err());
         check(&config("[main, \"release/*\"]", "next/{{ branch }}")).unwrap();
     }
 

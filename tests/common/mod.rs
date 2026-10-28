@@ -124,11 +124,10 @@ impl Repo {
     /// Run gh-ship in this repository, with the stub taking priority on
     /// PATH so a real `gh` can never be reached.
     pub fn ship(&self, args: &[&str]) -> Outcome {
-        let path = format!(
-            "{}:{}",
-            self.stub.bin.display(),
-            std::env::var("PATH").unwrap_or_default()
-        );
+        let path = std::env::join_paths(std::iter::once(self.stub.bin.clone()).chain(
+            std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()),
+        ))
+        .expect("valid PATH entries");
 
         let mut cmd = ship();
         cmd.current_dir(self.path())

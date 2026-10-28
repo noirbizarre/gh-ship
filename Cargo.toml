@@ -17,10 +17,18 @@ readme = "README.md"
 # Setting this makes `cargo publish` refuse outright, rather than leaving the
 # decision to depend on a registry token happening to be absent.
 publish = false
+default-run = "gh-ship"
 
 [[bin]]
 name = "gh-ship"
 path = "src/main.rs"
+
+# Native integration-test executable; release packaging stages only gh-ship.
+[[bin]]
+name = "gh-ship-test-gh"
+path = "tests/support/gh_stub.rs"
+test = false
+doc = false
 
 [lib]
 name = "gh_ship"

@@ -7,7 +7,8 @@
 //! module will want to undo.
 //!
 //! **The release notes are generated before the merge and must survive it.** The
-//! prepare workflow runs the changelog tool against the *release branch*; the
+//! prepare workflow runs the changelog tool on the *dispatched staging branch*,
+//! which gh-ship promotes to the release branch; the
 //! publish workflow checks out the *tag*, which is post-merge history. Were the
 //! publish workflow to regenerate them, what shipped could legitimately differ
 //! from what was reviewed in the Release PR. The artifact carries them so that
@@ -220,6 +221,7 @@ pub(super) fn run_with_pr(ctx: &Context, args: &ReleaseArgs, pr: PullRequest) ->
 
     // --- 6. Publish workflow, then undraft -------------------------------
     let draft = ctx.config.release().draft;
+    let make_latest = artifact.release.as_ref().and_then(|r| r.make_latest);
 
     match ctx.config.publish_workflow() {
         Some(publish) if draft => {
@@ -228,7 +230,7 @@ pub(super) fn run_with_pr(ctx: &Context, args: &ReleaseArgs, pr: PullRequest) ->
                 return Ok(());
             }
             eprintln!("{}", logger::action(theme, "publishing", tag));
-            repo::publish_release(&ctx.gh, tag)?;
+            repo::publish_release(&ctx.gh, tag, make_latest)?;
             eprintln!("{}", logger::ok(theme, "release published"));
         }
         Some(publish) => {
@@ -251,7 +253,7 @@ pub(super) fn run_with_pr(ctx: &Context, args: &ReleaseArgs, pr: PullRequest) ->
             // A draft with no publish workflow would sit invisible
             // forever, so undraft it immediately.
             eprintln!("{}", logger::action(theme, "publishing", tag));
-            repo::publish_release(&ctx.gh, tag)?;
+            repo::publish_release(&ctx.gh, tag, make_latest)?;
             eprintln!("{}", logger::ok(theme, "release published"));
         }
         None => {}
@@ -295,7 +297,7 @@ fn report_pending(theme: Theme, tag: &str, draft: bool) {
 
 /// Read the artifact back out of the Release PR body.
 fn recover_artifact(pr: &PullRequest) -> Result<Artifact> {
-    render::extract_artifact(&pr.body)
+    render::extract_artifact(&pr.body)?
         .ok_or_else(|| ReleaseError::NoArtifact { number: pr.number }.into())
 }
 

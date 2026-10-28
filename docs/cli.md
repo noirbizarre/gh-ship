@@ -10,7 +10,7 @@ gh ship <COMMAND>
 |---|---|---|
 | `-c`, `--config <PATH>` | `SHIP_CONFIG` | Config path. Default `.github/ship.yml`. |
 | `-R`, `--repo <OWNER/REPO>` | `SHIP_REPO` | Target repository. Defaults to the current one. |
-| `-v`, `--verbose` | | More detail. Repeat for more. |
+| `-v`, `--verbose` | | Show error cause chains. |
 
 ## Choosing the release line
 
@@ -64,9 +64,13 @@ longer than about 50 minutes cannot be waited on with a single token. Use
 [`gh ship release --no-wait`](workflows.md#long-publish-builds) instead, or
 [retry with a fresh token](workflows.md#retrying-with-a-fresh-token).
 
-When a command runs inside a workflow of your own, set `timeout-minutes` on the
-job *below* these values, so a stuck run fails the job visibly rather than
-sitting until GitHub's own six-hour limit.
+When a command runs inside a workflow of your own, set an explicit job
+`timeout-minutes`. For graceful timeout handling and retries, each gh-ship wait
+must expire *before* the remaining job budget, with headroom for queueing,
+token refresh, and subsequent attempts. The retry examples in
+[Workflows](workflows.md#retrying-with-a-fresh-token) budget for this.
+A shorter job timeout is a hard cancellation instead: GitHub may terminate
+the command before it returns exit `75`, so its retry logic cannot run.
 
 The `SHIP_RUN_TIMEOUT` default of 3600 s is exactly the lifetime of a GitHub App
 installation token. Inside GitHub Actions, gh-ship warns when the timeout is at
@@ -97,8 +101,10 @@ retains its number. A newer open Release PR cannot replace the triggering PR.
 Labels are not used for detection, and this command never merges a PR.
 
 `--no-wait` is passed to the selected phase: prepare leaves its staging workflow
-running; release leaves publication pending. Use the explicit lifecycle command
-to resume it. Manual dispatch and `workflow_run` events are not automatically
+running; release leaves publication pending. Re-running `release` can adopt its
+publish run. Re-running `prepare` starts a new preparation and sweeps the old
+staging ref, so allow enough time for one complete preparation.
+Manual dispatch and `workflow_run` events are not automatically
 routed; call `prepare` or `release` explicitly for those workflows.
 
 Outside Actions, or when a supported event's payload is missing or malformed,
@@ -176,13 +182,13 @@ machine-readable payloads — `--json`, and the rendered PR body from
 |---|---|
 | `0` | Success. **Including `changed: false`.** |
 | `1` | Failure. |
-| `75` | Timed out waiting for a run (`SHIP_RUN_TIMEOUT`) that is **still in flight**. Re-run the command to resume it. |
+| `75` | Timed out waiting for a run (`SHIP_RUN_TIMEOUT`) that is **still in flight**. `release` can adopt it on retry; `prepare` and `preview` restart work. |
 
 Code `75` is `EX_TEMPFAIL` from `sysexits.h`. It is distinct from `1` so a
 workflow can retry on this case alone — for instance with a fresh token —
 without treating a real failure, such as a failed or cancelled run, as
 retryable. A run that never *appeared* (`SHIP_APPEAR_TIMEOUT`) is not
-resumable and still exits `1`.
+reported as a completion timeout and still exits `1`.
 
 !!! note "`nothing to release` is not a failure"
 
@@ -272,8 +278,7 @@ $ gh ship prepare [--no-wait]
 3. Cuts a throwaway staging branch, `ship/prepare-<token>`, from the base branch
    (`workflow_dispatch` needs the ref to exist). With
    [release lines](configuration.md#release-lines) configured the name carries
-   the line — `ship/prepare-<base>-<token>`, so `release/1.x` stages on
-   `ship/prepare-release-1.x-<token>`.
+   a SHA-256 identity of the full base name — `ship/prepare-<hash>-<token>`.
 4. Dispatches the prepare workflow **on that staging branch** and waits.
 5. Downloads and validates the artifact.
 6. Stops with exit 0 if `changed: false`.
@@ -289,11 +294,12 @@ place.
     Step 2 deletes staging branches, including one a concurrent run is using,
     so two prepares on the same line must not overlap.
 
-    Without `branches`, the sweep covers every `ship/prepare-*` branch:
+    Without `branches`, the sweep covers `ship/prepare-<token>` branches:
     serialise everything with `concurrency: group: ship`, as the sample
     workflow in [Workflows](workflows.md) does.
 
-    With `branches` configured the sweep is scoped to the line's own prefix, so
+    With `branches` configured the sweep uses a hash of the full base name and
+    checks the invocation-token format, so
     different lines never collide and may prepare concurrently. Key the group
     by branch instead — `group: ship-${{ github.ref }}`.
 
@@ -448,8 +454,9 @@ $ gh ship sign
 
 Two behaviours worth knowing:
 
-- A commit that is **already signed** is left alone and the command succeeds.
-  Re-creating it would replace a signature its author chose with one they did not.
+- A commit whose signature is **already verified by GitHub** is left alone and
+  the command succeeds. The check uses GitHub's verification status, not merely
+  the presence of a signature; an unverified signature may be replaced.
 - When GitHub returns the re-created commit **unsigned**, the command fails and
   the branch is **not moved**. That happens when the token is not a bot — a PAT
   or a user login cannot produce a signature, whatever its permissions — and

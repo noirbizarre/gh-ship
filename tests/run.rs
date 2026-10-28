@@ -51,7 +51,7 @@ fn pushes_prepare_only_active_release_lines_using_payload_not_checkout() {
         (MINIMAL_CONFIG.to_string(), "main"),
         (
             format!(
-                "{MINIMAL_CONFIG}branches: [main, 'maint/*']\nrelease_branch: 'next/{{{{ match }}}}'\n"
+                "{MINIMAL_CONFIG}branches: [main, 'maint/*']\nrelease_branch: 'next/{{{{ branch }}}}'\n"
             ),
             "maint/1.x",
         ),

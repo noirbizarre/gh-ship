@@ -163,8 +163,8 @@ pub enum RunError {
 impl RunError {
     /// Whether gh-ship gave up *waiting* while the run was still in flight.
     ///
-    /// Unlike every other variant this is resumable: re-running the command
-    /// adopts the run. It is what the distinct exit code is derived from.
+    /// This determines the distinct timeout exit code. Publication can adopt
+    /// its run on retry; prepare and preview dispatch a new run instead.
     pub fn is_timeout(&self) -> bool {
         matches!(self, Self::Timeout { .. })
     }
@@ -359,6 +359,22 @@ pub fn list(gh: &Gh, workflow: &WorkflowRef, branch: &str) -> Result<Vec<Run>, G
         branch,
         "--limit",
         "50",
+        "--json",
+        RUN_FIELDS,
+    ])
+}
+
+/// Recent dispatches across refs, including runs whose staging ref was deleted.
+pub fn recent_dispatches(gh: &Gh, workflow: &WorkflowRef) -> Result<Vec<Run>, GhError> {
+    gh.json_scoped(&[
+        "run",
+        "list",
+        "--workflow",
+        &workflow.id,
+        "--event",
+        DISPATCH_EVENT,
+        "--limit",
+        "100",
         "--json",
         RUN_FIELDS,
     ])

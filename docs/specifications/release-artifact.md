@@ -108,7 +108,9 @@ precise error, instead of a confusing failure in gh-ship minutes later.
 
 - **`changed: false`** — `version` and `tag` are rejected: promising nothing to
   release while naming a release is a schema error. gh-ship prints
-  `nothing to release`, **exits 0**, and touches no branch, PR, tag or release.
+  `nothing to release`, **exits 0**, and leaves the release branch, PR, tag and
+  release unchanged. Prepare may still create and remove temporary staging
+  branches before it reads this result.
 - **`changed: true`** — `version` and `tag` are required. Promising a release
   without identifying it is a schema error.
 

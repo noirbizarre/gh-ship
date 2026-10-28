@@ -102,9 +102,9 @@ pub fn run(cli: &Cli, args: &InitArgs, theme: Theme) -> Result<()> {
     let (conforming, nonconforming): (Vec<_>, Vec<_>) = available
         .iter()
         .cloned()
-        .partition(|w| w.contract_violations().is_empty());
+        .partition(|w| role_violations(w, Role::Prepare).is_empty());
 
-    report_nonconforming(&nonconforming, theme);
+    report_nonconforming(&nonconforming, Role::Prepare, theme);
 
     // --- the token ---------------------------------------------------------
     //
@@ -140,11 +140,12 @@ pub fn run(cli: &Cli, args: &InitArgs, theme: Theme) -> Result<()> {
     // The prepare workflow is excluded: using one workflow for both roles
     // is never what someone means, and offering it invites a misclick
     // that only shows up at release time.
-    let publish_candidates: Vec<Workflow> = conforming
+    let (publish_candidates, rejected): (Vec<_>, Vec<_>) = available
         .iter()
         .filter(|w| w.slug() != prepare_name)
         .cloned()
-        .collect();
+        .partition(|w| role_violations(w, Role::Publish).is_empty());
+    report_nonconforming(&rejected, Role::Publish, theme);
 
     let publish = choose_optional_workflow(
         "Which workflow publishes the release? (builds and uploads assets)",
@@ -215,7 +216,7 @@ fn choose_token_strategy() -> Result<TokenStrategy> {
         .description("GitHub's default token cannot trigger your CI on the Release PR")
         .option(
             DemandOption::new("app")
-                .label("A GitHub App — a scoped token, minted per run, nothing stored"),
+                .label("A GitHub App — a scoped token minted per run, using a stored private key"),
         )
         .option(DemandOption::new("pat").label("A personal access token — the SHIP_TOKEN secret"))
         .option(
@@ -327,7 +328,32 @@ fn resolve(picked: String, conforming: &[Workflow]) -> Choice {
 ///
 /// Hiding them would be worse than useless: the user knows the workflow
 /// exists, and would conclude gh-ship is broken.
-fn report_nonconforming(workflows: &[Workflow], theme: Theme) {
+fn role_violations(workflow: &Workflow, role: Role) -> Vec<workflow::Violation> {
+    match role {
+        Role::Prepare => workflow.contract_violations_as(role),
+        Role::Publish => workflow.publisher_violations(gh_ship::config::PublisherInput::Tag),
+    }
+}
+
+#[test]
+fn candidates_must_satisfy_the_selected_role() {
+    let prepare = workflow::parse(
+        std::path::Path::new("prepare.yml"),
+        "on:\n  workflow_dispatch:\n    inputs:\n      dry_run: {type: boolean}\n",
+    )
+    .unwrap();
+    let publish = workflow::parse(
+        std::path::Path::new("publish.yml"),
+        "on:\n  workflow_dispatch:\n    inputs:\n      tag: {type: string}\n",
+    )
+    .unwrap();
+    assert!(role_violations(&prepare, Role::Prepare).is_empty());
+    assert!(!role_violations(&prepare, Role::Publish).is_empty());
+    assert!(role_violations(&publish, Role::Publish).is_empty());
+    assert!(!role_violations(&publish, Role::Prepare).is_empty());
+}
+
+fn report_nonconforming(workflows: &[Workflow], role: Role, theme: Theme) {
     let relevant: Vec<&Workflow> = workflows
         .iter()
         .filter(|w| w.dispatchable || w.callable)
@@ -342,14 +368,14 @@ fn report_nonconforming(workflows: &[Workflow], theme: Theme) {
         logger::warn(
             theme,
             &format!(
-                "{} workflow{} cannot be used by gh-ship yet:",
+                "{} workflow{} cannot be used for {role} yet:",
                 relevant.len(),
                 logger::plural(relevant.len())
             )
         )
     );
     for w in &relevant {
-        for v in w.contract_violations() {
+        for v in role_violations(w, role) {
             eprintln!("{}", logger::detail(theme, &w.slug(), v.message()));
         }
     }

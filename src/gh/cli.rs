@@ -99,6 +99,17 @@ pub enum GhError {
     )]
     Decode { args: String, message: String },
 
+    #[error("tag `{tag}` points at {actual}, expected release commit {expected}")]
+    #[diagnostic(
+        code(ship::gh::tag_conflict),
+        help("choose a new release tag; gh-ship will not move an existing tag")
+    )]
+    TagConflict {
+        tag: String,
+        actual: String,
+        expected: String,
+    },
+
     #[error("the repository was not resolved before calling `gh api`")]
     #[diagnostic(
         code(ship::gh::unscoped),
@@ -440,7 +451,7 @@ pub(super) fn is_not_found(error: &GhError) -> bool {
 /// The creations gh-ship performs are idempotent by intent — re-running a
 /// release must not fail because the branch it wanted already exists.
 pub(super) fn is_already_exists(error: &GhError) -> bool {
-    const SIGNS: &[&str] = &["already exists", "422", "reference already exists"];
+    const SIGNS: &[&str] = &["already exists", "reference already exists"];
     matches_stderr(error, SIGNS)
 }
 

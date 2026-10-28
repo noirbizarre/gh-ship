@@ -12,8 +12,9 @@
 #
 # Rust itself is intentionally not managed here: CI needs per-job components
 # (rustfmt, clippy, llvm-tools-preview) and cross-compilation targets, which
-# `dtolnay/rust-toolchain` handles better. `rust-toolchain.toml` pins the
-# channel for both.
+# `dtolnay/rust-toolchain` handles better. `rust-toolchain.toml` selects the
+# local rustup channel; CI selects its channel through the action ref and
+# tests the declared MSRV in a separate job.
 
 [settings]
 # Resolve tools through mise.lock and keep it updated. Without this, the
@@ -97,7 +98,7 @@ run = "cargo run --"
 
 [tasks.setup]
 description = "Install gh-ship locally"
-run = "cargo install --path . --force"
+run = "cargo install --path . --bin gh-ship --force"
 
 [tasks.schema]
 description = "Validate every artifact fixture against the schema"

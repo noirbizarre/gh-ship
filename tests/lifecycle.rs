@@ -805,6 +805,30 @@ fn status_reports_the_last_prepare_run() {
 }
 
 #[test]
+fn status_finds_staging_activity_without_a_release_branch_and_ignores_other_refs() {
+    for branch in [
+        "ship/prepare-deadbeef1234",
+        "release/next",
+        "ship/prepare-other-deadbeef1234",
+    ] {
+        let repo = Repo::new(
+            CONFIG,
+            GhStub::new()
+                .branch_exists(false)
+                .existing_run("in_progress", "")
+                .run_on(branch),
+        );
+        let out = repo.ship(&["status", "--json"]);
+        assert_eq!(out.code, 0, "{}", out.diagnostics());
+        let status: serde_json::Value = serde_json::from_str(&out.stdout).unwrap();
+        assert_eq!(
+            status["last_run"].is_null(),
+            branch != "ship/prepare-deadbeef1234"
+        );
+    }
+}
+
+#[test]
 fn status_json_is_machine_readable() {
     let body = format!("Notes\n\n<!-- ship:artifact\n{CHANGED_ARTIFACT}\n-->");
     let repo = Repo::new(CONFIG, GhStub::new().pr_body(&body));
@@ -821,6 +845,16 @@ fn status_json_is_machine_readable() {
 }
 
 // --- release -------------------------------------------------------------
+
+#[test]
+fn unchanged_preview_json_is_a_successful_payload() {
+    let repo = Repo::new(CONFIG, GhStub::new());
+    let out = repo.ship(&["preview", "--json"]);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    let preview: serde_json::Value = serde_json::from_str(&out.stdout).unwrap();
+    assert_eq!(preview["artifact"]["changed"], false);
+    assert!(preview["pull_request"].is_null());
+}
 
 /// A merged Release PR carrying the artifact gh-ship embedded earlier.
 fn merged_repo(stub: GhStub) -> Repo {
@@ -1427,6 +1461,89 @@ fn release_output_is_stable() {
 
 // --- labels --------------------------------------------------------------
 
+#[test]
+fn latest_preference_is_applied_when_publishing_a_draft() {
+    for latest in [Some(true), Some(false), None] {
+        let mut artifact: serde_json::Value = serde_json::from_str(CHANGED_ARTIFACT).unwrap();
+        if let Some(latest) = latest {
+            artifact["release"]["make_latest"] = latest.into();
+        } else {
+            artifact["release"]
+                .as_object_mut()
+                .unwrap()
+                .remove("make_latest");
+        }
+        let body = format!("<!-- ship:artifact\n{artifact}\n-->");
+        let repo = Repo::new(
+            CONFIG,
+            GhStub::new()
+                .draft_release()
+                .pr_body(&body)
+                .pr_state("MERGED")
+                .merge_commit("abc1234def5678"),
+        );
+        let out = repo.ship(&["release"]);
+        assert_eq!(out.code, 0, "{}", out.diagnostics());
+        let call = repo
+            .stub
+            .calls()
+            .into_iter()
+            .find(|c| c.starts_with("release edit"))
+            .unwrap();
+        match latest {
+            Some(latest) => assert!(call.contains(&format!("--latest={latest}")), "{call}"),
+            None => assert!(!call.contains("--latest"), "{call}"),
+        }
+    }
+}
+
+#[test]
+fn invalid_embedded_protocol_data_never_drives_mutations() {
+    for payload in [
+        r#"{"schemaVersion":2,"changed":false}"#,
+        r#"{"schemaVersion":1,"changed":true,"tag":"v1"}"#,
+        "not json",
+    ] {
+        let body = format!("<!-- ship:artifact\n{payload}\n-->");
+        for command in ["release", "prepare", "status"] {
+            let repo = Repo::new(
+                CONFIG,
+                GhStub::new()
+                    .pr_body(&body)
+                    .pr_state("MERGED")
+                    .merge_commit("abc1234def5678"),
+            );
+            let out = repo.ship(&[command]);
+            assert_ne!(out.code, 0, "{}", out.diagnostics());
+            assert!(!repo.stub.called_with(&["--method"]));
+            assert!(!repo.stub.called_with(&["workflow run"]));
+        }
+    }
+}
+
+#[test]
+fn a_draft_release_blocks_prepare_and_status_advises_resuming() {
+    let repo = merged_repo(GhStub::new().draft_release());
+    let out = repo.ship(&["prepare"]);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    assert!(!repo.stub.called_with(&["workflow run"]));
+    assert!(!repo.stub.called_with(&["--method"]));
+    let out = repo.ship(&["status", "--json"]);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    let status: serde_json::Value = serde_json::from_str(&out.stdout).unwrap();
+    assert_eq!(status["release_exists"], true);
+    assert_eq!(status["release_state"], "draft");
+    assert!(
+        status["next"]
+            .as_str()
+            .unwrap()
+            .contains("resume publication")
+    );
+    let out = repo.ship(&["status"]);
+    assert!(out.diagnostics().contains("publication pending"));
+    assert!(!out.diagnostics().contains("nothing to do"));
+}
+
 const LABELLED_CONFIG: &str = r#"
 version: 1
 workflows:
@@ -1790,6 +1907,20 @@ fn an_existing_tag_is_not_an_error() {
     assert!(repo.stub.called_with(&["release create"]));
 }
 
+#[test]
+fn a_conflicting_tag_or_unrelated_422_stops_publication() {
+    for stub in [
+        GhStub::new().tag_target("wrongcommit"),
+        GhStub::new().tag_creation_error("HTTP 422: Invalid reference name"),
+    ] {
+        let repo = publishing_repo(stub);
+        let out = repo.ship(&["release"]);
+        assert_ne!(out.code, 0, "{}", out.diagnostics());
+        assert!(!repo.stub.called_with(&["release create"]));
+        assert!(!repo.stub.called_with(&["workflow run"]));
+    }
+}
+
 /// The publish workflow is dispatched on the tag, which is why the tag has to
 /// exist first.
 #[test]
@@ -1964,7 +2095,7 @@ fn a_staging_branch_that_cannot_be_deleted_does_not_fail_the_release() {
         CONFIG,
         GhStub::new()
             .artifact(CHANGED_ARTIFACT)
-            .stale_staging_branch("ship/prepare-undeletable")
+            .stale_staging_branch("ship/prepare-deadbeef1234")
             .branch_delete_fails(),
     );
     let out = repo.ship(&["prepare"]);

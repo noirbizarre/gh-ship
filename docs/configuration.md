@@ -112,7 +112,7 @@ once per line — so nothing is duplicated.
 ```yaml
 version: 1
 branches: [main, "release/*"]
-release_branch: "next/{{ match }}"
+release_branch: "next/{{ branch }}"
 workflows:
   prepare: prepare-release
 ```
@@ -122,7 +122,7 @@ That gives two independent releases in flight:
 | Base branch | Release branch | Release PR |
 |---|---|---|
 | `main` | `next/main` | `next/main` → `main` |
-| `release/1.x` | `next/1.x` | `next/1.x` → `release/1.x` |
+| `release/1.x` | `next/release/1.x` | `next/release/1.x` → `release/1.x` |
 
 Each line gets its own release branch, its own Release PR and its own staging
 branches, so two prepares can run at once without touching each other.
@@ -132,7 +132,7 @@ branches, so two prepares can run at once without touching each other.
 An entry is written either as a **branch name** or as a **mapping**:
 
 ```yaml
-release_branch: "next/{{ match }}"
+release_branch: "next/{{ branch }}"
 branches:
   - branch: main               # this line deviates
     release_branch: next/release
@@ -154,8 +154,9 @@ name**. A glob may contain at most one `*`, and `*` matches `/` — so
 `release/*` covers `release/1.x` as well as `release/1/x`.
 
 Exact entries are matched first, whatever their order in the file, then globs in
-the order they are written, first match winning. Writing `main` alongside `*`
-therefore means what it looks like: `main` is special.
+the order they are written, first match winning. An exact `release/next` entry
+therefore takes precedence over `release/*`. Avoid a bare `*` selector: it also
+matches every release branch, which the branch-safety checks reject.
 
 A branch matching no entry is refused, rather than released from by accident.
 
@@ -192,7 +193,12 @@ wins over the top-level one for that line.
     - a **release branch that is also a base branch**, which would open a pull
       request from a branch into itself.
 
-    Keeping `{{ match }}` in the name avoids all four.
+    Keep rendered release names distinct from every base selector and from
+    other release lines. `{{ match }}` distinguishes captures within one glob,
+    but not necessarily different selectors; using `{{ branch }}` or distinct
+    per-line prefixes can distinguish them. Validation probes common collisions;
+    it cannot prove arbitrary templates collision-free. Concrete line resolution
+    also rejects base-branch targets and collisions with configured exact lines.
 
 ### Which branch am I on?
 
@@ -236,7 +242,7 @@ branches: [develop]
 | `title` | template | `chore(release): {{ version }}` | PR title — and the squash commit subject. |
 | `header` | template | — | Markdown prepended to the release notes. |
 | `footer` | template | — | Markdown appended after the release notes. |
-| `labels` | list | `[]` | Labels applied to the Release PR. |
+| `labels` | list | `[]` | Labels added to the Release PR. Updates preserve existing labels, including ones removed from configuration. |
 | `reuse` | boolean | `true` | Reuse the existing Release PR instead of opening a new one each time. |
 
 ### The PR title is the release commit message

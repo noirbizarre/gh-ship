@@ -168,7 +168,8 @@ The conventional choice is the other one — most release tooling tags and relea
 from CI — so the split deserves a reason.
 
 **Release notes are generated before the merge and must survive it.** The prepare
-workflow runs your changelog tool against the *release branch*; the publish
+workflow runs your changelog tool on the *dispatched staging branch*, which
+gh-ship promotes to the release branch; the publish
 workflow checks out the *tag*, which is post-merge history. If the publish
 workflow regenerated the notes, what shipped could legitimately differ from what
 was reviewed and approved in the Release PR. The artifact exists so that what
@@ -235,8 +236,9 @@ the branch — and so the run dispatched on it — belong to exactly one prepare
 A run that fails part-way leaves one behind, so each prepare sweeps them first.
 
 With [release lines](configuration.md#release-lines) configured the name also
-carries the line — `ship/prepare-<base>-<token>` — and the sweep is filtered to
-that same prefix. Two lines can then prepare concurrently without either one
+carries a SHA-256 identity of the full base name — `ship/prepare-<hash>-<token>` —
+and the sweep checks that identity and the invocation-token format. Two lines
+can then prepare concurrently without either one
 deleting the ref the other's `workflow_dispatch` is running on.
 
 ### Draft-first releases

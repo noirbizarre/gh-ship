@@ -58,7 +58,7 @@ Configure [release lines](configuration.md#release-lines):
 
 ```yaml
 branches: [main, "release/*"]
-release_branch: "next/{{ match }}"
+release_branch: "next/{{ branch }}"
 ```
 
 Each base branch gets its own release branch, Release PR and staging branches,
@@ -70,7 +70,7 @@ If one line needs a release branch the template cannot express, give that entry
 its own:
 
 ```yaml
-release_branch: "next/{{ match }}"
+release_branch: "next/{{ branch }}"
 branches:
   - branch: main
     release_branch: next/release
@@ -117,8 +117,11 @@ another machine, run by someone else.
 
 ## What happens if my laptop dies mid-`prepare`?
 
-Nothing is lost. The workflow keeps running on GitHub. Run `gh ship status` to see
-where things stand, and `gh ship prepare` again to pick up.
+The workflow keeps running on GitHub. `gh ship status` looks through the latest
+100 prepare-workflow dispatches for this line's staging run, even if its ref
+has since been removed. A very busy workflow can push older runs out of that
+window. Re-running `gh ship prepare` starts fresh and sweeps the old staging ref;
+it does not adopt that run.
 
 ## Can two people run `gh ship prepare` at once?
 
@@ -134,10 +137,12 @@ and there is one per line. Serialise with `concurrency: group: ship`, as the
 sample workflow in [Workflows](workflows.md) does.
 
 Different [release lines](configuration.md#release-lines) *can* prepare
-concurrently. Their staging branches are named after the line
-(`ship/prepare-release-1.x-<token>`) and each sweep is scoped to its own, so
-`main` and `release/1.x` never collide. Key the concurrency group by branch —
-`group: ship-${{ github.ref }}` — to allow it.
+concurrently. Their staging branches include a hash of the full base name
+(`ship/prepare-<hash>-<token>`) and each sweep checks its own line identity.
+For a **prepare-only** workflow, key the concurrency group by branch —
+`group: ship-${{ github.ref }}` — to allow it. A combined push/PR lifecycle
+must instead derive its key from the base branch so both events serialize
+together; see [releasing on every push](workflows.md#releasing-on-every-push).
 
 ## Can the staging branches be hidden?
 
@@ -200,7 +205,8 @@ Most release tooling tags and releases from CI, so this is a fair thing to
 question.
 
 Because the release notes are generated **before** the merge and have to survive
-it. Your prepare workflow runs your changelog tool against the release branch;
+it. Your prepare workflow runs your changelog tool on its dispatched staging
+branch, which gh-ship then promotes to the release branch;
 the publish workflow checks out the tag, which is post-merge history. If the
 publish workflow regenerated the notes, what shipped could legitimately differ
 from what you reviewed and approved in the Release PR.

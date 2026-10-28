@@ -1,8 +1,8 @@
 //! Configuration — `.github/ship.yml`.
 //!
-//! Convention over configuration: the only required field is
-//! `workflows.prepare`. Everything else has a sensible default, and a
-//! repository with a two-line config is a fully working gh-ship setup.
+//! Convention over configuration: only `version` and `workflows.prepare`
+//! are required. Everything else has a sensible default, so a minimal
+//! versioned configuration is a fully working gh-ship setup.
 //!
 //! The raw source text is retained alongside the parsed model because
 //! `serde_norway::Value` discards positions, and good diagnostics need
@@ -541,6 +541,29 @@ impl Config {
                     "omit it to use the default, `{DEFAULT_RELEASE_BRANCH}`"
                 )),
             });
+        }
+
+        for (field, value) in [
+            ("workflows.publish", s.workflows.publish.as_deref()),
+            ("pull_request.title", Some(s.pull_request.title.as_str())),
+        ]
+        .into_iter()
+        .chain(
+            s.pull_request
+                .labels
+                .iter()
+                .map(|label| ("pull_request.labels", Some(label.as_str()))),
+        ) {
+            if value.is_some_and(|v| v.trim().is_empty()) {
+                return Err(ConfigError::EmptyField {
+                    field: field.into(),
+                    src: self.source.named(),
+                    span: self
+                        .source
+                        .locate(field.rsplit('.').next().unwrap_or(field)),
+                    help: Some("provide a non-empty value, or omit the optional setting".into()),
+                });
+            }
         }
 
         self.check_branches()?;

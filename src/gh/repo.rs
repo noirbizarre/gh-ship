@@ -105,9 +105,23 @@ pub fn create_tag(gh: &Gh, tag: &str, sha: &str) -> Result<(), GhError> {
         "--silent",
     ]) {
         Ok(_) => Ok(()),
-        // Creating a tag that is already there is the desired state: a
-        // re-run of `gh ship release` must not fail on its own first pass.
-        Err(e) if cli::is_already_exists(&e) => Ok(()),
+        Err(e) if cli::is_already_exists(&e) => {
+            // The commits endpoint peels annotated tags, unlike git/ref.
+            #[derive(Deserialize)]
+            struct Commit {
+                sha: String,
+            }
+            let commit: Commit = gh.json(&["api", &format!("repos/{repo}/commits/tags/{tag}")])?;
+            if commit.sha == sha {
+                Ok(())
+            } else {
+                Err(GhError::TagConflict {
+                    tag: tag.into(),
+                    actual: commit.sha,
+                    expected: sha.into(),
+                })
+            }
+        }
         Err(e) => Err(e),
     }
 }
@@ -496,6 +510,7 @@ pub fn create_pull_request(gh: &Gh, pr: &NewPullRequest<'_>) -> Result<String, G
 }
 
 /// Update an existing Release PR.
+/// Labels are additive: preserve manually managed and previously applied labels.
 pub fn update_pull_request(
     gh: &Gh,
     number: u64,
@@ -586,16 +601,48 @@ pub fn create_release(gh: &Gh, release: &NewRelease<'_>) -> Result<String, GhErr
 }
 
 /// Publish a draft release.
-pub fn publish_release(gh: &Gh, tag: &str) -> Result<(), GhError> {
-    gh.run_scoped(&["release", "edit", tag, "--draft=false"])
-        .map(|_| ())
+pub fn publish_release(gh: &Gh, tag: &str, make_latest: Option<bool>) -> Result<(), GhError> {
+    // Drafts cannot be latest. Apply the explicit preference at publication,
+    // rather than relying on it surviving draft creation on GitHub.
+    let mut args = vec![
+        "release".to_string(),
+        "edit".into(),
+        tag.into(),
+        "--draft=false".into(),
+    ];
+    if let Some(latest) = make_latest {
+        args.push(format!("--latest={latest}"));
+    }
+    gh.run_scoped(&args).map(|_| ())
 }
 
 /// Whether a release already exists for a tag.
 pub fn release_exists(gh: &Gh, tag: &str) -> Result<bool, GhError> {
-    match gh.run_scoped(&["release", "view", tag, "--json", "tagName"]) {
-        Ok(_) => Ok(true),
-        Err(e) if cli::is_not_found(&e) => Ok(false),
+    Ok(release_state(gh, tag)? != ReleaseState::Absent)
+}
+
+/// Existence is not publication: draft releases can still be awaiting a build.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReleaseState {
+    Absent,
+    Draft,
+    Published,
+}
+
+pub fn release_state(gh: &Gh, tag: &str) -> Result<ReleaseState, GhError> {
+    #[derive(Deserialize)]
+    struct Release {
+        #[serde(rename = "isDraft")]
+        draft: bool,
+    }
+    match gh.json_scoped::<Release, _>(&["release", "view", tag, "--json", "isDraft"]) {
+        Ok(release) => Ok(if release.draft {
+            ReleaseState::Draft
+        } else {
+            ReleaseState::Published
+        }),
+        Err(e) if cli::is_not_found(&e) => Ok(ReleaseState::Absent),
         Err(e) => Err(e),
     }
 }

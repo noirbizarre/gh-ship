@@ -45,7 +45,7 @@ pub const WORKFLOW_DIR: &str = ".github/workflows";
 /// |---|---|---|
 /// | **slug** | `prepare-release` | configuration and all human output |
 /// | **id** | `prepare-release.yaml` | arguments passed to `gh` |
-/// | **name** | `🚢 Prepare Release` | display only, never matched on |
+/// | **name** | `🚢 Prepare Release` | display and compatibility fallback matching |
 ///
 /// The slug is the stable identity: a display name is free-form, may
 /// carry emoji, and may be changed at any time without breaking a
@@ -95,6 +95,8 @@ pub struct Workflow {
     pub inputs: Vec<String>,
     /// Input names declared specifically under `workflow_dispatch`.
     pub dispatch_inputs: Vec<String>,
+    /// Explicit types of inputs accepted by workflow dispatch.
+    pub dispatch_input_types: std::collections::BTreeMap<String, String>,
 }
 
 impl Workflow {
@@ -165,7 +167,9 @@ impl Workflow {
 
     /// Whether it accepts the dry-run input, required by `gh ship preview`.
     pub fn accepts_dry_run(&self) -> bool {
-        self.inputs.iter().any(|i| i == DRY_RUN_INPUT)
+        self.dispatch_input_types
+            .get(DRY_RUN_INPUT)
+            .is_some_and(|t| t == "boolean")
     }
 
     /// Every way this workflow violates the role-agnostic part of the
@@ -191,7 +195,11 @@ impl Workflow {
     pub fn contract_violations_as(&self, role: Role) -> Vec<Violation> {
         let mut v = self.contract_violations();
         if role == Role::Prepare && !self.accepts_dry_run() {
-            v.push(Violation::MissingDryRunInput);
+            v.push(if self.dispatch_inputs.iter().any(|i| i == DRY_RUN_INPUT) {
+                Violation::InvalidDryRunType
+            } else {
+                Violation::MissingDryRunInput
+            });
         }
         v
     }
@@ -226,6 +234,7 @@ pub enum Violation {
     MissingPublisherInput(crate::config::PublisherInput),
     NotDispatchable,
     MissingDryRunInput,
+    InvalidDryRunType,
 }
 
 impl Violation {
@@ -239,6 +248,9 @@ impl Violation {
             }
             Self::NotDispatchable => "does not declare `on: workflow_dispatch`",
             Self::MissingDryRunInput => "does not declare a `dry_run` input",
+            Self::InvalidDryRunType => {
+                "`workflow_dispatch.inputs.dry_run` must declare `type: boolean`"
+            }
         }
     }
 
@@ -256,7 +268,7 @@ impl Violation {
                  usually called a reusable workflow — cannot be started this way. Declare both \
                  triggers to keep it reusable *and* dispatchable."
             }
-            Self::MissingDryRunInput => {
+            Self::MissingDryRunInput | Self::InvalidDryRunType => {
                 "add a boolean `dry_run` input under `workflow_dispatch.inputs` and skip pushing \
                  when it is true. `gh ship preview` dispatches with `dry_run=true`, and GitHub \
                  refuses a dispatch carrying an input the workflow does not declare."
@@ -295,6 +307,21 @@ pub fn parse(path: &Path, text: &str) -> Option<Workflow> {
     });
 
     let (dispatchable, callable, inputs, dispatch_inputs) = analyse_triggers(raw.on.as_ref());
+    let dispatch_input_types = raw
+        .on
+        .as_ref()
+        .and_then(|on| on.get("workflow_dispatch"))
+        .and_then(|trigger| trigger.get("inputs"))
+        .and_then(serde_norway::Value::as_mapping)
+        .into_iter()
+        .flatten()
+        .filter_map(|(name, input)| {
+            Some((
+                name.as_str()?.to_string(),
+                input.get("type")?.as_str()?.to_string(),
+            ))
+        })
+        .collect();
 
     Some(Workflow {
         path: path.to_path_buf(),
@@ -303,6 +330,7 @@ pub fn parse(path: &Path, text: &str) -> Option<Workflow> {
         callable,
         inputs,
         dispatch_inputs,
+        dispatch_input_types,
     })
 }
 

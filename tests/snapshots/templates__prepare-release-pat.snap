@@ -129,7 +129,8 @@ jobs:
 
       # Validating here turns a protocol mistake into a red workflow with
       # a precise error, instead of a confusing failure in gh-ship later.
-      # This step needs no network and no repository.
+      # Validation itself needs no network or repository; installing the
+      # extension below requires network access.
       - name: Validate the release artifact
         run: |
           gh extension install noirbizarre/gh-ship

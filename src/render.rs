@@ -222,11 +222,19 @@ pub fn embed_artifact(body: &str, artifact: &Artifact) -> String {
 }
 
 /// Recover an artifact previously embedded in a PR body.
-pub fn extract_artifact(body: &str) -> Option<Artifact> {
-    let start = body.find(ARTIFACT_MARKER_START)?;
+pub fn extract_artifact(body: &str) -> miette::Result<Option<Artifact>> {
+    let Some(start) = body.find(ARTIFACT_MARKER_START) else {
+        return Ok(None);
+    };
     let after = start + ARTIFACT_MARKER_START.len();
-    let end = body[after..].find(ARTIFACT_MARKER_END)? + after;
-    serde_json::from_str(body[after..end].trim()).ok()
+    let end = body[after..]
+        .find(ARTIFACT_MARKER_END)
+        .ok_or_else(|| miette::miette!("unterminated release artifact in PR body"))?
+        + after;
+    Ok(Some(crate::artifact::validate::validate_str(
+        "PR release artifact",
+        body[after..end].trim(),
+    )?))
 }
 
 /// Remove the embedded artifact block from a body.
@@ -388,7 +396,7 @@ mod tests {
     fn artifact_round_trips_through_a_pr_body() {
         let a = artifact();
         let body = embed_artifact("## Release\n\nSome notes.", &a);
-        assert_eq!(extract_artifact(&body).unwrap(), a);
+        assert_eq!(extract_artifact(&body).unwrap().unwrap(), a);
     }
 
     #[test]
@@ -400,7 +408,10 @@ mod tests {
         a.tag = Some("v2.0.0".into());
         let updated = embed_artifact(&body, &a);
 
-        assert_eq!(extract_artifact(&updated).unwrap().version(), Some("2.0.0"));
+        assert_eq!(
+            extract_artifact(&updated).unwrap().unwrap().version(),
+            Some("2.0.0")
+        );
         assert_eq!(
             updated.matches(ARTIFACT_MARKER_START).count(),
             1,
@@ -437,7 +448,7 @@ mod tests {
             "the payload must not be able to close the comment it lives in: {block}"
         );
 
-        assert_eq!(extract_artifact(&body).unwrap(), a);
+        assert_eq!(extract_artifact(&body).unwrap().unwrap(), a);
         assert_eq!(strip_artifact(&body).trim(), "Visible.");
     }
 
@@ -450,14 +461,21 @@ mod tests {
 
     #[test]
     fn extracting_from_a_body_without_an_artifact_returns_none() {
-        assert!(extract_artifact("just a normal PR body").is_none());
-        assert!(extract_artifact("").is_none());
+        assert!(extract_artifact("just a normal PR body").unwrap().is_none());
+        assert!(extract_artifact("").unwrap().is_none());
     }
 
     #[test]
-    fn malformed_embedded_artifact_is_ignored_rather_than_fatal() {
+    fn malformed_embedded_artifact_is_reported_without_panicking() {
         // A human editing the PR body should never make gh-ship panic.
-        assert!(extract_artifact("<!-- ship:artifact\nnot json\n-->").is_none());
+        for payload in [
+            "not json",
+            r#"{"schemaVersion":2,"changed":false}"#,
+            r#"{"schemaVersion":1,"changed":true,"tag":"v1"}"#,
+        ] {
+            assert!(extract_artifact(&format!("<!-- ship:artifact\n{payload}\n-->")).is_err());
+        }
+        assert!(extract_artifact("<!-- ship:artifact\nunterminated").is_err());
         assert_eq!(
             strip_artifact("<!-- ship:artifact\nunterminated"),
             "<!-- ship:artifact\nunterminated"
@@ -468,6 +486,6 @@ mod tests {
     fn embedding_into_an_empty_body_produces_only_the_block() {
         let body = embed_artifact("", &artifact());
         assert!(body.starts_with(ARTIFACT_MARKER_START));
-        assert!(extract_artifact(&body).is_some());
+        assert!(extract_artifact(&body).unwrap().is_some());
     }
 }

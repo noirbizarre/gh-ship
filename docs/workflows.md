@@ -110,7 +110,8 @@ Responsible for everything gh-ship refuses to know about:
 1. Work out the next version.
 2. Generate the changelog.
 3. Update files.
-4. Commit and push to the release branch.
+4. Commit and push to the staging branch the workflow was dispatched on
+   (`git push origin HEAD`). gh-ship then promotes it to the release branch.
 5. Write and upload `ship.release.json`.
 
 ```yaml
@@ -432,10 +433,11 @@ With a PAT, gh-ship never sees, stores, or manages the secret: `gh` reads
 
 ### Using a GitHub App
 
-An App is the best of the three because nothing durable is stored: the workflow
-mints an installation token at the start of the job, and the action revokes it
-when the job ends. What you keep is the private key, which is useless without a
-workflow run to use it in.
+An App uses short-lived installation tokens: the workflow mints one at the
+start of the job, and the action revokes it when the job ends. The private key
+you store is still a durable secret capable of minting new tokens, including
+outside a workflow run. Protect it as the App's credential; the installation
+tokens themselves need not be stored between runs.
 
 Setting one up:
 
@@ -508,8 +510,9 @@ jobs:
 
     gh-ship warns when `SHIP_RUN_TIMEOUT` is at or above 60 minutes inside
     Actions. When the timeout expires with the run still going, the command
-    exits with code `75` rather than `1`, and re-running it adopts that run.
-    A second job can therefore mint a fresh token and retry on that code
+    exits with code `75` rather than `1`. Re-running `release` adopts its publish
+    run; `prepare` starts a new run and sweeps the previous staging ref.
+    For publication, a second job can mint a fresh token and retry on that code
     alone, leaving real failures (exit `1`) alone.
 
     **A publish workflow that takes more than about 50 minutes cannot be waited
@@ -764,8 +767,10 @@ jobs:
   with an App token.
 - The attempts can also be separate jobs. Each job that mints a token needs
   `environment: release`, as [above](#using-a-github-app).
-- `gh ship prepare` exits with code `75` in the same way, so a very long
-  prepare-release workflow can use the same pattern.
+- `gh ship prepare` also exits with code `75`, but its retries start over and
+  may delete the previous run's staging ref. `preview` also dispatches anew.
+  Budget enough time for a complete prepare, using a PAT or gh-ship's built-in
+  App token refresh for long waits; repeated short waits do not resume it.
 
 #### Committing as the App
 
