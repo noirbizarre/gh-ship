@@ -433,10 +433,11 @@ With a PAT, gh-ship never sees, stores, or manages the secret: `gh` reads
 
 ### Using a GitHub App
 
-An App is the best of the three because nothing durable is stored: the workflow
-mints an installation token at the start of the job, and the action revokes it
-when the job ends. What you keep is the private key, which is useless without a
-workflow run to use it in.
+An App uses short-lived installation tokens: the workflow mints one at the
+start of the job, and the action revokes it when the job ends. The private key
+you store is still a durable secret capable of minting new tokens, including
+outside a workflow run. Protect it as the App's credential; the installation
+tokens themselves need not be stored between runs.
 
 Setting one up:
 

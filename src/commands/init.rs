@@ -216,7 +216,7 @@ fn choose_token_strategy() -> Result<TokenStrategy> {
         .description("GitHub's default token cannot trigger your CI on the Release PR")
         .option(
             DemandOption::new("app")
-                .label("A GitHub App — a scoped token, minted per run, nothing stored"),
+                .label("A GitHub App — a scoped token minted per run, using a stored private key"),
         )
         .option(DemandOption::new("pat").label("A personal access token — the SHIP_TOKEN secret"))
         .option(
