@@ -51,6 +51,10 @@ commitlint on `commit-msg`. The type selects the changelog section, and a `!`
 or a `BREAKING CHANGE:` footer drives the version bump — so the message is part
 of the release, not paperwork around it.
 
+The official typos hooks check source files on `pre-commit` and commit messages
+on `commit-msg`. Message spelling is checked without rewriting the message, so
+fix any reported errors before retrying the commit.
+
 ## Releases
 
 Releases are run by [gh-ship](https://github.com/noirbizarre/gh-ship).

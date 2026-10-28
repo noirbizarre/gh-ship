@@ -184,19 +184,6 @@ jobs:
               }' > ship.release.json
           fi
 
-      # Validating here turns a protocol mistake into a red workflow with
-      # a precise error, instead of a confusing failure in gh-ship later.
-      # Validation itself needs no network or repository; installing the
-      # extension below requires network access.
-      - name: Validate the release artifact
-        run: |
-          gh extension install noirbizarre/gh-ship
-          gh ship validate ship.release.json
-{% if token == "app" %}
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-{% endif %}
-
       - uses: actions/upload-artifact@v7
         with:
           name: ship-release

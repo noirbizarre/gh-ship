@@ -18,17 +18,18 @@ separate binary to download, no package on crates.io, and nothing to keep in syn
 
 ## In GitHub Actions
 
-Your prepare workflow should validate the artifact before uploading it. Runners
-already have `gh` and a token, so installing is one line:
+Install the extension in jobs that run orchestration commands or sign release
+commits. Runners already have `gh` and a token, so installing is one line:
 
 ```yaml
-- name: Validate the release artifact
+- name: Install gh-ship
   env:
     GH_TOKEN: ${{ github.token }}
-  run: |
-    gh extension install noirbizarre/gh-ship
-    gh ship validate ship.release.json
+  run: gh extension install noirbizarre/gh-ship
 ```
+
+The orchestrator validates the release artifact after downloading it. Preparation
+only needs to write and upload it; Release PR CI builds and tests the changes.
 
 !!! tip "Validation is fully self-contained"
 
@@ -55,14 +56,9 @@ declared in `Cargo.toml`.
 
 ## Building from source
 
-You do not need this to use gh-ship. Building from source is not a second
-installation route, and gh-ship's own workflows use it in exactly one place:
-the [release artifact](specifications/release-artifact.md) check in
-`prepare-release`, which validates the artifact with a binary built from the
-very commit being released. That is deliberate dogfooding, not an install.
-
-Everywhere else gh-ship releases itself with
-`gh extension install noirbizarre/gh-ship`, like everyone else. Before its own
+You do not need this to use gh-ship. Its own workflows install the published
+extension for orchestration and signing, while PR CI builds and tests the changes
+and the publish workflow builds release binaries. Before its own
 first release existed it had no choice but to bootstrap —
 
 ```yaml

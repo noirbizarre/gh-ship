@@ -26,11 +26,6 @@ The workflow uploads an artifact named **`ship-release`** containing a single fi
 named **`ship.release.json`**.
 
 ```yaml
-- name: Validate the artifact before uploading
-  run: |
-    gh extension install noirbizarre/gh-ship
-    gh ship validate ship.release.json
-
 - uses: actions/upload-artifact@v7
   with:
     name: ship-release
@@ -38,8 +33,9 @@ named **`ship.release.json`**.
     if-no-files-found: error
 ```
 
-Validating before uploading turns a protocol mistake into a red workflow with a
-precise error, instead of a confusing failure in gh-ship minutes later.
+gh-ship validates the downloaded artifact before using it to update the Release
+PR. For local debugging, `gh ship validate ship.release.json` runs the same schema
+checks without dispatching a workflow.
 
 ---
 
