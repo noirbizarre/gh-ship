@@ -153,7 +153,7 @@ pub fn resolve(config: &Config, base: &str) -> Result<Line, BranchError> {
         });
     };
 
-    Ok(Line {
+    let line = Line {
         base: base.to_string(),
         release: render_release_branch(
             config.release_branch_template_for(Some(index)),
@@ -161,7 +161,9 @@ pub fn resolve(config: &Config, base: &str) -> Result<Line, BranchError> {
             capture,
         )?,
         entry: Some(index),
-    })
+    };
+    check_line(config, &line)?;
+    Ok(line)
 }
 
 /// The single release line of a config without `branches`.
@@ -169,11 +171,27 @@ pub fn resolve(config: &Config, base: &str) -> Result<Line, BranchError> {
 /// `match` is the branch itself here, so one template works whether or
 /// not release lines are configured.
 pub fn single(config: &Config, base: &str) -> Result<Line, BranchError> {
-    Ok(Line {
+    let line = Line {
         base: base.to_string(),
         release: render_release_branch(config.release_branch_template(), base, base)?,
         entry: None,
-    })
+    };
+    check_line(config, &line)?;
+    Ok(line)
+}
+
+fn check_line(config: &Config, line: &Line) -> Result<(), BranchError> {
+    if line.release == line.base {
+        return Err(BranchError::ReleaseBranchIsBaseBranch {
+            release: line.release.clone(),
+            help: "give the release line a branch distinct from its base".into(),
+            src: config.source.named(),
+            span: config
+                .source
+                .locate(config.release_branch_template_for(line.entry)),
+        });
+    }
+    Ok(())
 }
 
 /// Config checks that need the template engine.

@@ -106,6 +106,7 @@ impl Context {
         repository: Repository,
     ) -> Result<Option<Self>> {
         let config = Config::load(&cli.config)?;
+        branches::check(&config)?;
         let line = if config.has_branches() {
             match branches::resolve(&config, base) {
                 Ok(line) => line,
@@ -131,6 +132,7 @@ impl Context {
     /// Resolve configuration, repository and release line.
     pub fn load(cli: &Cli, base: Option<&str>, theme: Theme) -> Result<Self> {
         let config = Config::load(&cli.config)?;
+        branches::check(&config)?;
         let (gh, repository) = resolve_repo(cli)?;
         let root = repo_root(&cli.config);
 
