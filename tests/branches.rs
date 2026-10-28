@@ -15,7 +15,7 @@ use common::{CHANGED_ARTIFACT, GhStub, Repo, with_redactions};
 /// Two release lines: `main` and every `release/*` maintenance branch.
 const LINES: &str = "version: 1\n\
                      branches: [main, \"release/*\"]\n\
-                     release_branch: \"next/{{ match }}\"\n\
+                     release_branch: \"next/{{ branch }}\"\n\
                      workflows:\n  prepare: prepare-release\n";
 
 fn stub() -> GhStub {
@@ -32,7 +32,7 @@ fn the_base_flag_selects_the_line() {
     assert_eq!(out.code, 0, "{}", out.diagnostics());
     let status: serde_json::Value = serde_json::from_str(&out.stdout).expect("status is JSON");
     assert_eq!(status["base_branch"], "release/1.x");
-    assert_eq!(status["release_branch"], "next/1.x");
+    assert_eq!(status["release_branch"], "next/release/1.x");
     assert_eq!(status["branch_rule"], "release/*");
     assert_eq!(status["base_branch_origin"], "flag");
 }
@@ -45,7 +45,7 @@ fn the_ci_environment_selects_the_line() {
     assert_eq!(out.code, 0, "{}", out.diagnostics());
     let status: serde_json::Value = serde_json::from_str(&out.stdout).expect("status is JSON");
     assert_eq!(status["base_branch"], "release/2.x");
-    assert_eq!(status["release_branch"], "next/2.x");
+    assert_eq!(status["release_branch"], "next/release/2.x");
     assert_eq!(status["base_branch_origin"], "ci");
 }
 
@@ -106,7 +106,7 @@ fn nothing_detected_falls_back_to_the_repository_default() {
 fn an_exact_entry_wins_over_a_pattern_declared_first() {
     let config = "version: 1\n\
                   branches: [\"release/*\", \"release/next\"]\n\
-                  release_branch: \"staging/{{ match }}\"\n\
+                  release_branch: \"staging/{{ branch }}\"\n\
                   workflows:\n  prepare: prepare-release\n";
     let repo = Repo::new(config, stub());
     let out = repo.ship(&["status", "--base", "release/next", "--json"]);
@@ -176,7 +176,7 @@ fn preview_refuses_an_unlisted_branch_too() {
 fn a_constant_release_branch_across_lines_is_refused() {
     let config = "version: 1\n\
                   branches: [main, \"release/*\"]\n\
-                  release_branch: release/next\n\
+                  release_branch: next/release\n\
                   workflows:\n  prepare: prepare-release\n";
     let repo = Repo::new(config, stub());
     let out = repo.ship(&["validate"]);
@@ -347,7 +347,7 @@ fn each_line_gets_its_own_release_branch_and_pull_request() {
 
     assert_eq!(out.code, 0, "{}", out.diagnostics());
     assert!(
-        repo.stub.called_with(&["pr create", "next/1.x"]),
+        repo.stub.called_with(&["pr create", "next/release/1.x"]),
         "the PR is opened from this line's release branch: {:?}",
         repo.stub.calls()
     );
@@ -359,6 +359,25 @@ fn each_line_gets_its_own_release_branch_and_pull_request() {
 }
 
 // --- Back-compatibility --------------------------------------------------
+
+#[test]
+fn glob_self_targets_and_mixed_collisions_are_refused() {
+    for (branches, template) in [
+        ("[\"release/*\"]", "release/{{ match }}"),
+        ("[main, \"release/*\"]", "next/{{ match }}"),
+    ] {
+        let config = format!(
+            "version: 1\nbranches: {branches}\nrelease_branch: \"{template}\"\nworkflows:\n  prepare: prepare-release\n"
+        );
+        let repo = Repo::new(&config, stub());
+        for command in ["validate", "prepare"] {
+            let out = repo.ship(&[command]);
+            assert_ne!(out.code, 0, "{}", out.diagnostics());
+            assert!(!repo.stub.called_with(&["workflow run"]));
+            assert!(!repo.stub.called_with(&["--method"]));
+        }
+    }
+}
 
 #[test]
 fn without_release_lines_the_environment_is_ignored() {

@@ -192,7 +192,12 @@ wins over the top-level one for that line.
     - a **release branch that is also a base branch**, which would open a pull
       request from a branch into itself.
 
-    Keeping `{{ match }}` in the name avoids all four.
+    Keep rendered release names distinct from every base selector and from
+    other release lines. `{{ match }}` distinguishes captures within one glob,
+    but not necessarily different selectors; using `{{ branch }}` or distinct
+    per-line prefixes can distinguish them. Validation probes common collisions;
+    it cannot prove arbitrary templates collision-free. Concrete line resolution
+    also rejects base-branch targets and collisions with configured exact lines.
 
 ### Which branch am I on?
 
