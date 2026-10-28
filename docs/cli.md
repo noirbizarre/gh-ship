@@ -10,7 +10,7 @@ gh ship <COMMAND>
 |---|---|---|
 | `-c`, `--config <PATH>` | `SHIP_CONFIG` | Config path. Default `.github/ship.yml`. |
 | `-R`, `--repo <OWNER/REPO>` | `SHIP_REPO` | Target repository. Defaults to the current one. |
-| `-v`, `--verbose` | | More detail. Repeat for more. |
+| `-v`, `--verbose` | | Show error cause chains. |
 
 ## Choosing the release line
 

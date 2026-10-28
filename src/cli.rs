@@ -33,7 +33,7 @@ pub struct Cli {
     #[arg(long, short = 'R', global = true, env = "SHIP_REPO")]
     pub repo: Option<String>,
 
-    /// Increase verbosity. Repeat for more detail.
+    /// Show error cause chains.
     #[arg(long, short, global = true, action = clap::ArgAction::Count)]
     pub verbose: u8,
 
