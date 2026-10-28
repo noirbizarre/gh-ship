@@ -1,0 +1,51 @@
+name: 📚 Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - zensical.toml
+      - .github/workflows/docs.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deployment at a time; never cancel one midway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: 🏗️ Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # uv is pinned by mise.lock, so the docs build uses the same version
+      # as `mise run docs:build` locally.
+      - uses: jdx/mise-action@v4
+        with:
+          cache: true
+
+      - name: Build the site
+        run: mise run docs:build
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    name: 🚀 Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

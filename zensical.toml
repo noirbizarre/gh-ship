@@ -1,0 +1,99 @@
+# Zensical configuration.
+# https://zensical.org/docs/setup/
+
+[project]
+
+site_name = "gh-ship"
+site_description = "The GitHub Release Orchestrator — a gh CLI extension that orchestrates Release PRs and GitHub Actions release workflows"
+site_url = "https://noirbizarre.github.io/gh-ship/"
+site_author = "noirbizarre"
+
+repo_url = "https://github.com/noirbizarre/gh-ship"
+repo_name = "noirbizarre/gh-ship"
+edit_uri = "edit/main/docs/"
+
+copyright = """
+Copyright &copy; 2026 Axel H. — MIT licensed
+"""
+
+# Seeded, not owned: the navigation is the one part of this file that is
+# entirely about your project. Extend it freely — the template will not
+# meaningfully conflict with additions here.
+nav = [
+  { "Home" = "index.md" },
+  { "About" = [
+    { "Architecture Decisions" = "adr/README.md" },
+  ] },
+]
+
+[project.theme]
+
+language = "en"
+
+# The header slot is one line tall and already sits next to the site name, so
+# it gets the mark alone — a wordmark would render as an illegible sliver and
+# repeat the name.
+logo = "images/icon.svg"
+favicon = "images/icon.svg"
+
+features = [
+  "content.action.edit",
+  "content.code.annotate",
+  "content.code.copy",
+  "navigation.instant",
+  "navigation.sections",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+  "search.suggest",
+  "toc.follow",
+]
+
+# Three entries, in this order. The first has no `scheme`, so it follows the
+# operating system — and being first, it is what a visitor gets by default. The
+# other two let anyone override that choice, which then persists.
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+primary = "black"
+accent = "indigo"
+toggle.icon = "lucide/monitor"
+toggle.name = "Following your system — switch to light"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "black"
+accent = "indigo"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "black"
+accent = "indigo"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to following your system"
+
+# Markdown extensions used by the documentation. Admonitions and tabs carry
+# most of the guidance; superfences is required for fenced code blocks with
+# annotations.
+[project.markdown_extensions.abbr]
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.def_list]
+[project.markdown_extensions.md_in_html]
+[project.markdown_extensions.tables]
+[project.markdown_extensions.toc]
+permalink = true
+[project.markdown_extensions.pymdownx.details]
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+line_spans = "__span"
+pygments_lang_class = true
+[project.markdown_extensions.pymdownx.inlinehilite]
+[project.markdown_extensions.pymdownx.superfences]
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+[project.markdown_extensions.pymdownx.tasklist]
+custom_checkbox = true
