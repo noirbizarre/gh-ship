@@ -200,7 +200,8 @@ Most release tooling tags and releases from CI, so this is a fair thing to
 question.
 
 Because the release notes are generated **before** the merge and have to survive
-it. Your prepare workflow runs your changelog tool against the release branch;
+it. Your prepare workflow runs your changelog tool on its dispatched staging
+branch, which gh-ship then promotes to the release branch;
 the publish workflow checks out the tag, which is post-merge history. If the
 publish workflow regenerated the notes, what shipped could legitimately differ
 from what you reviewed and approved in the Release PR.

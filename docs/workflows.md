@@ -110,7 +110,8 @@ Responsible for everything gh-ship refuses to know about:
 1. Work out the next version.
 2. Generate the changelog.
 3. Update files.
-4. Commit and push to the release branch.
+4. Commit and push to the staging branch the workflow was dispatched on
+   (`git push origin HEAD`). gh-ship then promotes it to the release branch.
 5. Write and upload `ship.release.json`.
 
 ```yaml

@@ -7,7 +7,8 @@
 //! module will want to undo.
 //!
 //! **The release notes are generated before the merge and must survive it.** The
-//! prepare workflow runs the changelog tool against the *release branch*; the
+//! prepare workflow runs the changelog tool on the *dispatched staging branch*,
+//! which gh-ship promotes to the release branch; the
 //! publish workflow checks out the *tag*, which is post-merge history. Were the
 //! publish workflow to regenerate them, what shipped could legitimately differ
 //! from what was reviewed in the Release PR. The artifact carries them so that

@@ -168,7 +168,8 @@ The conventional choice is the other one — most release tooling tags and relea
 from CI — so the split deserves a reason.
 
 **Release notes are generated before the merge and must survive it.** The prepare
-workflow runs your changelog tool against the *release branch*; the publish
+workflow runs your changelog tool on the *dispatched staging branch*, which
+gh-ship promotes to the release branch; the publish
 workflow checks out the *tag*, which is post-merge history. If the publish
 workflow regenerated the notes, what shipped could legitimately differ from what
 was reviewed and approved in the Release PR. The artifact exists so that what
