@@ -44,20 +44,18 @@ pub fn run(cli: &Cli, args: &PreviewArgs, theme: Theme) -> Result<()> {
         &[(DRY_RUN_INPUT, "true".to_string())],
     )?;
 
-    if !artifact.changed {
-        report_nothing_to_release(theme);
-        return Ok(());
-    }
-
-    let rendered = render::render(ctx.config.pull_request(), &artifact)?;
+    let rendered = artifact
+        .changed
+        .then(|| render::render(ctx.config.pull_request(), &artifact))
+        .transpose()?;
 
     if args.json {
         let out = Preview {
-            pull_request: PreviewPullRequest {
+            pull_request: rendered.as_ref().map(|rendered| PreviewPullRequest {
                 title: &rendered.title,
                 body: &rendered.body,
                 labels: &rendered.labels,
-            },
+            }),
             artifact: &artifact,
         };
         println!(
@@ -66,6 +64,11 @@ pub fn run(cli: &Cli, args: &PreviewArgs, theme: Theme) -> Result<()> {
         );
         return Ok(());
     }
+
+    let Some(rendered) = rendered else {
+        report_nothing_to_release(theme);
+        return Ok(());
+    };
 
     eprintln!();
     eprintln!(
@@ -88,7 +91,7 @@ pub fn run(cli: &Cli, args: &PreviewArgs, theme: Theme) -> Result<()> {
 #[derive(Serialize)]
 struct Preview<'a> {
     artifact: &'a Artifact,
-    pull_request: PreviewPullRequest<'a>,
+    pull_request: Option<PreviewPullRequest<'a>>,
 }
 
 #[derive(Serialize)]

@@ -846,6 +846,16 @@ fn status_json_is_machine_readable() {
 
 // --- release -------------------------------------------------------------
 
+#[test]
+fn unchanged_preview_json_is_a_successful_payload() {
+    let repo = Repo::new(CONFIG, GhStub::new());
+    let out = repo.ship(&["preview", "--json"]);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    let preview: serde_json::Value = serde_json::from_str(&out.stdout).unwrap();
+    assert_eq!(preview["artifact"]["changed"], false);
+    assert!(preview["pull_request"].is_null());
+}
+
 /// A merged Release PR carrying the artifact gh-ship embedded earlier.
 fn merged_repo(stub: GhStub) -> Repo {
     let body = format!("Notes\n\n<!-- ship:artifact\n{CHANGED_ARTIFACT}\n-->");
