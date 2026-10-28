@@ -455,8 +455,9 @@ $ gh ship sign
 
 Two behaviours worth knowing:
 
-- A commit that is **already signed** is left alone and the command succeeds.
-  Re-creating it would replace a signature its author chose with one they did not.
+- A commit whose signature is **already verified by GitHub** is left alone and
+  the command succeeds. The check uses GitHub's verification status, not merely
+  the presence of a signature; an unverified signature may be replaced.
 - When GitHub returns the re-created commit **unsigned**, the command fails and
   the branch is **not moved**. That happens when the token is not a bot — a PAT
   or a user login cannot produce a signature, whatever its permissions — and
