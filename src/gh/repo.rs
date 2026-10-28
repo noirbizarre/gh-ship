@@ -105,9 +105,23 @@ pub fn create_tag(gh: &Gh, tag: &str, sha: &str) -> Result<(), GhError> {
         "--silent",
     ]) {
         Ok(_) => Ok(()),
-        // Creating a tag that is already there is the desired state: a
-        // re-run of `gh ship release` must not fail on its own first pass.
-        Err(e) if cli::is_already_exists(&e) => Ok(()),
+        Err(e) if cli::is_already_exists(&e) => {
+            // The commits endpoint peels annotated tags, unlike git/ref.
+            #[derive(Deserialize)]
+            struct Commit {
+                sha: String,
+            }
+            let commit: Commit = gh.json(&["api", &format!("repos/{repo}/commits/tags/{tag}")])?;
+            if commit.sha == sha {
+                Ok(())
+            } else {
+                Err(GhError::TagConflict {
+                    tag: tag.into(),
+                    actual: commit.sha,
+                    expected: sha.into(),
+                })
+            }
+        }
         Err(e) => Err(e),
     }
 }

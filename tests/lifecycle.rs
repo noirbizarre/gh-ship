@@ -1813,6 +1813,20 @@ fn an_existing_tag_is_not_an_error() {
     assert!(repo.stub.called_with(&["release create"]));
 }
 
+#[test]
+fn a_conflicting_tag_or_unrelated_422_stops_publication() {
+    for stub in [
+        GhStub::new().tag_target("wrongcommit"),
+        GhStub::new().tag_creation_error("HTTP 422: Invalid reference name"),
+    ] {
+        let repo = publishing_repo(stub);
+        let out = repo.ship(&["release"]);
+        assert_ne!(out.code, 0, "{}", out.diagnostics());
+        assert!(!repo.stub.called_with(&["release create"]));
+        assert!(!repo.stub.called_with(&["workflow run"]));
+    }
+}
+
 /// The publish workflow is dispatched on the tag, which is why the tag has to
 /// exist first.
 #[test]

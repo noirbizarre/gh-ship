@@ -222,6 +222,17 @@ impl GhStub {
         self
     }
 
+    pub fn tag_target(self, sha: &str) -> Self {
+        let mut stub = self.tag_exists();
+        stub.env.insert("STUB_TAG_SHA".into(), sha.into());
+        stub
+    }
+
+    pub fn tag_creation_error(mut self, message: &str) -> Self {
+        self.env.insert("STUB_TAG_ERROR".into(), message.into());
+        self
+    }
+
     /// Report a leftover staging branch, as an abandoned run would.
     pub fn stale_staging_branch(mut self, name: &str) -> Self {
         self.env.insert("STUB_STALE_STAGING".into(), name.into());
@@ -682,6 +693,9 @@ case "$1 ${2:-}" in
         ;;
       # The commit a ref points at, already flattened by the `--jq` the
       # caller passes. `verified` reports an existing signature.
+      *"/commits/tags/"*)
+        printf '{"sha":"%s"}\n' "${STUB_TAG_SHA:-${STUB_MERGE_SHA:-abc1234def5678}}"
+        ;;
       *"/commits/"*)
         printf '{"sha":"c0ffee0000000000000000000000000000000000","message":"chore(release): 1.0.0","tree":"77ee110000000000000000000000000000000000","parents":["9a5e110000000000000000000000000000000000"],"verified":%s}\n' \
           "${STUB_HEAD_VERIFIED:-false}"
@@ -697,6 +711,11 @@ case "$1 ${2:-}" in
       # POST creates a ref (branch or tag); PATCH .../git/refs/heads/<branch>
       # force-updates one; DELETE removes one.
       *"/git/refs"*)
+        if [ -n "${STUB_TAG_ERROR:-}" ]; then
+          case "$*" in
+            *refs/tags/*) echo "$STUB_TAG_ERROR" >&2; exit 1 ;;
+          esac
+        fi
         if [ "${STUB_BRANCH_DELETE_FAILS:-0}" = "1" ]; then
           case " $* " in
             *" DELETE "*)
