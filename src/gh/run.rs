@@ -364,6 +364,22 @@ pub fn list(gh: &Gh, workflow: &WorkflowRef, branch: &str) -> Result<Vec<Run>, G
     ])
 }
 
+/// Recent dispatches across refs, including runs whose staging ref was deleted.
+pub fn recent_dispatches(gh: &Gh, workflow: &WorkflowRef) -> Result<Vec<Run>, GhError> {
+    gh.json_scoped(&[
+        "run",
+        "list",
+        "--workflow",
+        &workflow.id,
+        "--event",
+        DISPATCH_EVENT,
+        "--limit",
+        "100",
+        "--json",
+        RUN_FIELDS,
+    ])
+}
+
 /// Fetch a single run's current state.
 pub fn view(gh: &Gh, id: u64) -> Result<Run, GhError> {
     gh.json_scoped(&["run", "view", &id.to_string(), "--json", RUN_FIELDS])

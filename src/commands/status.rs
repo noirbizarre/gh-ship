@@ -108,26 +108,24 @@ fn collect(ctx: &Context) -> Result<Status> {
     // gh-ship needs no local state.
     let artifact = pr.as_ref().and_then(|p| render::extract_artifact(&p.body));
 
-    // The most recent prepare run on the release branch, whether or not
-    // gh-ship started it.
-    let last_run = if branch_exists {
-        run::list(
-            &ctx.gh,
-            &ctx.workflow(ctx.config.prepare_workflow()),
-            &release_branch,
-        )
-        .ok()
-        .and_then(|runs| runs.into_iter().next())
+    // Runs remain queryable after their temporary staging refs are removed.
+    let prefix = if ctx.config.has_branches() {
+        super::prepare::staging_prefix(&base_branch)
+    } else {
+        super::prepare::STAGING_PREFIX.into()
+    };
+    let last_run = run::recent_dispatches(&ctx.gh, &ctx.workflow(ctx.config.prepare_workflow()))?
+        .into_iter()
+        .find(|r| {
+            r.event == "workflow_dispatch" && super::prepare::owns_staging(&prefix, &r.head_branch)
+        })
         .map(|r| RunStatus {
             id: r.id,
             title: r.title,
             status: r.status,
             conclusion: r.conclusion,
             url: r.url,
-        })
-    } else {
-        None
-    };
+        });
 
     let release_state = match artifact.as_ref().and_then(|a| a.tag()) {
         Some(tag) => repo::release_state(&ctx.gh, tag)?,

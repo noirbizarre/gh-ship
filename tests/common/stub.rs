@@ -105,6 +105,13 @@ impl GhStub {
     /// [`Self::existing_run`], named for how `status` reads it.
     pub fn last_run(self, status: &str, conclusion: &str) -> Self {
         self.existing_run(status, conclusion)
+            .run_on("ship/prepare-deadbeef1234")
+    }
+
+    pub fn run_on(mut self, branch: &str) -> Self {
+        self.env
+            .insert("STUB_EXISTING_RUN_BRANCH".into(), branch.into());
+        self
     }
 
     /// The contents of `ship.release.json` the run "uploaded".
@@ -545,15 +552,15 @@ case "$1 ${2:-}" in
       NOISE="$(printf '{"databaseId":99,"displayTitle":"prepare-release","status":"completed","conclusion":"success","url":"https://github.com/%s/actions/runs/99","headBranch":"%s","event":"push"}' "$REPO" "$BRANCH")"
     fi
     RUNS=""
-    if [ -n "$REF" ] && [ "$REF" = "$BRANCH" ]; then
+    if [ -n "$REF" ] && { [ "$REF" = "$BRANCH" ] || [ -z "$BRANCH" ]; }; then
       # The run this test dispatched, on the ref it was dispatched on.
       RUNS="$(printf '{"databaseId":42,"displayTitle":"prepare-release","status":"%s","conclusion":"%s","url":"https://github.com/%s/actions/runs/42","headBranch":"%s","event":"workflow_dispatch"}' \
-        "${STUB_RUN_STATUS:-completed}" "${STUB_RUN_CONCLUSION:-success}" "$REPO" "$BRANCH")"
-    elif [ "${STUB_EXISTING_RUN:-0}" = "1" ]; then
+        "${STUB_RUN_STATUS:-completed}" "${STUB_RUN_CONCLUSION:-success}" "$REPO" "$REF")"
+    elif [ "${STUB_EXISTING_RUN:-0}" = "1" ] && { [ -z "$BRANCH" ] || [ "${STUB_EXISTING_RUN_BRANCH:-$BRANCH}" = "$BRANCH" ]; }; then
       # A run that was already there before this invocation: a previous
       # dispatch, or one a human started.
       RUNS="$(printf '{"databaseId":41,"displayTitle":"publish-release","status":"%s","conclusion":"%s","url":"https://github.com/%s/actions/runs/41","headBranch":"%s","event":"workflow_dispatch"}' \
-        "${STUB_EXISTING_RUN_STATUS:-completed}" "${STUB_EXISTING_RUN_CONCLUSION:-success}" "$REPO" "$BRANCH")"
+        "${STUB_EXISTING_RUN_STATUS:-completed}" "${STUB_EXISTING_RUN_CONCLUSION:-success}" "$REPO" "${STUB_EXISTING_RUN_BRANCH:-$BRANCH}")"
     fi
     if [ -n "$RUNS" ] && [ -n "$NOISE" ]; then
       printf '[%s,%s]\n' "$RUNS" "$NOISE"

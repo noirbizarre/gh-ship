@@ -117,8 +117,11 @@ another machine, run by someone else.
 
 ## What happens if my laptop dies mid-`prepare`?
 
-Nothing is lost. The workflow keeps running on GitHub. Run `gh ship status` to see
-where things stand, and `gh ship prepare` again to pick up.
+The workflow keeps running on GitHub. `gh ship status` looks through the latest
+100 prepare-workflow dispatches for this line's staging run, even if its ref
+has since been removed. A very busy workflow can push older runs out of that
+window. Re-running `gh ship prepare` starts fresh and sweeps the old staging ref;
+it does not adopt that run.
 
 ## Can two people run `gh ship prepare` at once?
 

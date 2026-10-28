@@ -805,6 +805,30 @@ fn status_reports_the_last_prepare_run() {
 }
 
 #[test]
+fn status_finds_staging_activity_without_a_release_branch_and_ignores_other_refs() {
+    for branch in [
+        "ship/prepare-deadbeef1234",
+        "release/next",
+        "ship/prepare-other-deadbeef1234",
+    ] {
+        let repo = Repo::new(
+            CONFIG,
+            GhStub::new()
+                .branch_exists(false)
+                .existing_run("in_progress", "")
+                .run_on(branch),
+        );
+        let out = repo.ship(&["status", "--json"]);
+        assert_eq!(out.code, 0, "{}", out.diagnostics());
+        let status: serde_json::Value = serde_json::from_str(&out.stdout).unwrap();
+        assert_eq!(
+            status["last_run"].is_null(),
+            branch != "ship/prepare-deadbeef1234"
+        );
+    }
+}
+
+#[test]
 fn status_json_is_machine_readable() {
     let body = format!("Notes\n\n<!-- ship:artifact\n{CHANGED_ARTIFACT}\n-->");
     let repo = Repo::new(CONFIG, GhStub::new().pr_body(&body));
