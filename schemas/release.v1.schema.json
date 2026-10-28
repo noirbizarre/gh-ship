@@ -21,7 +21,7 @@
     },
 
     "changed": {
-      "description": "Whether there is anything to release. When false, gh-ship prints `nothing to release`, exits 0, and touches no branch, PR or release.",
+      "description": "Whether there is anything to release. When false, gh-ship prints `nothing to release`, exits 0, and leaves the release branch, PR, tag and release unchanged. Prepare may create and remove temporary staging branches.",
       "type": "boolean"
     },
 
