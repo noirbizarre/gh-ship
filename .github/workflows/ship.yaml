@@ -1,6 +1,7 @@
+
 name: 🚢 Ship
 
-# gh-ship releases gh-ship. This workflow does none of the release work itself;
+# gh-ship runs the release. This workflow does none of the release work itself;
 # it drives the two halves of the lifecycle:
 #
 #   push to main          -> `gh ship prepare` -> opens or updates the Release PR
@@ -36,17 +37,19 @@ concurrency:
 jobs:
   prepare:
     name: 🚢 Prepare
-    if: github.event_name == 'push'
+    # A public fork's push to main would otherwise also trigger this job,
+    # which then fails noisily for lack of the App/release secrets a fork
+    # does not have.
+    if: github.event_name == 'push' && github.repository_owner == 'noirbizarre'
     runs-on: ubuntu-latest
     # `gh ship prepare` blocks on the dispatched workflow until
     # SHIP_RUN_TIMEOUT expires, 60 minutes by default. Cap the job well below
     # that so a stuck run fails visibly.
     timeout-minutes: 30
 
-    # Same pattern as 🚀 Prepare Release: APP_CLIENT_ID and APP_PRIVATE_KEY
-    # both live in this environment, and starting a release is not itself a
-    # deployment, so it stays out of the deployment history. 📦 Publish
-    # Release is the only job that registers one.
+    # APP_CLIENT_ID and APP_PRIVATE_KEY both live in this environment, and
+    # starting a release is not itself a deployment, so it stays out of the
+    # deployment history. 📦 Publish Release is the only job that registers one.
     environment:
       name: release
       deployment: false
@@ -55,7 +58,6 @@ jobs:
       # An installation token, minted for this job and revoked when it ends.
       # Unlike a PAT it cannot be set once in the job's `env:` — a step output
       # is not resolvable there — so every `gh` step below sets it itself.
-      # See https://noirbizarre.github.io/gh-ship/workflows/#using-a-github-app
       - uses: actions/create-github-app-token@v3
         id: app-token
         with:
@@ -63,13 +65,12 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - uses: actions/checkout@v7
-        # A plain shallow checkout is enough: `gh ship prepare` reads
-        # .github/ship.yml and discovers workflows from .github/workflows,
-        # both of which are in the tree. gh-ship never shells out to git.
+        with:
+          # gh-ship authenticates its own API calls; a persisted default-token
+          # credential here would only be unused attack surface, since nothing
+          # in this job shells out to `git push`.
+          persist-credentials: false
 
-      # gh-ship releases gh-ship: the extension published by the previous
-      # release is what runs the next one. Building from source here was only
-      # ever the 0.1.0 bootstrap.
       - name: Install gh-ship
         run: gh extension install noirbizarre/gh-ship
         env:
@@ -83,16 +84,17 @@ jobs:
   release:
     name: 🚢 Release
     # Only the Release PR, and only when it actually merged — `closed` fires for
-    # abandoned pull requests too.
+    # abandoned pull requests too. Same fork guard as `prepare`, above.
     if: >-
       github.event_name == 'pull_request'
       && github.event.pull_request.merged
       && github.event.pull_request.head.ref == 'release/next'
+      && github.repository_owner == 'noirbizarre'
     runs-on: ubuntu-latest
-    # `gh ship release` waits on the publish workflow, which cross-compiles six
-    # targets. Capped below the App installation token's one-hour lifetime:
-    # a longer job would outlive its own credentials.
-    timeout-minutes: 45
+    # `gh ship release` waits on the publish workflow, which cross-compiles the
+    # whole target matrix. Capped below the App installation token's one-hour
+    # lifetime: a longer job would outlive its own credentials.
+    timeout-minutes: 50
 
     environment:
       name: release
@@ -106,6 +108,8 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Install gh-ship
         run: gh extension install noirbizarre/gh-ship
