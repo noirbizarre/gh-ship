@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1](https://github.com/noirbizarre/gh-ship/compare/0.6.0..0.6.1) - 2026-10-28
+
+### 🔧 CI
+
+- **ship** Streamline preparation and preserve changelog commits - ([3ad60a2](https://github.com/noirbizarre/gh-ship/commit/3ad60a2ffcda39cadab03a652842f312fe42b45c))
+- **ship** Use event routing and renewable app tokens - ([0025511](https://github.com/noirbizarre/gh-ship/commit/002551126c60d24e216e7682ea4b661609b12718))
+
+### 🧹 Chores
+
+- **tpl** Sync streamlined release preparation - ([68d4e0d](https://github.com/noirbizarre/gh-ship/commit/68d4e0d28de54fc797b40b62a5e20bcae00f1a1c))
+- **tpl** Sync gh-ship 0.6 template update - ([832fe12](https://github.com/noirbizarre/gh-ship/commit/832fe128993f5cc3a8143584c55fee7d5f06b8d9))
+
+### Tpl
+
+- Render rust at main - ([e4fa67f](https://github.com/noirbizarre/gh-ship/commit/e4fa67fa7ba5d429e98bd8beccddcd8eab8ebcb3))
+- Render rust at main - ([b11e398](https://github.com/noirbizarre/gh-ship/commit/b11e398da8dc2251dfbad638584ad514c2d94a56))
+
 ## [0.6.0](https://github.com/noirbizarre/gh-ship/compare/0.5.0..0.6.0) - 2026-10-28
 
 ### 💫 Features
@@ -173,7 +190,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### 🔧 CI
 
-- **cliff** Force 0.x versioning until 1.0 - ([3d2c140](https://github.com/noirbizarre/gh-ship/commit/3d2c1402a5f7e21668b7a70576a5d7b7e0bcf8bb))
+- **cliff** Force 0.x versionning until 1.0 - ([3d2c140](https://github.com/noirbizarre/gh-ship/commit/3d2c1402a5f7e21668b7a70576a5d7b7e0bcf8bb))
 - **typos** Allow the near-miss proving nested key suggestions - ([5fd6fed](https://github.com/noirbizarre/gh-ship/commit/5fd6fed5f4af31e7cc2b8db41983bf91f2a24cdd))
 - **typos** Allow the deliberate near-miss, fix the real typo - ([5375ad2](https://github.com/noirbizarre/gh-ship/commit/5375ad23b9c1c7edb571823c09915f0169f28cf8))
 - Keep the mise pin out of mise's own namespace - ([ab9adf1](https://github.com/noirbizarre/gh-ship/commit/ab9adf1bda352d2ec75d2408333a901995b0464e))
@@ -190,6 +207,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### 🐛 Bug Fixes
 
 - **render** Stop the artifact payload closing its own HTML comment - ([2dadfeb](https://github.com/noirbizarre/gh-ship/commit/2dadfebe69a1efc7f7b76ed8dc1e1798c3828618))
+
+### 🏗️ Build
+
+- Harden the changelog config against delimiters and SHAs - ([8a2658a](https://github.com/noirbizarre/gh-ship/commit/8a2658ab371409c8b06dbaa731386008fdcd0d00))
 
 ### 🔧 CI
 
