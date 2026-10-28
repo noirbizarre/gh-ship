@@ -222,7 +222,7 @@ fn release_in_flight(
 
     // A merged PR with no artifact cannot be released from; `gh ship status`
     // already reports that, and preparing afresh is the way out.
-    let Some(artifact) = render::extract_artifact(&pr.body) else {
+    let Some(artifact) = render::extract_artifact(&pr.body)? else {
         return Ok(false);
     };
     let Some(tag) = artifact.tag().filter(|_| artifact.changed) else {

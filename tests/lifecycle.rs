@@ -1452,6 +1452,30 @@ fn release_output_is_stable() {
 // --- labels --------------------------------------------------------------
 
 #[test]
+fn invalid_embedded_protocol_data_never_drives_mutations() {
+    for payload in [
+        r#"{"schemaVersion":2,"changed":false}"#,
+        r#"{"schemaVersion":1,"changed":true,"tag":"v1"}"#,
+        "not json",
+    ] {
+        let body = format!("<!-- ship:artifact\n{payload}\n-->");
+        for command in ["release", "prepare", "status"] {
+            let repo = Repo::new(
+                CONFIG,
+                GhStub::new()
+                    .pr_body(&body)
+                    .pr_state("MERGED")
+                    .merge_commit("abc1234def5678"),
+            );
+            let out = repo.ship(&[command]);
+            assert_ne!(out.code, 0, "{}", out.diagnostics());
+            assert!(!repo.stub.called_with(&["--method"]));
+            assert!(!repo.stub.called_with(&["workflow run"]));
+        }
+    }
+}
+
+#[test]
 fn a_draft_release_blocks_prepare_and_status_advises_resuming() {
     let repo = merged_repo(GhStub::new().draft_release());
     let out = repo.ship(&["prepare"]);

@@ -106,7 +106,11 @@ fn collect(ctx: &Context) -> Result<Status> {
 
     // The artifact lives in the PR body, which is the whole reason
     // gh-ship needs no local state.
-    let artifact = pr.as_ref().and_then(|p| render::extract_artifact(&p.body));
+    let artifact = pr
+        .as_ref()
+        .map(|p| render::extract_artifact(&p.body))
+        .transpose()?
+        .flatten();
 
     // Runs remain queryable after their temporary staging refs are removed.
     let prefix = if ctx.config.has_branches() {

@@ -296,7 +296,7 @@ fn report_pending(theme: Theme, tag: &str, draft: bool) {
 
 /// Read the artifact back out of the Release PR body.
 fn recover_artifact(pr: &PullRequest) -> Result<Artifact> {
-    render::extract_artifact(&pr.body)
+    render::extract_artifact(&pr.body)?
         .ok_or_else(|| ReleaseError::NoArtifact { number: pr.number }.into())
 }
 
