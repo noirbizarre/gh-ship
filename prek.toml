@@ -62,14 +62,21 @@ files = "^(AGENTS\\.md|CONTRIBUTING\\.md|README\\.md|docs/.*\\.md)$"
 additional_dependencies = ["markdownlint-cli2-formatter-pretty"]
 
 [[repos]]
-repo = "local"
+repo = "https://github.com/crate-ci/typos"
+rev = "v1.47.1"
 
 [[repos.hooks]]
 id = "typos"
-name = "typos"
-language = "system"
-entry = "typos"
-pass_filenames = false
+
+# Check the message before it enters release history; do not rewrite it.
+[[repos.hooks]]
+id = "typos"
+alias = "typos-commit-msg"
+args = ["--force-exclude"]
+stages = ["commit-msg"]
+
+[[repos]]
+repo = "local"
 
 [[repos.hooks]]
 id = "fmt"

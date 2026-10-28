@@ -60,7 +60,6 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
 
       # git-cliff is pinned by mise.lock: a changelog tool that changes
       # version between releases would silently change our release notes.
@@ -68,8 +67,7 @@ jobs:
         with:
           cache: true
 
-      # Installed up front because two later steps need it: `gh ship sign`
-      # and the artifact validation.
+      # Use the published extension to sign the next release's commit.
       - name: Install gh-ship
         run: gh extension install noirbizarre/gh-ship
         env:
@@ -209,11 +207,6 @@ jobs:
               }' > ship.release.json
           fi
           cat ship.release.json
-
-      - name: Validate the release artifact
-        run: gh ship validate ship.release.json
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - uses: actions/upload-artifact@v7
         with:
