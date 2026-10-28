@@ -97,7 +97,7 @@ run = "cargo run --"
 
 [tasks.setup]
 description = "Install gh-ship locally"
-run = "cargo install --path . --force"
+run = "cargo install --path . --bin gh-ship --force"
 
 [tasks.schema]
 description = "Validate every artifact fixture against the schema"
