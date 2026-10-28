@@ -1,0 +1,37 @@
+# git-tpl — https://noirbizarre.github.io/git-tpl/configuration/
+#
+# This file is versioned with the project. Edit an answer and run
+# `git tpl update` to re-render the template with it.
+
+[template]
+source = "https://github.com/noirbizarre/rust.tpl"
+
+[answers]
+archive = false
+aur = false
+author = "Axel H. <noirbizarre@gmail.com>"
+bin_name = "gh-ship"
+categories = "command-line-utilities,development-tools"
+copyright_holder = "Axel H."
+copyright_year = 2026
+crate = "gh-ship"
+description = "The GitHub Release Orchestrator — a gh CLI extension that orchestrates Release PRs and GitHub Actions release workflows"
+docs = true
+docs_accent = "indigo"
+homebrew = false
+keywords = "github,release,gh-extension,cli,release-automation"
+kind = "library-and-binary"
+man_pages = false
+msrv = true
+msrv_version = "1.88"
+owner = "noirbizarre"
+publish = false
+service = false
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+]
