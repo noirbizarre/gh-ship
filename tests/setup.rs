@@ -242,6 +242,36 @@ fn call_only_diagnostic_is_stable() {
 // --- init ---------------------------------------------------------------
 
 #[test]
+fn prepare_requires_a_boolean_dispatch_dry_run() {
+    for (declaration, valid) in [
+        (
+            "  workflow_dispatch: {}\n  workflow_call:\n    inputs:\n      dry_run: {type: boolean}\n",
+            false,
+        ),
+        (
+            "  workflow_dispatch:\n    inputs:\n      dry_run: {type: string}\n",
+            false,
+        ),
+        (
+            "  workflow_dispatch:\n    inputs:\n      dry_run: {}\n",
+            false,
+        ),
+        (
+            "  workflow_dispatch:\n    inputs:\n      dry_run: {type: boolean}\n",
+            true,
+        ),
+    ] {
+        let workflow = format!("on:\n{declaration}");
+        let dir = repo(Some(MINIMAL_CONFIG), &[("prepare-release.yml", &workflow)]);
+        let out = validate_in(dir.path());
+        assert_eq!(out.code, if valid { 0 } else { 1 }, "{}", out.diagnostics());
+        if !valid {
+            assert!(out.diagnostics().contains("workflow_dispatch.inputs"));
+        }
+    }
+}
+
+#[test]
 fn init_refuses_to_clobber_an_existing_config() {
     let dir = repo(Some(MINIMAL_CONFIG), &[("prepare-release.yml", CONFORMING)]);
     let out = Outcome::run(ship().current_dir(dir.path()).arg("init"));
