@@ -64,9 +64,13 @@ longer than about 50 minutes cannot be waited on with a single token. Use
 [`gh ship release --no-wait`](workflows.md#long-publish-builds) instead, or
 [retry with a fresh token](workflows.md#retrying-with-a-fresh-token).
 
-When a command runs inside a workflow of your own, set `timeout-minutes` on the
-job *below* these values, so a stuck run fails the job visibly rather than
-sitting until GitHub's own six-hour limit.
+When a command runs inside a workflow of your own, set an explicit job
+`timeout-minutes`. For graceful timeout handling and retries, each gh-ship wait
+must expire *before* the remaining job budget, with headroom for queueing,
+token refresh, and subsequent attempts. The retry examples in
+[Workflows](workflows.md#retrying-with-a-fresh-token) budget for this.
+A shorter job timeout is a hard cancellation instead: GitHub may terminate
+the command before it returns exit `75`, so its retry logic cannot run.
 
 The `SHIP_RUN_TIMEOUT` default of 3600 s is exactly the lifetime of a GitHub App
 installation token. Inside GitHub Actions, gh-ship warns when the timeout is at
