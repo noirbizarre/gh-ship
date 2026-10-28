@@ -391,6 +391,30 @@ fn staging_cleanup_ignores_other_lines_and_malformed_tokens() {
 }
 
 #[test]
+fn status_filters_staging_runs_by_full_line_identity_even_after_ref_cleanup() {
+    use sha2::{Digest, Sha256};
+    for (line, expected) in [("release/1.x", true), ("release-1.x", false)] {
+        for (state, conclusion) in [("in_progress", ""), ("completed", "success")] {
+            let branch = format!(
+                "ship/prepare-{:x}-deadbeef1234",
+                Sha256::digest(line.as_bytes())
+            );
+            let repo = Repo::new(
+                LINES,
+                stub()
+                    .branch_exists(false)
+                    .existing_run(state, conclusion)
+                    .run_on(&branch),
+            );
+            let out = repo.ship(&["status", "--base", "release/1.x", "--json"]);
+            assert_eq!(out.code, 0, "{}", out.diagnostics());
+            let status: serde_json::Value = serde_json::from_str(&out.stdout).unwrap();
+            assert_eq!(!status["last_run"].is_null(), expected);
+        }
+    }
+}
+
+#[test]
 fn glob_self_targets_and_mixed_collisions_are_refused() {
     for (branches, template) in [
         ("[\"release/*\"]", "release/{{ match }}"),
