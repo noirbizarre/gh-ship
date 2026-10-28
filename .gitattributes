@@ -1,0 +1,3 @@
+# Diagnostic snapshots assert parser positions in these exact input bytes.
+# CRLF checkout on Windows changes where malformed JSON is reported.
+/tests/fixtures/** text eol=lf
