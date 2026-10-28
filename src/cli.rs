@@ -43,6 +43,9 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Prepare or release automatically from the GitHub Actions event.
+    Run(RunArgs),
+
     /// Make this repository gh-ship enabled.
     Init(InitArgs),
 
@@ -100,6 +103,19 @@ pub struct ReleaseArgs {
 #[derive(Debug, clap::Args)]
 pub struct PrepareArgs {
     /// Dispatch the workflow but do not wait for it to finish.
+    #[arg(long)]
+    pub no_wait: bool,
+
+    #[command(flatten)]
+    pub base: BaseArgs,
+}
+
+#[derive(Debug, clap::Args)]
+#[command(
+    after_help = "Requires GitHub Actions. The event selects the release line; --base must match it. Unsupported events skip successfully."
+)]
+pub struct RunArgs {
+    /// Dispatch the selected workflow without waiting for it to finish.
     #[arg(long)]
     pub no_wait: bool,
 
@@ -201,10 +217,11 @@ mod tests {
 
     #[test]
     fn base_is_accepted_by_every_lifecycle_command() {
-        for command in ["prepare", "preview", "release", "status"] {
+        for command in ["run", "prepare", "preview", "release", "status"] {
             let cli = Cli::try_parse_from(["gh-ship", command, "--base", "release/1.x"])
                 .unwrap_or_else(|e| panic!("{command} should accept --base: {e}"));
             let base = match cli.command {
+                Command::Run(a) => a.base.base,
                 Command::Prepare(a) => a.base.base,
                 Command::Preview(a) => a.base.base,
                 Command::Release(a) => a.base.base,

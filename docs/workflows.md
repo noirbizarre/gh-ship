@@ -311,15 +311,19 @@ history. Publishing one is, so it does — and its `url` links straight to the r
 
 ## Releasing on every push
 
-To have gh-ship check for a release on every push to your default branch, add a
-workflow that runs `gh ship prepare`. It performs no release work itself — it
-dispatches your prepare workflow and manages the Release PR.
+Use `gh ship run` in a single job to prepare on pushes and release when the
+Release PR merges. The command detects the phase from the Actions event and
+your configured release branches. Your prepare and publish workflows still
+own version changes, changelog generation, and asset builds.
 
 ```yaml
 name: 🚢 Ship
 
 on:
   push:
+    branches: [main]
+  pull_request:
+    types: [closed]
     branches: [main]
 
 permissions:
@@ -333,12 +337,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  prepare:
+  ship:
+    # Skip unmerged and fork PRs before starting credential setup. gh-ship
+    # checks the configured release branch itself.
+    if: >-
+      github.event_name == 'push'
+      || (github.event.pull_request.merged
+          && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
-    # `gh ship prepare` blocks on the dispatched run until `SHIP_RUN_TIMEOUT`
+    # `gh ship run` blocks on the dispatched run until `SHIP_RUN_TIMEOUT`
     # expires, 60 minutes by default. Capping below that makes a stuck run
     # fail the job visibly. See [Waiting](cli.md#waiting).
-    timeout-minutes: 30
+    timeout-minutes: 45
     environment:
       name: release
       deployment: false
@@ -350,39 +360,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: gh extension install noirbizarre/gh-ship
-      - run: gh ship prepare
+      - run: gh ship run
 ```
 
-Add a second job to release when that PR merges, and the whole lifecycle runs
-itself:
-
-```yaml
-on:
-  push:
-    branches: [main]
-  pull_request:
-    types: [closed]
-
-jobs:
-  prepare:
-    if: github.event_name == 'push'
-    # ... gh ship prepare
-
-  release:
-    # `closed` fires for abandoned pull requests too, so check it merged.
-    if: >-
-      github.event_name == 'pull_request'
-      && github.event.pull_request.merged
-      && github.event.pull_request.head.ref == 'release/next'
-    # ... gh ship release
-```
-
-So:
+The resulting lifecycle:
 
 | Event | What happens |
 |---|---|
-| push to your default branch | `gh ship prepare` opens or updates the Release PR |
-| the Release PR merges | `gh ship release` tags, drafts, attaches assets, publishes |
+| push to your default branch | `gh ship run` prepares: opens or updates the Release PR |
+| the Release PR merges | `gh ship run` releases: tags, drafts, attaches assets, publishes |
+| another PR closes | `gh ship run` skips successfully |
+
+For multiple [release lines](configuration.md#release-lines), include their base
+branches in both event filters. The shared `ship` concurrency group serializes
+all lines; to allow independent lines to run concurrently, use
+`ship-${{ github.base_ref || github.ref_name }}`. The base branch then gives both
+events for a release line the same group. Do not use the PR head branch as the
+group key. GitHub concurrency does not guarantee FIFO ordering or retain an
+unlimited queue of pending runs.
 
 A push with nothing to release costs one prepare-release run reporting
 `changed: false`, and exits 0.
@@ -398,7 +393,7 @@ A push with nothing to release costs one prepare-release run reporting
     run, and cancelling would orphan that run rather than stop it.
 
     Merging fires **both** triggers, since the merge is also a push. The
-    concurrency queue keeps them from interleaving, and either order is
+    concurrency group keeps active runs from interleaving, and either order is
     correct — if `prepare` goes first it stops at the pending-release guard, and
     if `release` goes first the next `prepare` finds nothing to release.
 

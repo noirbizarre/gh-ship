@@ -73,6 +73,10 @@ $ gh ship release
 Tags the merge commit, creates the release as a draft, dispatches your publish
 workflow to attach assets, then makes the release visible.
 
+To automate both phases, use `gh ship run` in a
+[single-job Ship workflow](workflows.md#releasing-on-every-push). Pushes prepare
+the Release PR; merging that PR releases it.
+
 ## Where am I?
 
 At any point:

@@ -171,6 +171,18 @@ impl GhStub {
         self
     }
 
+    pub fn pr_identity(mut self, json: &str) -> Self {
+        self.env.insert("STUB_PR_IDENTITY".into(), json.into());
+        self
+    }
+
+    /// Keep branch lookup open while viewing the triggering PR as merged.
+    pub fn viewed_pr_merged(mut self) -> Self {
+        self.env
+            .insert("STUB_VIEW_PR_STATE".into(), "MERGED".into());
+        self
+    }
+
     pub fn release_exists(mut self, yes: bool) -> Self {
         self.env.insert("STUB_RELEASE_EXISTS".into(), bool_env(yes));
         self
@@ -567,10 +579,10 @@ case "$1 ${2:-}" in
     ;;
 
   "pr view")
-    printf '{"number":7,"url":"https://github.com/%s/pull/7","title":"Release 1.0.0","body":%s,"state":"%s","isDraft":false,"mergeCommit":%s}\n' \
-      "$REPO" \
+    printf '{"number":%s,"url":"https://github.com/%s/pull/7","title":"Release 1.0.0","body":%s,"state":"%s","isDraft":false,"mergeCommit":%s}\n' \
+      "${3:-7}" "$REPO" \
       "${STUB_PR_BODY_JSON:-\"\"}" \
-      "${STUB_PR_STATE:-OPEN}" \
+      "${STUB_VIEW_PR_STATE:-${STUB_PR_STATE:-OPEN}}" \
       "$(if [ -n "${STUB_MERGE_SHA:-}" ]; then printf '{"oid":"%s"}' "$STUB_MERGE_SHA"; else printf 'null'; fi)"
     ;;
 
@@ -647,6 +659,9 @@ case "$1 ${2:-}" in
     esac
     TARGET="${2:-}"
     case "$TARGET" in
+      *"/pulls/"*)
+        printf '%s\n' "${STUB_PR_IDENTITY:-null}"
+        ;;
       *"/branches/"*)
         [ "${STUB_BRANCH_EXISTS:-1}" = "1" ] || { echo "HTTP 404: Not Found" >&2; exit 1; }
         ;;

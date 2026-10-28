@@ -78,6 +78,7 @@ src/
     repo.rs        #   branches, PRs, releases
   commands/        # one module per subcommand
     context.rs     #   the shared dispatch → wait → validate sequence
+    run.rs         #   Actions event -> prepare, release, or skip
   config.rs        # .github/ship.yml
   detect.rs        # which branch are we releasing from?
   branches.rs      # base branch -> release line
@@ -108,6 +109,13 @@ release line or five.
 `detect.rs` reads `.git/HEAD` directly rather than shelling out to `git`. `gh`
 is the only subprocess gh-ship spawns, and keeping it that way costs ten lines
 and buys a detection story with no `PATH` dependency and no way to fetch.
+
+`gh ship run` is the event-driven entry point. It takes push branches from the
+event payload and merged PR identity from GitHub, matching the same configured
+release lines without falling back to a different branch. Release execution is
+bound to the triggering PR number, not a search that could select a newer open
+PR. Both phases reuse the explicit lifecycle commands' execution paths. A shared
+workflow concurrency group is still required to serialize push and merge runs.
 
 ### Dispatch correlation
 

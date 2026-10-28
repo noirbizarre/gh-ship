@@ -37,10 +37,14 @@ Detection only applies when `branches` is configured; otherwise the repository
 default branch is used, exactly as before. `gh ship status` always reports which
 source it used.
 
+`run` also accepts `--base`, but takes its branch from the triggering event.
+An explicit base must agree with that branch; it cannot redirect an event to
+another release line.
+
 ## Waiting
 
-`preview`, `prepare` and `release` all block on a workflow run they dispatched,
-unless `prepare` or `release` is given `--no-wait` ([`prepare`](#gh-ship-prepare),
+`run`, `preview`, `prepare` and `release` all block on a workflow run they dispatched,
+unless `run`, `prepare` or `release` is given `--no-wait` ([`prepare`](#gh-ship-prepare),
 [`release`](#gh-ship-release)). Two environment
 variables cap how long they wait:
 
@@ -70,6 +74,36 @@ or above that, since a wait that long outlives the token. Lower it, and when it
 expires the command exits with [code `75`](#exit-codes), which a workflow can
 retry with a fresh token. The warning does not appear when gh-ship mints its own
 token, since that one is replaced before it expires.
+
+## `gh ship run`
+
+```sh
+gh ship run [--base <BRANCH>] [--no-wait]
+```
+
+An automatic entry point for a [single-job Ship workflow](workflows.md#releasing-on-every-push).
+It reads `GITHUB_EVENT_NAME` and the JSON payload at `GITHUB_EVENT_PATH`, with
+`GITHUB_ACTIONS=true`:
+
+| Event | Behavior |
+|---|---|
+| Branch push | Prepare when the branch matches a configured release line, or the repository default branch without `branches`. |
+| Closed, merged Release PR | Release that exact PR when its head and base match the configured line and both belong to the target repository. |
+| Other events or unrelated PRs | Skip successfully, reporting why. |
+
+Tag pushes, branch deletions, and unconfigured branches also skip. PR identity
+is checked against GitHub, including when the payload omits its PR object but
+retains its number. A newer open Release PR cannot replace the triggering PR.
+Labels are not used for detection, and this command never merges a PR.
+
+`--no-wait` is passed to the selected phase: prepare leaves its staging workflow
+running; release leaves publication pending. Use the explicit lifecycle command
+to resume it. Manual dispatch and `workflow_run` events are not automatically
+routed; call `prepare` or `release` explicitly for those workflows.
+
+Outside Actions, or when a supported event's payload is missing or malformed,
+the command fails with a diagnostic. Use `gh ship prepare` and `gh ship release`
+locally. `--base` / `SHIP_BASE_BRANCH` must match the event branch.
 
 ## Authentication
 
