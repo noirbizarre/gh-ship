@@ -319,6 +319,8 @@ fn a_release_branch_that_is_a_base_branch_is_refused() {
 
 #[test]
 fn staging_branches_are_scoped_to_their_release_line() {
+    use sha2::{Digest, Sha256};
+    let prefix = format!("ship/prepare-{:x}-", Sha256::digest(b"release/1.x"));
     let repo = Repo::new(LINES, stub());
     let out = repo.ship(&["prepare", "--base", "release/1.x"]);
 
@@ -329,12 +331,12 @@ fn staging_branches_are_scoped_to_their_release_line() {
     // out from under its workflow.
     assert!(
         repo.stub
-            .called_with(&["matching-refs/heads/ship/prepare-release-1.x-"]),
+            .called_with(&[&format!("matching-refs/heads/{prefix}")]),
         "the sweep must be scoped to the line: {:?}",
         repo.stub.calls()
     );
     assert!(
-        repo.stub.called_with(&["ship/prepare-release-1.x-"]),
+        repo.stub.called_with(&[&prefix]),
         "the staging branch carries the line: {:?}",
         repo.stub.calls()
     );
@@ -359,6 +361,34 @@ fn each_line_gets_its_own_release_branch_and_pull_request() {
 }
 
 // --- Back-compatibility --------------------------------------------------
+
+#[test]
+fn staging_cleanup_ignores_other_lines_and_malformed_tokens() {
+    use sha2::{Digest, Sha256};
+    for (base, other) in [("release/1.x", "release-1.x"), ("main", "main-next")] {
+        let own = format!("ship/prepare-{:x}-", Sha256::digest(base.as_bytes()));
+        let foreign = format!(
+            "ship/prepare-{:x}-deadbeef1234",
+            Sha256::digest(other.as_bytes())
+        );
+        let config = format!(
+            "version: 1\nbranches: [{base}, {other}]\nrelease_branch: 'next/{{{{ branch }}}}'\nworkflows:\n  prepare: prepare-release\n"
+        );
+        for stale in [
+            foreign,
+            format!("{own}deadbeef1234-extra"),
+            format!("{own}deadbeef1234"),
+        ] {
+            let repo = Repo::new(&config, stub().stale_staging_branch(&stale));
+            let out = repo.ship(&["prepare", "--base", base]);
+            assert_eq!(out.code, 0, "{}", out.diagnostics());
+            assert_eq!(
+                repo.stub.called_with(&[&stale, "DELETE"]),
+                stale == format!("{own}deadbeef1234")
+            );
+        }
+    }
+}
 
 #[test]
 fn glob_self_targets_and_mixed_collisions_are_refused() {

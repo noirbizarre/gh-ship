@@ -1964,7 +1964,7 @@ fn a_staging_branch_that_cannot_be_deleted_does_not_fail_the_release() {
         CONFIG,
         GhStub::new()
             .artifact(CHANGED_ARTIFACT)
-            .stale_staging_branch("ship/prepare-undeletable")
+            .stale_staging_branch("ship/prepare-deadbeef1234")
             .branch_delete_fails(),
     );
     let out = repo.ship(&["prepare"]);

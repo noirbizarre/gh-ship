@@ -235,8 +235,9 @@ the branch — and so the run dispatched on it — belong to exactly one prepare
 A run that fails part-way leaves one behind, so each prepare sweeps them first.
 
 With [release lines](configuration.md#release-lines) configured the name also
-carries the line — `ship/prepare-<base>-<token>` — and the sweep is filtered to
-that same prefix. Two lines can then prepare concurrently without either one
+carries a SHA-256 identity of the full base name — `ship/prepare-<hash>-<token>` —
+and the sweep checks that identity and the invocation-token format. Two lines
+can then prepare concurrently without either one
 deleting the ref the other's `workflow_dispatch` is running on.
 
 ### Draft-first releases

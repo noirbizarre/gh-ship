@@ -289,11 +289,12 @@ place.
     Step 2 deletes staging branches, including one a concurrent run is using,
     so two prepares on the same line must not overlap.
 
-    Without `branches`, the sweep covers every `ship/prepare-*` branch:
+    Without `branches`, the sweep covers `ship/prepare-<token>` branches:
     serialise everything with `concurrency: group: ship`, as the sample
     workflow in [Workflows](workflows.md) does.
 
-    With `branches` configured the sweep is scoped to the line's own prefix, so
+    With `branches` configured the sweep uses a hash of the full base name and
+    checks the invocation-token format, so
     different lines never collide and may prepare concurrently. Key the group
     by branch instead — `group: ship-${{ github.ref }}`.
 

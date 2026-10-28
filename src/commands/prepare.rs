@@ -281,21 +281,15 @@ pub const STAGING_PREFIX: &str = "ship/prepare-";
 /// destroying the ref its `workflow_dispatch` is running on. The line
 /// therefore becomes part of the name and part of the sweep filter.
 pub fn staging_prefix(base: &str) -> String {
-    format!("{STAGING_PREFIX}{}-", slug(base))
+    use sha2::{Digest, Sha256};
+    format!("{STAGING_PREFIX}{:x}-", Sha256::digest(base.as_bytes()))
 }
 
-/// A branch name reduced to one git-ref-safe path segment.
-fn slug(branch: &str) -> String {
+/// Match exactly one invocation token, not a nested or overlapping prefix.
+pub(super) fn owns_staging(prefix: &str, branch: &str) -> bool {
     branch
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '.' {
-                c
-            } else {
-                '-'
-            }
-        })
-        .collect()
+        .strip_prefix(prefix)
+        .is_some_and(|token| token.len() == 12 && token.bytes().all(|b| b.is_ascii_hexdigit()))
 }
 
 /// The staging branch name for a run.
@@ -349,6 +343,9 @@ fn promote(ctx: &Context, staging: &str, release: &str) -> Result<()> {
 /// the Release PR is the lock, and there is one per line.
 fn sweep_staging_branches(ctx: &Context, prefix: &str) {
     for branch in repo::matching_branches(&ctx.gh, prefix) {
+        if !owns_staging(prefix, &branch) {
+            continue;
+        }
         if repo::delete_branch(&ctx.gh, &branch).is_err() {
             eprintln!(
                 "{}",
