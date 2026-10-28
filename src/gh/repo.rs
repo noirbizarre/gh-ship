@@ -601,9 +601,19 @@ pub fn create_release(gh: &Gh, release: &NewRelease<'_>) -> Result<String, GhErr
 }
 
 /// Publish a draft release.
-pub fn publish_release(gh: &Gh, tag: &str) -> Result<(), GhError> {
-    gh.run_scoped(&["release", "edit", tag, "--draft=false"])
-        .map(|_| ())
+pub fn publish_release(gh: &Gh, tag: &str, make_latest: Option<bool>) -> Result<(), GhError> {
+    // Drafts cannot be latest. Apply the explicit preference at publication,
+    // rather than relying on it surviving draft creation on GitHub.
+    let mut args = vec![
+        "release".to_string(),
+        "edit".into(),
+        tag.into(),
+        "--draft=false".into(),
+    ];
+    if let Some(latest) = make_latest {
+        args.push(format!("--latest={latest}"));
+    }
+    gh.run_scoped(&args).map(|_| ())
 }
 
 /// Whether a release already exists for a tag.

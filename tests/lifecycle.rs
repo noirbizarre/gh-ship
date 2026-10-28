@@ -1462,6 +1462,42 @@ fn release_output_is_stable() {
 // --- labels --------------------------------------------------------------
 
 #[test]
+fn latest_preference_is_applied_when_publishing_a_draft() {
+    for latest in [Some(true), Some(false), None] {
+        let mut artifact: serde_json::Value = serde_json::from_str(CHANGED_ARTIFACT).unwrap();
+        if let Some(latest) = latest {
+            artifact["release"]["make_latest"] = latest.into();
+        } else {
+            artifact["release"]
+                .as_object_mut()
+                .unwrap()
+                .remove("make_latest");
+        }
+        let body = format!("<!-- ship:artifact\n{artifact}\n-->");
+        let repo = Repo::new(
+            CONFIG,
+            GhStub::new()
+                .draft_release()
+                .pr_body(&body)
+                .pr_state("MERGED")
+                .merge_commit("abc1234def5678"),
+        );
+        let out = repo.ship(&["release"]);
+        assert_eq!(out.code, 0, "{}", out.diagnostics());
+        let call = repo
+            .stub
+            .calls()
+            .into_iter()
+            .find(|c| c.starts_with("release edit"))
+            .unwrap();
+        match latest {
+            Some(latest) => assert!(call.contains(&format!("--latest={latest}")), "{call}"),
+            None => assert!(!call.contains("--latest"), "{call}"),
+        }
+    }
+}
+
+#[test]
 fn invalid_embedded_protocol_data_never_drives_mutations() {
     for payload in [
         r#"{"schemaVersion":2,"changed":false}"#,
