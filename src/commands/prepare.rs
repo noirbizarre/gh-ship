@@ -282,7 +282,12 @@ pub const STAGING_PREFIX: &str = "ship/prepare-";
 /// therefore becomes part of the name and part of the sweep filter.
 pub fn staging_prefix(base: &str) -> String {
     use sha2::{Digest, Sha256};
-    format!("{STAGING_PREFIX}{:x}-", Sha256::digest(base.as_bytes()))
+    // Encode bytes explicitly: sha2 0.11's digest output no longer implements LowerHex.
+    let hash: String = Sha256::digest(base.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    format!("{STAGING_PREFIX}{hash}-")
 }
 
 /// Match exactly one invocation token, not a nested or overlapping prefix.
