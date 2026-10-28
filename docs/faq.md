@@ -137,10 +137,12 @@ and there is one per line. Serialise with `concurrency: group: ship`, as the
 sample workflow in [Workflows](workflows.md) does.
 
 Different [release lines](configuration.md#release-lines) *can* prepare
-concurrently. Their staging branches are named after the line
-(`ship/prepare-release-1.x-<token>`) and each sweep is scoped to its own, so
-`main` and `release/1.x` never collide. Key the concurrency group by branch —
-`group: ship-${{ github.ref }}` — to allow it.
+concurrently. Their staging branches include a hash of the full base name
+(`ship/prepare-<hash>-<token>`) and each sweep checks its own line identity.
+For a **prepare-only** workflow, key the concurrency group by branch —
+`group: ship-${{ github.ref }}` — to allow it. A combined push/PR lifecycle
+must instead derive its key from the base branch so both events serialize
+together; see [releasing on every push](workflows.md#releasing-on-every-push).
 
 ## Can the staging branches be hidden?
 
