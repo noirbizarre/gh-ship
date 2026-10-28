@@ -94,11 +94,11 @@ miette = { version = "7", features = ["fancy"] }
 # `${{ }}` verbatim: see the delimiter note in src/templates.rs.
 minijinja = { version = "2", features = ["loader", "custom_syntax"] }
 owo-colors = "4"
-rsa = "0.9"
+rsa = { version = "0.9", features = ["sha2"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 serde_norway = "0.9"
-sha2 = { version = "0.10", features = ["oid"] }
+sha2 = { version = "0.11", features = ["oid"] }
 strsim = "0.11"
 tempfile = "3"
 thiserror = "2"

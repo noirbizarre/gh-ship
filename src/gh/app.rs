@@ -25,9 +25,10 @@ use rsa::RsaPrivateKey;
 use rsa::pkcs1::DecodeRsaPrivateKey;
 use rsa::pkcs1v15::SigningKey;
 use rsa::pkcs8::DecodePrivateKey;
+// RSA 0.9 requires the digest traits from its compatible SHA-256 version.
+use rsa::sha2::Sha256;
 use rsa::signature::{SignatureEncoding, Signer};
 use serde::Deserialize;
-use sha2::Sha256;
 
 use super::cli::GhError;
 

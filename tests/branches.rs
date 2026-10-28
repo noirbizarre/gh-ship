@@ -319,8 +319,8 @@ fn a_release_branch_that_is_a_base_branch_is_refused() {
 
 #[test]
 fn staging_branches_are_scoped_to_their_release_line() {
-    use sha2::{Digest, Sha256};
-    let prefix = format!("ship/prepare-{:x}-", Sha256::digest(b"release/1.x"));
+    // A fixed SHA-256 vector catches changes to the persisted branch-name format.
+    let prefix = "ship/prepare-81caa6e9876b5588653c80e8c0c5f3f21f21bb486f42bbb424d566bc64fdda76-";
     let repo = Repo::new(LINES, stub());
     let out = repo.ship(&["prepare", "--base", "release/1.x"]);
 
@@ -336,7 +336,7 @@ fn staging_branches_are_scoped_to_their_release_line() {
         repo.stub.calls()
     );
     assert!(
-        repo.stub.called_with(&[&prefix]),
+        repo.stub.called_with(&[prefix]),
         "the staging branch carries the line: {:?}",
         repo.stub.calls()
     );
@@ -364,13 +364,23 @@ fn each_line_gets_its_own_release_branch_and_pull_request() {
 
 #[test]
 fn staging_cleanup_ignores_other_lines_and_malformed_tokens() {
-    use sha2::{Digest, Sha256};
-    for (base, other) in [("release/1.x", "release-1.x"), ("main", "main-next")] {
-        let own = format!("ship/prepare-{:x}-", Sha256::digest(base.as_bytes()));
-        let foreign = format!(
-            "ship/prepare-{:x}-deadbeef1234",
-            Sha256::digest(other.as_bytes())
-        );
+    // Fixed hashes keep cleanup compatibility independent of the production encoder.
+    for (base, other, own_hash, other_hash) in [
+        (
+            "release/1.x",
+            "release-1.x",
+            "81caa6e9876b5588653c80e8c0c5f3f21f21bb486f42bbb424d566bc64fdda76",
+            "b38b6c7329621dafb08c4eba241d44808759b05333de646e1602cfa11998b04d",
+        ),
+        (
+            "main",
+            "main-next",
+            "0d6e4079e36703ebd37c00722f5891d28b0e2811dc114b129215123adcce3605",
+            "178e22364b110af2efd447b5f866c162b439e5d16181519e0da0357f1b99032c",
+        ),
+    ] {
+        let own = format!("ship/prepare-{own_hash}-");
+        let foreign = format!("ship/prepare-{other_hash}-deadbeef1234");
         let config = format!(
             "version: 1\nbranches: [{base}, {other}]\nrelease_branch: 'next/{{{{ branch }}}}'\nworkflows:\n  prepare: prepare-release\n"
         );
@@ -392,13 +402,18 @@ fn staging_cleanup_ignores_other_lines_and_malformed_tokens() {
 
 #[test]
 fn status_filters_staging_runs_by_full_line_identity_even_after_ref_cleanup() {
-    use sha2::{Digest, Sha256};
-    for (line, expected) in [("release/1.x", true), ("release-1.x", false)] {
+    for (hash, expected) in [
+        (
+            "81caa6e9876b5588653c80e8c0c5f3f21f21bb486f42bbb424d566bc64fdda76",
+            true,
+        ),
+        (
+            "b38b6c7329621dafb08c4eba241d44808759b05333de646e1602cfa11998b04d",
+            false,
+        ),
+    ] {
         for (state, conclusion) in [("in_progress", ""), ("completed", "success")] {
-            let branch = format!(
-                "ship/prepare-{:x}-deadbeef1234",
-                Sha256::digest(line.as_bytes())
-            );
+            let branch = format!("ship/prepare-{hash}-deadbeef1234");
             let repo = Repo::new(
                 LINES,
                 stub()
