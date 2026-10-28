@@ -101,8 +101,10 @@ retains its number. A newer open Release PR cannot replace the triggering PR.
 Labels are not used for detection, and this command never merges a PR.
 
 `--no-wait` is passed to the selected phase: prepare leaves its staging workflow
-running; release leaves publication pending. Use the explicit lifecycle command
-to resume it. Manual dispatch and `workflow_run` events are not automatically
+running; release leaves publication pending. Re-running `release` can adopt its
+publish run. Re-running `prepare` starts a new preparation and sweeps the old
+staging ref, so allow enough time for one complete preparation.
+Manual dispatch and `workflow_run` events are not automatically
 routed; call `prepare` or `release` explicitly for those workflows.
 
 Outside Actions, or when a supported event's payload is missing or malformed,
@@ -180,13 +182,13 @@ machine-readable payloads — `--json`, and the rendered PR body from
 |---|---|
 | `0` | Success. **Including `changed: false`.** |
 | `1` | Failure. |
-| `75` | Timed out waiting for a run (`SHIP_RUN_TIMEOUT`) that is **still in flight**. Re-run the command to resume it. |
+| `75` | Timed out waiting for a run (`SHIP_RUN_TIMEOUT`) that is **still in flight**. `release` can adopt it on retry; `prepare` and `preview` restart work. |
 
 Code `75` is `EX_TEMPFAIL` from `sysexits.h`. It is distinct from `1` so a
 workflow can retry on this case alone — for instance with a fresh token —
 without treating a real failure, such as a failed or cancelled run, as
 retryable. A run that never *appeared* (`SHIP_APPEAR_TIMEOUT`) is not
-resumable and still exits `1`.
+reported as a completion timeout and still exits `1`.
 
 !!! note "`nothing to release` is not a failure"
 

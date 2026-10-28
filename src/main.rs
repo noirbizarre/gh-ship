@@ -24,9 +24,9 @@ mod exit {
     pub const FAILURE: u8 = 1;
     /// Gave up waiting for a dispatched run that is still in flight.
     ///
-    /// `EX_TEMPFAIL` from `sysexits.h`. Re-running the command resumes the
-    /// run, so a workflow can retry on this code alone without treating a
-    /// real failure as retryable.
+    /// `EX_TEMPFAIL` from `sysexits.h`. Publication can resume on retry;
+    /// prepare and preview restart. Callers can distinguish this timeout
+    /// from a failed workflow without assuming every phase is resumable.
     pub const TIMEOUT: u8 = 75;
 }
 
