@@ -45,7 +45,7 @@ pub const WORKFLOW_DIR: &str = ".github/workflows";
 /// |---|---|---|
 /// | **slug** | `prepare-release` | configuration and all human output |
 /// | **id** | `prepare-release.yaml` | arguments passed to `gh` |
-/// | **name** | `🚢 Prepare Release` | display only, never matched on |
+/// | **name** | `🚢 Prepare Release` | display and compatibility fallback matching |
 ///
 /// The slug is the stable identity: a display name is free-form, may
 /// carry emoji, and may be changed at any time without breaking a
