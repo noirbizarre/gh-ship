@@ -426,6 +426,32 @@ pub fn view_pull_request(gh: &Gh, number: u64) -> Result<PullRequest, GhError> {
     gh.json_scoped(&["pr", "view", &number.to_string(), "--json", PR_FIELDS])
 }
 
+/// Current routing identity of an event's PR, including fork provenance.
+#[derive(Debug, Deserialize)]
+pub struct PullRequestIdentity {
+    pub merged: bool,
+    pub base: PullRequestRef,
+    pub head: PullRequestRef,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PullRequestRef {
+    #[serde(rename = "ref")]
+    pub branch: String,
+    pub repo: Option<PullRequestRepository>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PullRequestRepository {
+    pub full_name: String,
+}
+
+/// Use REST here because its head/base repositories also identify same-named
+/// fork branches. An event can omit its PR object; the number remains usable.
+pub fn pull_request_identity(gh: &Gh, number: u64) -> Result<PullRequestIdentity, GhError> {
+    gh.json(&["api", &format!("repos/{}/pulls/{number}", gh.slug()?)])
+}
+
 /// What a Release PR says, independent of where it points.
 ///
 /// A struct rather than a parameter list, for the same reason as

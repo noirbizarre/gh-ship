@@ -97,6 +97,37 @@ pub fn resolve_repo(cli: &Cli) -> Result<(Gh, Repository)> {
 }
 
 impl Context {
+    /// Match an event branch without falling back to a different release line.
+    pub(super) fn for_event(
+        cli: &Cli,
+        base: &str,
+        theme: Theme,
+        gh: Gh,
+        repository: Repository,
+    ) -> Result<Option<Self>> {
+        let config = Config::load(&cli.config)?;
+        let line = if config.has_branches() {
+            match branches::resolve(&config, base) {
+                Ok(line) => line,
+                Err(branches::BranchError::NoMatch { .. }) => return Ok(None),
+                Err(err) => return Err(err.into()),
+            }
+        } else if base == repository.default_branch.name {
+            branches::single(&config, base)?
+        } else {
+            return Ok(None);
+        };
+        Ok(Some(Self {
+            gh,
+            config,
+            repository,
+            theme,
+            root: repo_root(&cli.config),
+            line,
+            origin: Origin::Ci,
+        }))
+    }
+
     /// Resolve configuration, repository and release line.
     pub fn load(cli: &Cli, base: Option<&str>, theme: Theme) -> Result<Self> {
         let config = Config::load(&cli.config)?;

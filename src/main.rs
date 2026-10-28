@@ -74,6 +74,7 @@ fn run(cli: Cli) -> Result<()> {
     let theme = Theme::auto();
 
     match &cli.command {
+        Command::Run(args) => commands::run::run(&cli, args, theme),
         Command::Init(args) => commands::init::run(&cli, args, theme),
         Command::Validate(args) => commands::validate::run(&cli, args, theme),
         Command::Preview(args) => commands::preview::run(&cli, args, theme),

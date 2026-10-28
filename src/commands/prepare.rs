@@ -41,6 +41,11 @@ use super::short_sha;
 
 pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
     let ctx = Context::load(cli, args.base.base.as_deref(), theme)?;
+    run_with_context(&ctx, args)
+}
+
+pub(super) fn run_with_context(ctx: &Context, args: &PrepareArgs) -> Result<()> {
+    let theme = ctx.theme;
 
     eprintln!("{}", logger::action(theme, "preparing", ctx.repo_slug()));
 
@@ -65,12 +70,12 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
 
     // Refuse to start a release on top of one still in flight, or on top of one
     // that just landed and left nothing behind it.
-    if release_in_flight(&ctx, &release_branch, &base_branch, &base_sha)? {
+    if release_in_flight(ctx, &release_branch, &base_branch, &base_sha)? {
         return Ok(());
     }
 
     // Clean up after any run that was abandoned before it could tidy up.
-    sweep_staging_branches(&ctx, &sweep_prefix);
+    sweep_staging_branches(ctx, &sweep_prefix);
 
     // Stage on a throwaway branch cut from the base, rather than resetting the
     // release branch in place. See `stage_branch` for why.
@@ -87,23 +92,23 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
     repo::create_branch_at(&ctx.gh, &staging, &base_sha)?;
 
     if args.no_wait {
-        return dispatch_only(&ctx, &staging);
+        return dispatch_only(ctx, &staging);
     }
 
-    let artifact = run_workflow(&ctx, ctx.config.prepare_workflow(), &staging, &[])?;
+    let artifact = run_workflow(ctx, ctx.config.prepare_workflow(), &staging, &[])?;
 
     if !artifact.changed {
         // Nothing was committed, so there is nothing to promote and no reason
         // to leave a release branch behind.
-        sweep_staging_branches(&ctx, &sweep_prefix);
+        sweep_staging_branches(ctx, &sweep_prefix);
         report_nothing_to_release(theme);
         return Ok(());
     }
 
     // Promote: move the release branch straight from its previous release
     // commit to the new one, in a single update.
-    promote(&ctx, &staging, &release_branch)?;
-    sweep_staging_branches(&ctx, &sweep_prefix);
+    promote(ctx, &staging, &release_branch)?;
+    sweep_staging_branches(ctx, &sweep_prefix);
 
     let rendered = render::render(ctx.config.pull_request(), &artifact)?;
 
@@ -116,10 +121,10 @@ pub fn run(cli: &Cli, args: &PrepareArgs, theme: Theme) -> Result<()> {
     // Labels must exist before the PR references them: `gh pr create`
     // fails outright on an unknown label, which would lose the PR over
     // pure decoration.
-    let labels = ensure_labels(&ctx, &rendered.labels);
+    let labels = ensure_labels(ctx, &rendered.labels);
 
     upsert_pull_request(
-        &ctx,
+        ctx,
         &release_branch,
         &base_branch,
         &repo::PullRequestContent {

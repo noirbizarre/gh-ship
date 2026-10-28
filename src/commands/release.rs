@@ -159,6 +159,13 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
         }
     })?;
 
+    run_with_pr(&ctx, args, pr)
+}
+
+/// Release the selected PR, without repeating the open-first branch lookup.
+pub(super) fn run_with_pr(ctx: &Context, args: &ReleaseArgs, pr: PullRequest) -> Result<()> {
+    let theme = ctx.theme;
+
     // --- 2. Recover the artifact ----------------------------------------
     //
     // From the PR body, which is where `prepare` embedded it. This is why
@@ -183,7 +190,7 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
     eprintln!("{}", logger::detail(theme, "tag", tag));
 
     // --- 3. Ensure the PR is merged -------------------------------------
-    let pr = ensure_merged(&ctx, pr, args.merge)?;
+    let pr = ensure_merged(ctx, pr, args.merge)?;
 
     let target = pr
         .merged_sha()
@@ -208,7 +215,7 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
             )
         );
     } else {
-        create_release(&ctx, &artifact, tag, target)?;
+        create_release(ctx, &artifact, tag, target)?;
     }
 
     // --- 6. Publish workflow, then undraft -------------------------------
@@ -216,7 +223,7 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
 
     match ctx.config.publish_workflow() {
         Some(publish) if draft => {
-            if run_publish(&ctx, publish, tag, args.no_wait)? == PublishOutcome::Pending {
+            if run_publish(ctx, publish, tag, args.no_wait)? == PublishOutcome::Pending {
                 report_pending(theme, tag, true);
                 return Ok(());
             }
@@ -235,7 +242,7 @@ pub fn run(cli: &Cli, args: &ReleaseArgs, theme: Theme) -> Result<()> {
                     "release.draft is false — watchers were notified before assets were uploaded"
                 )
             );
-            if run_publish(&ctx, publish, tag, args.no_wait)? == PublishOutcome::Pending {
+            if run_publish(ctx, publish, tag, args.no_wait)? == PublishOutcome::Pending {
                 report_pending(theme, tag, false);
                 return Ok(());
             }
