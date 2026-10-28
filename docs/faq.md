@@ -58,7 +58,7 @@ Configure [release lines](configuration.md#release-lines):
 
 ```yaml
 branches: [main, "release/*"]
-release_branch: "next/{{ match }}"
+release_branch: "next/{{ branch }}"
 ```
 
 Each base branch gets its own release branch, Release PR and staging branches,
@@ -70,7 +70,7 @@ If one line needs a release branch the template cannot express, give that entry
 its own:
 
 ```yaml
-release_branch: "next/{{ match }}"
+release_branch: "next/{{ branch }}"
 branches:
   - branch: main
     release_branch: next/release

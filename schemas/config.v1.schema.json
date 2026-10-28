@@ -157,12 +157,12 @@
     {
       "version": 1,
       "branches": ["main", "release/*"],
-      "release_branch": "next/{{ match }}",
+      "release_branch": "next/{{ branch }}",
       "workflows": { "prepare": "prepare-release" }
     },
     {
       "version": 1,
-      "release_branch": "next/{{ match }}",
+      "release_branch": "next/{{ branch }}",
       "branches": [
         { "branch": "main", "release_branch": "next/release" },
         "release/*"

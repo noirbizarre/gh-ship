@@ -127,6 +127,9 @@ fn every_documented_example_validates() {
     for (i, example) in examples.iter().enumerate() {
         let yaml = serde_norway::to_string(example).expect("example serialises");
         check(&yaml).unwrap_or_else(|e| panic!("schema example {i} does not validate: {e}"));
+        let config = gh_ship::config::Config::parse("example.yml", &yaml).unwrap();
+        gh_ship::branches::check(&config)
+            .unwrap_or_else(|e| panic!("unsafe schema example {i}: {e}"));
     }
 }
 
