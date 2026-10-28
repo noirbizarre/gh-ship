@@ -271,11 +271,15 @@ mod tests {
         for strategy in STRATEGIES {
             let rendered = render(Role::Prepare, strategy);
             assert!(rendered.contains("name: ship-release"), "{rendered}");
-            assert!(rendered.contains("ship.release.json"), "{rendered}");
+            assert!(rendered.contains("path: ship.release.json"), "{rendered}");
+            assert!(rendered.contains("if-no-files-found: error"), "{rendered}");
+            // The orchestrator validates the download; preparing must not
+            // install an extension solely to repeat that validation.
             assert!(
-                rendered.contains("gh ship validate ship.release.json"),
-                "the template should validate before uploading:\n{rendered}"
+                !rendered.contains("gh ship validate ship.release.json"),
+                "{rendered}"
             );
+            assert!(!rendered.contains("gh extension install"), "{rendered}");
         }
     }
 

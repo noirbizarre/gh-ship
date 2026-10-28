@@ -130,13 +130,15 @@ Responsible for everything gh-ship refuses to know about:
         release: { notes: $notes }
       }' > ship.release.json
 
-- name: Validate before uploading
-  env:
-    GH_TOKEN: ${{ github.token }}
-  run: |
-    gh extension install noirbizarre/gh-ship
-    gh ship validate ship.release.json
+- uses: actions/upload-artifact@v7
+  with:
+    name: ship-release
+    path: ship.release.json
+    if-no-files-found: error
 ```
+
+gh-ship validates the artifact after downloading it, before updating the Release
+PR. Keep builds and tests in PR CI so preparation stays fast.
 
 Nothing to release? Say so, and gh-ship stops cleanly with exit 0:
 
@@ -822,8 +824,8 @@ exclusive in a single call. Measured, four routes to the same tree:
 | GraphQL `createCommitOnBranch` | **yes**, `valid` | `GitHub` |
 
 To take the third route, commit and push as usual, then re-create that commit
-through the API and move the branch onto it. `gh ship sign` does exactly that,
-and your prepare workflow already installs gh-ship to validate the artifact:
+through the API and move the branch onto it. `gh ship sign` does exactly that;
+install the extension before signing:
 
 ```yaml
 - name: Commit and push
@@ -833,7 +835,9 @@ and your prepare workflow already installs gh-ship to validate the artifact:
     git push origin HEAD
 
 - name: Sign the release commit
-  run: gh ship sign
+  run: |
+    gh extension install noirbizarre/gh-ship
+    gh ship sign
   env:
     GH_TOKEN: ${{ steps.app-token.outputs.token }}
 ```

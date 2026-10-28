@@ -60,7 +60,6 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
 
       # git-cliff is pinned by mise.lock: a changelog tool that changes
       # version between releases would silently change our release notes.
@@ -210,13 +209,6 @@ jobs:
               }' > ship.release.json
           fi
           cat ship.release.json
-
-      - name: Validate the release artifact
-        # Dogfood the code being released so a protocol regression cannot hide
-        # behind validation by the previously published extension.
-        run: |
-          cargo build --release --locked --bin gh-ship
-          ./target/release/gh-ship validate ship.release.json
 
       - uses: actions/upload-artifact@v7
         with:
