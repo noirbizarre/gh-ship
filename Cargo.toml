@@ -85,7 +85,7 @@ strip = true
 # favour of the project if `git tpl update` ever touches it.
 
 [dependencies]
-base64 = "0.22"
+base64 = "0.23"
 boon = "0.6"
 clap = { version = "4", features = ["derive", "env"] }
 demand = "2"
