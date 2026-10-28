@@ -229,7 +229,7 @@ fn release_in_flight(
         return Ok(false);
     };
 
-    if repo::release_exists(&ctx.gh, tag)? {
+    if repo::release_state(&ctx.gh, tag)? == repo::ReleaseState::Published {
         // Released already. A new cycle may start — unless the merge that
         // carried this release is still the tip of base, in which case there is
         // nothing on top of it to release.

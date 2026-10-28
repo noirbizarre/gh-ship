@@ -47,6 +47,7 @@ pub struct Status {
     pub artifact: Option<Artifact>,
     pub last_run: Option<RunStatus>,
     pub release_exists: bool,
+    pub release_state: repo::ReleaseState,
     /// What to do next, in plain language.
     pub next: String,
 }
@@ -128,10 +129,11 @@ fn collect(ctx: &Context) -> Result<Status> {
         None
     };
 
-    let release_exists = match artifact.as_ref().and_then(|a| a.tag()) {
-        Some(tag) => repo::release_exists(&ctx.gh, tag).unwrap_or(false),
-        None => false,
+    let release_state = match artifact.as_ref().and_then(|a| a.tag()) {
+        Some(tag) => repo::release_state(&ctx.gh, tag)?,
+        None => repo::ReleaseState::Absent,
     };
+    let release_exists = release_state != repo::ReleaseState::Absent;
 
     let pull_request = pr.as_ref().map(|p| PullRequestStatus {
         number: p.number,
@@ -141,12 +143,16 @@ fn collect(ctx: &Context) -> Result<Status> {
         merged_sha: p.merged_sha().map(str::to_string),
     });
 
-    let next = next_step(
-        branch_exists,
-        pull_request.as_ref(),
-        artifact.as_ref(),
-        release_exists,
-    );
+    let next = if release_state == repo::ReleaseState::Draft {
+        "run `gh ship release` to resume publication of the draft release".into()
+    } else {
+        next_step(
+            branch_exists,
+            pull_request.as_ref(),
+            artifact.as_ref(),
+            release_state == repo::ReleaseState::Published,
+        )
+    };
 
     Ok(Status {
         repository: ctx.repo_slug().to_string(),
@@ -168,6 +174,7 @@ fn collect(ctx: &Context) -> Result<Status> {
         artifact,
         last_run,
         release_exists,
+        release_state,
         next,
     })
 }
@@ -285,8 +292,13 @@ fn report(status: &Status, theme: Theme) {
         eprintln!("{}", logger::detail_url(theme, "run", &r.url));
     }
 
-    if status.release_exists {
-        eprintln!("{}", logger::detail(theme, "release", "published"));
+    if status.release_state != repo::ReleaseState::Absent {
+        let state = if status.release_state == repo::ReleaseState::Draft {
+            "draft (publication pending)"
+        } else {
+            "published"
+        };
+        eprintln!("{}", logger::detail(theme, "release", state));
     }
 
     eprintln!();

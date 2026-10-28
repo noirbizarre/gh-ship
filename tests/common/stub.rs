@@ -188,6 +188,12 @@ impl GhStub {
         self
     }
 
+    pub fn draft_release(self) -> Self {
+        let mut stub = self.release_exists(true);
+        stub.env.insert("STUB_RELEASE_DRAFT".into(), "true".into());
+        stub
+    }
+
     /// Labels that already exist in the repository.
     pub fn labels(mut self, names: &[&str]) -> Self {
         self.env.insert("STUB_LABELS".into(), names.join(","));
@@ -638,7 +644,7 @@ case "$1 ${2:-}" in
       echo "release not found" >&2
       exit 1
     fi
-    printf '{"tagName":"v1.0.0"}\n'
+    printf '{"tagName":"v1.0.0","isDraft":%s}\n' "${STUB_RELEASE_DRAFT:-false}"
     ;;
 
   "release create")

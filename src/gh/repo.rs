@@ -593,9 +593,31 @@ pub fn publish_release(gh: &Gh, tag: &str) -> Result<(), GhError> {
 
 /// Whether a release already exists for a tag.
 pub fn release_exists(gh: &Gh, tag: &str) -> Result<bool, GhError> {
-    match gh.run_scoped(&["release", "view", tag, "--json", "tagName"]) {
-        Ok(_) => Ok(true),
-        Err(e) if cli::is_not_found(&e) => Ok(false),
+    Ok(release_state(gh, tag)? != ReleaseState::Absent)
+}
+
+/// Existence is not publication: draft releases can still be awaiting a build.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReleaseState {
+    Absent,
+    Draft,
+    Published,
+}
+
+pub fn release_state(gh: &Gh, tag: &str) -> Result<ReleaseState, GhError> {
+    #[derive(Deserialize)]
+    struct Release {
+        #[serde(rename = "isDraft")]
+        draft: bool,
+    }
+    match gh.json_scoped::<Release, _>(&["release", "view", tag, "--json", "isDraft"]) {
+        Ok(release) => Ok(if release.draft {
+            ReleaseState::Draft
+        } else {
+            ReleaseState::Published
+        }),
+        Err(e) if cli::is_not_found(&e) => Ok(ReleaseState::Absent),
         Err(e) => Err(e),
     }
 }

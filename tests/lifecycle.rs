@@ -1427,6 +1427,29 @@ fn release_output_is_stable() {
 
 // --- labels --------------------------------------------------------------
 
+#[test]
+fn a_draft_release_blocks_prepare_and_status_advises_resuming() {
+    let repo = merged_repo(GhStub::new().draft_release());
+    let out = repo.ship(&["prepare"]);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    assert!(!repo.stub.called_with(&["workflow run"]));
+    assert!(!repo.stub.called_with(&["--method"]));
+    let out = repo.ship(&["status", "--json"]);
+    assert_eq!(out.code, 0, "{}", out.diagnostics());
+    let status: serde_json::Value = serde_json::from_str(&out.stdout).unwrap();
+    assert_eq!(status["release_exists"], true);
+    assert_eq!(status["release_state"], "draft");
+    assert!(
+        status["next"]
+            .as_str()
+            .unwrap()
+            .contains("resume publication")
+    );
+    let out = repo.ship(&["status"]);
+    assert!(out.diagnostics().contains("publication pending"));
+    assert!(!out.diagnostics().contains("nothing to do"));
+}
+
 const LABELLED_CONFIG: &str = r#"
 version: 1
 workflows:
