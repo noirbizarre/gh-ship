@@ -56,12 +56,12 @@ of the release, not paperwork around it.
 Releases are run by [gh-ship](https://github.com/noirbizarre/gh-ship).
 **Never bump a version or push a tag by hand.**
 
-1. A push to `main` triggers 🚢 Ship, which runs `gh ship prepare`.
+1. A push to `main` triggers 🚢 Ship, which runs `gh ship run` and selects preparation.
 2. `prepare` dispatches 🚀 Prepare Release, which asks git-cliff for the next
    version, writes `CHANGELOG.md`, bumps `Cargo.toml`, commits, and uploads a
    `ship.release.json` artifact describing what would ship.
 3. gh-ship opens (or updates) the Release PR from `release/next`. Review it.
-4. Merging it triggers 🚢 Ship again, which runs `gh ship release`: it tags the
+4. Merging it triggers 🚢 Ship again, where `gh ship run` selects publication: it tags the
    merge commit, creates a draft release, dispatches 📦 Publish Release to
    attach the binaries, then makes the
    release public.
