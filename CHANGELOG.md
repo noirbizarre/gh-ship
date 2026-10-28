@@ -4,6 +4,69 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0](https://github.com/noirbizarre/gh-ship/compare/0.5.0..0.6.0) - 2026-10-28
+
+### 💫 Features
+
+- **auth** Mint and refresh GitHub App installation tokens ([#21](https://github.com/noirbizarre/gh-ship/issues/21)) - ([20b726b](https://github.com/noirbizarre/gh-ship/commit/20b726bb3c541e2f0862645ed293593e331c7a99))
+- **release** Support opt-in ref publisher inputs ([#25](https://github.com/noirbizarre/gh-ship/issues/25)) - ([52405d9](https://github.com/noirbizarre/gh-ship/commit/52405d92a47fb71dbbda15561da90e805d61aada))
+- **release** Add --no-wait to dispatch the publish workflow and return ([#19](https://github.com/noirbizarre/gh-ship/issues/19)) - ([4bd6f99](https://github.com/noirbizarre/gh-ship/commit/4bd6f9997d777702d1e738f9d536cf10830089a7))
+- **run** Detect prepare or release from GitHub Actions events ([#26](https://github.com/noirbizarre/gh-ship/issues/26)) - ([aff9233](https://github.com/noirbizarre/gh-ship/commit/aff92338cb6f506c56fbe28a0d7884a7cb98c646))
+- **run** Exit with code 75 when waiting for a run times out ([#18](https://github.com/noirbizarre/gh-ship/issues/18)) - ([65bec41](https://github.com/noirbizarre/gh-ship/commit/65bec416ebd517a3cf67c12a407c3aae984dfde7))
+
+### 🐛 Bug Fixes
+
+- **artifact** Validate protocol metadata recovered from PRs - ([a7dfcc2](https://github.com/noirbizarre/gh-ship/commit/a7dfcc29a4c967f9d905e0e7a610b673a05c623c))
+- **branches** Reject mixed collisions and glob base targets - ([b8f631a](https://github.com/noirbizarre/gh-ship/commit/b8f631a60c93f44e75bcd2849791acc9196dfa7f))
+- **branches** Enforce safety in lifecycle commands - ([626d9e8](https://github.com/noirbizarre/gh-ship/commit/626d9e83f412d1a0637d397716dc280e95f89bb0))
+- **config** Align empty-value rules with the editor schema - ([557de8f](https://github.com/noirbizarre/gh-ship/commit/557de8fc961f6efb4c1acb71c544801e5a30d43f))
+- **init** Filter workflow candidates by their release role - ([9a2febe](https://github.com/noirbizarre/gh-ship/commit/9a2febe45a34bad7c16dcea4d18ad2efc507970a))
+- **prepare** Isolate staging cleanup by full line identity - ([45615c1](https://github.com/noirbizarre/gh-ship/commit/45615c1c963247170235f3ed405e188ed451eda7))
+- **preview** Emit JSON for unchanged release artifacts - ([6d7481e](https://github.com/noirbizarre/gh-ship/commit/6d7481e5feb3012c873be495d052d643c7dd4794))
+- **release** Apply latest preference when publishing drafts - ([5403cd4](https://github.com/noirbizarre/gh-ship/commit/5403cd44e19171ea5ae3e8f5c35de9871f660e3d))
+- **release** Verify existing tag targets before publishing - ([b211991](https://github.com/noirbizarre/gh-ship/commit/b211991f0c3787d083ffe2dd14888cd0b4299f23))
+- **release** Distinguish pending drafts from published releases - ([b561e9a](https://github.com/noirbizarre/gh-ship/commit/b561e9a49ebba17878be1e6f4c27655be9c34170))
+- **status** Discover prepare runs on temporary staging refs - ([f584f07](https://github.com/noirbizarre/gh-ship/commit/f584f078474a2ea5e5dec4d59566bf03962b5ce9))
+- **validate** Require boolean dry_run on workflow dispatch - ([0fc45e6](https://github.com/noirbizarre/gh-ship/commit/0fc45e696775d3753b16120b55f4bfcd29012f8d))
+
+### 📚 Documentation
+
+- **artifact** Clarify temporary refs for unchanged prepares - ([de54122](https://github.com/noirbizarre/gh-ship/commit/de5412225c01ded47eefcbf8829a0b0c7ff7c9ed))
+- **auth** Distinguish durable App keys from temporary tokens - ([dd7f773](https://github.com/noirbizarre/gh-ship/commit/dd7f77365a71289fe01c8f0bcbd59b179f87eac9))
+- **branches** Use collision-free release-line examples - ([5e3df52](https://github.com/noirbizarre/gh-ship/commit/5e3df5251db4013a7d3547db7fd785bed39a045f))
+- **cli** Describe the implemented verbose output - ([b24c27b](https://github.com/noirbizarre/gh-ship/commit/b24c27b9b5d5e93becb4972ee1d5f506cf044052))
+- **cli** Budget job time for graceful wait retries - ([5f3938c](https://github.com/noirbizarre/gh-ship/commit/5f3938ce67e9b9d32ed08f413415a0f106531e1f))
+- **concurrency** Scope ref-based keys to prepare-only workflows - ([67684e7](https://github.com/noirbizarre/gh-ship/commit/67684e747f0123243e67fd32c05ff379287e748e))
+- **config** Include version among required fields - ([f1babd4](https://github.com/noirbizarre/gh-ship/commit/f1babd431285d326f20fdc09ff7a08a8aff54304))
+- **labels** Explain additive updates on reused PRs - ([24f5399](https://github.com/noirbizarre/gh-ship/commit/24f53998f407b8fbcb27a2e8d32b1334d24f2ee9))
+- **prepare** Describe hashed staging branch names - ([c380fcf](https://github.com/noirbizarre/gh-ship/commit/c380fcf593c6a95acf703dacd79b1837e3351f81))
+- **retry** Distinguish publication adoption from prepare restarts - ([48124d9](https://github.com/noirbizarre/gh-ship/commit/48124d93ad654b7b5a3e4f26e51488eee7fd2f20))
+- **schema** Describe actual release content defaults - ([6f811a8](https://github.com/noirbizarre/gh-ship/commit/6f811a86770de43b1f2104bd1a3e3f62d5975692))
+- **sign** Clarify GitHub-verified signature preservation - ([f378fc1](https://github.com/noirbizarre/gh-ship/commit/f378fc1136b84949fe16ec058717a75144bc8f38))
+- **template** Scope offline claim to artifact validation - ([dad454c](https://github.com/noirbizarre/gh-ship/commit/dad454c15697b3c350a834bb32b537eeb7ec2457))
+- **toolchain** Distinguish local and CI Rust selection - ([eb843eb](https://github.com/noirbizarre/gh-ship/commit/eb843eb2ef3f331e5d71a84169bd5ebf002d1ce1))
+- **workflow** Acknowledge display-name fallback matching - ([325ae4a](https://github.com/noirbizarre/gh-ship/commit/325ae4aed457d9f9838870fa6a6350e6a953b53b))
+- **workflows** Push prepared changes to the staging ref - ([a3252f2](https://github.com/noirbizarre/gh-ship/commit/a3252f2347f4d860b78f16926356ddbdfc578d63))
+- **workflows** Document the 50 minute App-token wait limit ([#20](https://github.com/noirbizarre/gh-ship/issues/20)) - ([a45ad3c](https://github.com/noirbizarre/gh-ship/commit/a45ad3c517668eb18faba206c239159cadc4cdd0))
+- **workflows** Warn that versioning tools read GITHUB_TOKEN, not GH_TOKEN ([#12](https://github.com/noirbizarre/gh-ship/issues/12)) - ([65ca8a7](https://github.com/noirbizarre/gh-ship/commit/65ca8a7211d3afc9e6b6f1fc6549aabe2d0c6c17))
+
+### 🧪 Tests
+
+- **fixtures** Keep diagnostic inputs LF on Windows - ([5a54106](https://github.com/noirbizarre/gh-ship/commit/5a541064db2ddaab87bd470040d9be1408c45e9d))
+- **run** Use a collision-free release-line fixture - ([313adc8](https://github.com/noirbizarre/gh-ship/commit/313adc88c712c2ab8474745aa69242e2ebc148f2))
+- **status** Cover scoped runs after staging ref cleanup - ([c58def9](https://github.com/noirbizarre/gh-ship/commit/c58def9831faffb400c584bc1f5a75557227108a))
+- **templates** Refresh offline-validation wording snapshots - ([f4c24e5](https://github.com/noirbizarre/gh-ship/commit/f4c24e5ff7f4d33ece54f114172e3ee121a53df3))
+- Replace the shell gh stub with a native executable - ([e292161](https://github.com/noirbizarre/gh-ship/commit/e2921611d23d76ec62ccf3e816c78cc7eaa1da04))
+
+### 🧹 Chores
+
+- **tpl** Adopt latest rust.tpl revision - ([909dd80](https://github.com/noirbizarre/gh-ship/commit/909dd801a8fe397dc318b502c629b3f8e3b271ed))
+- **tpl** Attach the rust template - ([50d2a58](https://github.com/noirbizarre/gh-ship/commit/50d2a58d25363f795d55c6a6df77858b6ae7057c))
+
+### Tpl
+
+- Render rust at main - ([0134f2e](https://github.com/noirbizarre/gh-ship/commit/0134f2edfbdc84ac38fa1955df7871e388a9bb90))
+
 ## [0.5.0](https://github.com/noirbizarre/gh-ship/compare/0.4.0..0.5.0) - 2026-08-15
 
 ### 💫 Features
@@ -70,9 +133,6 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - Authenticate as a GitHub App - ([b0e9324](https://github.com/noirbizarre/gh-ship/commit/b0e9324a0e3dc2d879082241a245c3e8ea7e82d7))
 
-## ❤️ New Contributors
-
-* @noirbizbot[bot] made their first contribution in [#9](https://github.com/noirbizarre/gh-ship/pull/9)
 ## [0.3.0](https://github.com/noirbizarre/gh-ship/compare/0.2.2..0.3.0) - 2026-08-12
 
 ### 💫 Features
