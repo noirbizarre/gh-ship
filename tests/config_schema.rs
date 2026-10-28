@@ -227,8 +227,8 @@ fn release_lines_are_validated_like_the_binary_validates_them() {
         "a duplicated entry is dead config"
     );
     assert!(
-        check("version: 1\nbranches: []\nworkflows:\n  prepare: p\n").is_err(),
-        "an empty list says nothing; omit the key instead"
+        check("version: 1\nbranches: []\nworkflows:\n  prepare: p\n").is_ok(),
+        "an empty list uses the repository default, just like omission"
     );
     assert!(
         check("version: 1\nbase_branch: main\nworkflows:\n  prepare: p\n").is_err(),
@@ -245,6 +245,34 @@ fn types_are_enforced() {
         check("version: 1\nworkflows:\n  prepare: p\npull_request:\n  labels: nope\n").is_err(),
         "labels must be a list"
     );
+}
+
+#[test]
+fn empty_values_have_schema_runtime_parity() {
+    for (setting, valid) in [
+        ("branches: []\n", true),
+        (
+            "pull_request:\n  labels: []\n  header: ''\n  footer: ''\n",
+            true,
+        ),
+        ("pull_request:\n  title: ''\n", false),
+        ("pull_request:\n  title: '  '\n", false),
+        ("pull_request:\n  labels: ['']\n", false),
+        ("pull_request:\n  labels: ['  ']\n", false),
+    ] {
+        let yaml = format!("version: 1\nworkflows:\n  prepare: p\n{setting}");
+        assert_eq!(check(&yaml).is_ok(), valid, "{yaml}");
+        assert_eq!(
+            gh_ship::config::Config::parse("ship.yml", &yaml).is_ok(),
+            valid,
+            "{yaml}"
+        );
+    }
+    for value in ["''", "'  '"] {
+        let yaml = format!("version: 1\nworkflows:\n  prepare: p\n  publish: {value}\n");
+        assert!(check(&yaml).is_err());
+        assert!(gh_ship::config::Config::parse("ship.yml", &yaml).is_err());
+    }
 }
 
 /// Every field on the Rust model should be described. A missing one means an

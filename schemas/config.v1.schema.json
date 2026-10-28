@@ -22,9 +22,8 @@
     },
 
     "branches": {
-      "description": "The base branches gh-ship releases from, one release line each, so a project can maintain release/1.x while main moves on. An entry is either a branch name — a glob if it contains a single `*` — or a mapping with `branch` and its own `release_branch` template, for a line that deviates from the top-level one. Exact entries are matched before globs, and globs in the order listed. When omitted, the repository's own default branch is the only release line. Omit the key rather than passing an empty list, which says nothing. gh-ship detects which branch it runs on from --base, the GitHub Actions environment, the local checkout, or the repository's default branch, in that order. Note that `uniqueItems` cannot see `main` and `{branch: main}` as the same line; gh-ship rejects that itself.",
+      "description": "The base branches gh-ship releases from, one release line each, so a project can maintain release/1.x while main moves on. An entry is either a branch name — a glob if it contains a single `*` — or a mapping with `branch` and its own `release_branch` template, for a line that deviates from the top-level one. Exact entries are matched before globs, and globs in the order listed. When omitted or empty, the repository's own default branch is the only release line. gh-ship detects which branch it runs on from --base, the GitHub Actions environment, the local checkout, or the repository's default branch, in that order. Note that `uniqueItems` cannot see `main` and `{branch: main}` as the same line; gh-ship rejects that itself.",
       "type": "array",
-      "minItems": 1,
       "uniqueItems": true,
       "items": {
         "anyOf": [
@@ -70,7 +69,8 @@
         "publish": {
           "description": "Optional workflow run after the Release PR is merged and the draft release exists — typically builds and uploads assets.",
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "pattern": "\\S"
         }
       },
       "additionalProperties": false
@@ -84,7 +84,8 @@
           "description": "Template for the PR title. This is also the commit message: GitHub pre-fills the squash-merge dialog from the PR title and appends `(#42)`, so a Conventional Commit here keeps the release commit parseable by changelog tooling.",
           "type": "string",
           "minLength": 1,
-          "default": "chore(release): {{ version }}"
+          "default": "chore(release): {{ version }}",
+          "pattern": "\\S"
         },
         "header": {
           "description": "Markdown prepended to the release notes.",
@@ -97,7 +98,7 @@
         "labels": {
           "description": "Labels applied to the Release PR. gh-ship creates any that do not exist; if it cannot, it warns and opens the PR without them.",
           "type": "array",
-          "items": { "type": "string", "minLength": 1 },
+          "items": { "type": "string", "minLength": 1, "pattern": "\\S" },
           "uniqueItems": true,
           "default": []
         },

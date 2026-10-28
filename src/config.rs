@@ -543,6 +543,29 @@ impl Config {
             });
         }
 
+        for (field, value) in [
+            ("workflows.publish", s.workflows.publish.as_deref()),
+            ("pull_request.title", Some(s.pull_request.title.as_str())),
+        ]
+        .into_iter()
+        .chain(
+            s.pull_request
+                .labels
+                .iter()
+                .map(|label| ("pull_request.labels", Some(label.as_str()))),
+        ) {
+            if value.is_some_and(|v| v.trim().is_empty()) {
+                return Err(ConfigError::EmptyField {
+                    field: field.into(),
+                    src: self.source.named(),
+                    span: self
+                        .source
+                        .locate(field.rsplit('.').next().unwrap_or(field)),
+                    help: Some("provide a non-empty value, or omit the optional setting".into()),
+                });
+            }
+        }
+
         self.check_branches()?;
 
         Ok(())
