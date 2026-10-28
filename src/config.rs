@@ -1,8 +1,8 @@
 //! Configuration — `.github/ship.yml`.
 //!
-//! Convention over configuration: the only required field is
-//! `workflows.prepare`. Everything else has a sensible default, and a
-//! repository with a two-line config is a fully working gh-ship setup.
+//! Convention over configuration: only `version` and `workflows.prepare`
+//! are required. Everything else has a sensible default, so a minimal
+//! versioned configuration is a fully working gh-ship setup.
 //!
 //! The raw source text is retained alongside the parsed model because
 //! `serde_norway::Value` discards positions, and good diagnostics need
