@@ -1,0 +1,72 @@
+name: 🔄 Template
+
+# Has the template this project was rendered from moved?
+#
+# Scheduled rather than a job in ♻️ CI, deliberately. A template moving is not
+# a fault in anyone's pull request, and failing their check for it would teach
+# people to ignore a red X that is not about their change. This runs on its own
+# clock and fails on its own terms.
+
+on:
+  schedule:
+    # Monday morning. Weekly is the right cadence for something whose remedy is
+    # "read a diff and decide", not "fix it now".
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: template
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    name: 🔄 Drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The merged rendering is an ancestor of HEAD, not a fetched branch.
+          # A shallow checkout hides it and makes re-rendering start a new root.
+          fetch-depth: 0
+          persist-credentials: false
+
+      # git-tpl comes from mise.toml, pinned and provenance-verified.
+      - uses: jdx/mise-action@v4
+        with:
+          cache: true
+
+      # refs/tpl/* is not fetched by checkout. Recover the latest rendering
+      # already merged into this branch from its provenance trailer, otherwise
+      # project customizations appear as add/add conflicts on every run.
+      - name: Restore the merged template rendering
+        run: |
+          set -euo pipefail
+          rendered=$(git log HEAD --topo-order -1 --format=%H --fixed-strings \
+            --grep='Template-Source: https://github.com/noirbizarre/rust.tpl')
+          if [ -z "$rendered" ]; then
+            echo 'No merged rust.tpl rendering found in repository history.' >&2
+            exit 1
+          fi
+          git update-ref refs/tpl/github-com-noirbizarre-rust-tpl "$rendered"
+
+      # A hosted runner has no author identity, but advancing the rendered ref
+      # creates a commit even though nothing is committed to the project branch.
+      - name: Configure the rendering identity
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      # Nothing is written that outlives the runner. New template questions use
+      # defaults rather than opening an interactive prompt in a scheduled job.
+      - name: Re-render the template
+        run: git tpl update --defaults
+
+      - name: Report what merging it would change
+        run: git tpl diff --exit-code --stat
