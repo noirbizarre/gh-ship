@@ -241,7 +241,7 @@ branches: [develop]
 | `title` | template | `chore(release): {{ version }}` | PR title — and the squash commit subject. |
 | `header` | template | — | Markdown prepended to the release notes. |
 | `footer` | template | — | Markdown appended after the release notes. |
-| `labels` | list | `[]` | Labels applied to the Release PR. |
+| `labels` | list | `[]` | Labels added to the Release PR. Updates preserve existing labels, including ones removed from configuration. |
 | `reuse` | boolean | `true` | Reuse the existing Release PR instead of opening a new one each time. |
 
 ### The PR title is the release commit message

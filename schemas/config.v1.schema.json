@@ -96,7 +96,7 @@
           "type": "string"
         },
         "labels": {
-          "description": "Labels applied to the Release PR. gh-ship creates any that do not exist; if it cannot, it warns and opens the PR without them.",
+          "description": "Labels added to the Release PR. Updates preserve existing labels, including ones removed from configuration. gh-ship creates any that do not exist; if it cannot, it warns and opens the PR without them.",
           "type": "array",
           "items": { "type": "string", "minLength": 1, "pattern": "\\S" },
           "uniqueItems": true,

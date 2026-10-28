@@ -510,6 +510,7 @@ pub fn create_pull_request(gh: &Gh, pr: &NewPullRequest<'_>) -> Result<String, G
 }
 
 /// Update an existing Release PR.
+/// Labels are additive: preserve manually managed and previously applied labels.
 pub fn update_pull_request(
     gh: &Gh,
     number: u64,
