@@ -91,11 +91,22 @@ pub struct Workflow {
     pub dispatchable: bool,
     /// Whether it declares `on: workflow_call`.
     pub callable: bool,
-    /// `workflow_dispatch` input names.
+    /// Input names declared under either dispatch or call triggers.
     pub inputs: Vec<String>,
+    /// Input names declared specifically under `workflow_dispatch`.
+    pub dispatch_inputs: Vec<String>,
 }
 
 impl Workflow {
+    /// Validate the configured publisher contract, without inferring a mode.
+    pub fn publisher_violations(&self, input: crate::config::PublisherInput) -> Vec<Violation> {
+        let mut violations = self.contract_violations();
+        if !self.dispatch_inputs.iter().any(|name| name == input.name()) {
+            violations.push(Violation::MissingPublisherInput(input));
+        }
+        violations
+    }
+
     /// The identifier to pass to `gh`.
     ///
     /// The filename is preferred over the display name: it is unique,
@@ -212,6 +223,7 @@ impl std::fmt::Display for Role {
 /// A way a workflow fails to satisfy the gh-ship contract.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Violation {
+    MissingPublisherInput(crate::config::PublisherInput),
     NotDispatchable,
     MissingDryRunInput,
 }
@@ -219,6 +231,12 @@ pub enum Violation {
 impl Violation {
     pub fn message(&self) -> &'static str {
         match self {
+            Self::MissingPublisherInput(crate::config::PublisherInput::Tag) => {
+                "does not declare a `tag` input under `workflow_dispatch.inputs`"
+            }
+            Self::MissingPublisherInput(crate::config::PublisherInput::Ref) => {
+                "does not declare a `ref` input under `workflow_dispatch.inputs`"
+            }
             Self::NotDispatchable => "does not declare `on: workflow_dispatch`",
             Self::MissingDryRunInput => "does not declare a `dry_run` input",
         }
@@ -226,6 +244,12 @@ impl Violation {
 
     pub fn help(&self) -> &'static str {
         match self {
+            Self::MissingPublisherInput(crate::config::PublisherInput::Tag) => {
+                "release.publish_input is `tag` (the default). Add a `tag` input under `workflow_dispatch.inputs`, or set `release.publish_input: ref` if that is the intended contract."
+            }
+            Self::MissingPublisherInput(crate::config::PublisherInput::Ref) => {
+                "release.publish_input is `ref`. Add a `ref` input under `workflow_dispatch.inputs`, or set `release.publish_input: tag` if that is the intended contract."
+            }
             Self::NotDispatchable => {
                 "gh-ship starts workflows through the API, which can only start workflows \
                  declaring `on: workflow_dispatch`. A `workflow_call`-only workflow — what is \
@@ -270,7 +294,7 @@ pub fn parse(path: &Path, text: &str) -> Option<Workflow> {
             .unwrap_or_default()
     });
 
-    let (dispatchable, callable, inputs) = analyse_triggers(raw.on.as_ref());
+    let (dispatchable, callable, inputs, dispatch_inputs) = analyse_triggers(raw.on.as_ref());
 
     Some(Workflow {
         path: path.to_path_buf(),
@@ -278,6 +302,7 @@ pub fn parse(path: &Path, text: &str) -> Option<Workflow> {
         dispatchable,
         callable,
         inputs,
+        dispatch_inputs,
     })
 }
 
@@ -285,12 +310,13 @@ pub fn parse(path: &Path, text: &str) -> Option<Workflow> {
 ///
 /// `on:` has three legal shapes — a bare string, a sequence of strings,
 /// and a mapping — and all three appear in the wild.
-fn analyse_triggers(on: Option<&serde_norway::Value>) -> (bool, bool, Vec<String>) {
+fn analyse_triggers(on: Option<&serde_norway::Value>) -> (bool, bool, Vec<String>, Vec<String>) {
     use serde_norway::Value;
 
     let mut dispatchable = false;
     let mut callable = false;
     let mut inputs = Vec::new();
+    let mut dispatch_inputs = Vec::new();
 
     match on {
         Some(Value::String(s)) => {
@@ -314,6 +340,7 @@ fn analyse_triggers(on: Option<&serde_norway::Value>) -> (bool, bool, Vec<String
                     "workflow_dispatch" => {
                         dispatchable = true;
                         collect_inputs(value, &mut inputs);
+                        collect_inputs(value, &mut dispatch_inputs);
                     }
                     "workflow_call" => {
                         callable = true;
@@ -328,7 +355,9 @@ fn analyse_triggers(on: Option<&serde_norway::Value>) -> (bool, bool, Vec<String
 
     inputs.sort();
     inputs.dedup();
-    (dispatchable, callable, inputs)
+    dispatch_inputs.sort();
+    dispatch_inputs.dedup();
+    (dispatchable, callable, inputs, dispatch_inputs)
 }
 
 fn collect_inputs(trigger: &serde_norway::Value, out: &mut Vec<String>) {

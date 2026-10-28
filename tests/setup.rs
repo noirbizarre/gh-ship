@@ -177,6 +177,54 @@ fn validates_the_publish_workflow_too() {
 }
 
 #[test]
+fn validates_the_configured_publisher_dispatch_input() {
+    for mode in [None, Some("tag"), Some("ref")] {
+        for declared in ["tag", "ref", "both", "neither", "call-only"] {
+            let selected = mode.unwrap_or("tag");
+            let mut config =
+                "version: 1\nworkflows:\n  prepare: prepare-release\n  publish: publish-release\n"
+                    .to_string();
+            if let Some(mode) = mode {
+                config.push_str(&format!("release:\n  publish_input: {mode}\n"));
+            }
+            let publisher = match declared {
+                "both" => "on:\n  workflow_dispatch:\n    inputs:\n      tag: {type: string}\n      ref: {type: string}\n".to_string(),
+                "neither" => "on: workflow_dispatch\n".to_string(),
+                "call-only" => format!("on:\n  workflow_dispatch:\n  workflow_call:\n    inputs:\n      {selected}: {{type: string}}\n"),
+                input => format!("on:\n  workflow_dispatch:\n    inputs:\n      {input}: {{type: string}}\n"),
+            };
+            let dir = repo(
+                Some(&config),
+                &[
+                    ("prepare-release.yml", CONFORMING),
+                    ("publish-release.yml", &publisher),
+                ],
+            );
+            let out = validate_in(dir.path());
+            let valid = declared == "both" || declared == selected;
+            assert_eq!(
+                out.code,
+                if valid { 0 } else { 1 },
+                "{mode:?}/{declared}: {}",
+                out.diagnostics()
+            );
+            if !valid {
+                assert!(
+                    out.diagnostics().contains("release.publish_input"),
+                    "{}",
+                    out.diagnostics()
+                );
+                assert!(
+                    out.diagnostics().contains("workflow_dispatch.inputs"),
+                    "{}",
+                    out.diagnostics()
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn setup_output_is_stable() {
     let dir = repo(Some(MINIMAL_CONFIG), &[("prepare-release.yml", CONFORMING)]);
     let out = validate_in(dir.path());

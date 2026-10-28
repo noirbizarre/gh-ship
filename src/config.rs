@@ -275,6 +275,8 @@ pub struct PullRequestConfig {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct ReleaseConfig {
+    /// Input contract used to dispatch the publish workflow.
+    pub publish_input: PublisherInput,
     /// Create the release as a draft first, then undraft after the
     /// publish workflow succeeds.
     ///
@@ -282,6 +284,31 @@ pub struct ReleaseConfig {
     /// publish workflow upload assets to the release *before* anyone
     /// subscribed to the repository is notified about it.
     pub draft: bool,
+}
+
+/// The explicitly selected publish workflow input contract.
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PublisherInput {
+    #[default]
+    Tag,
+    Ref,
+}
+
+impl PublisherInput {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Tag => "tag",
+            Self::Ref => "ref",
+        }
+    }
+
+    pub fn value(self, tag: &str) -> String {
+        match self {
+            Self::Tag => tag.to_string(),
+            Self::Ref => format!("refs/tags/{tag}"),
+        }
+    }
 }
 
 fn default_release_branch() -> String {
@@ -302,7 +329,10 @@ impl Default for PullRequestConfig {
 
 impl Default for ReleaseConfig {
     fn default() -> Self {
-        Self { draft: true }
+        Self {
+            draft: true,
+            publish_input: PublisherInput::default(),
+        }
     }
 }
 

@@ -836,14 +836,174 @@ fn merged_repo(stub: GhStub) -> Repo {
 /// As [`merged_repo`], with a publish workflow configured — the only
 /// configuration in which `release` dispatches anything.
 fn publishing_repo(stub: GhStub) -> Repo {
-    let config = "version: 1\nworkflows:\n  prepare: prepare-release\n  publish: prepare-release\n";
+    publishing_repo_with_input(stub, None)
+}
+
+fn publishing_repo_with_input(stub: GhStub, input: Option<&str>) -> Repo {
+    let mut config =
+        "version: 1\nworkflows:\n  prepare: prepare-release\n  publish: publish-release\n"
+            .to_string();
+    if let Some(input) = input {
+        config.push_str(&format!("release:\n  publish_input: {input}\n"));
+    }
     let body = format!("Notes\n\n<!-- ship:artifact\n{CHANGED_ARTIFACT}\n-->");
-    Repo::new(
-        config,
+    let repo = Repo::new(
+        &config,
         stub.pr_body(&body)
             .pr_state("MERGED")
             .merge_commit("abc1234def5678"),
-    )
+    );
+    std::fs::write(
+        repo.path().join(".github/workflows/publish-release.yml"),
+        "on:\n  workflow_dispatch:\n    inputs:\n      tag: {type: string}\n      ref: {type: string}\n",
+    ).unwrap();
+    repo
+}
+
+#[test]
+fn publisher_input_selection_is_explicit_in_both_wait_modes() {
+    for mode in [None, Some("tag"), Some("ref")] {
+        for no_wait in [false, true] {
+            for legacy in [false, true] {
+                let stub = if legacy {
+                    GhStub::new().requires_ship_id()
+                } else {
+                    GhStub::new()
+                };
+                let repo = publishing_repo_with_input(stub, mode);
+                let args = if no_wait {
+                    vec!["release", "--no-wait"]
+                } else {
+                    vec!["release"]
+                };
+                let out = repo.ship(&args);
+                assert_eq!(out.code, 0, "{}", out.diagnostics());
+                let calls = repo.stub.calls();
+                let dispatches: Vec<_> = calls
+                    .iter()
+                    .filter(|c| c.starts_with("workflow run"))
+                    .collect();
+                assert_eq!(dispatches.len(), if legacy { 2 } else { 1 }, "{calls:?}");
+                for dispatch in dispatches {
+                    assert!(dispatch.contains("--ref v1.4.0"), "{dispatch}");
+                    let (selected, absent) = if mode == Some("ref") {
+                        ("-f ref=refs/tags/v1.4.0", "-f tag=")
+                    } else {
+                        ("-f tag=v1.4.0", "-f ref=")
+                    };
+                    assert!(dispatch.contains(selected), "{dispatch}");
+                    assert!(!dispatch.contains(absent), "{dispatch}");
+                }
+                if !legacy {
+                    assert!(
+                        !out.diagnostics().contains("no longer"),
+                        "{}",
+                        out.diagnostics()
+                    );
+                    assert!(
+                        !out.diagnostics().contains("deprecated"),
+                        "{}",
+                        out.diagnostics()
+                    );
+                }
+                let draft = calls
+                    .iter()
+                    .position(|c| c.contains("release create") && c.contains("--draft"))
+                    .unwrap();
+                let dispatch = calls
+                    .iter()
+                    .position(|c| c.starts_with("workflow run"))
+                    .unwrap();
+                assert!(draft < dispatch, "{calls:?}");
+                if no_wait {
+                    assert!(!repo.stub.called_with(&["release edit", "--draft=false"]));
+                } else {
+                    let undraft = calls
+                        .iter()
+                        .position(|c| c.contains("--draft=false"))
+                        .unwrap();
+                    assert!(dispatch < undraft, "{calls:?}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn ref_publish_preserves_existing_run_handling() {
+    for (status, conclusion) in [
+        ("completed", "success"),
+        ("in_progress", ""),
+        ("completed", "failure"),
+    ] {
+        for no_wait in [false, true] {
+            let repo = publishing_repo_with_input(
+                GhStub::new().existing_run(status, conclusion),
+                Some("ref"),
+            );
+            let args = if no_wait {
+                vec!["release", "--no-wait"]
+            } else {
+                vec!["release"]
+            };
+            let out = repo.ship(&args);
+            assert_eq!(out.code, 0, "{}", out.diagnostics());
+            assert_eq!(
+                repo.stub.called_with(&["workflow run"]),
+                conclusion == "failure"
+            );
+            assert_eq!(
+                repo.stub.called_with(&["release edit", "--draft=false"]),
+                !no_wait || conclusion == "success"
+            );
+            if conclusion == "failure" {
+                assert!(
+                    repo.stub
+                        .called_with(&["workflow run", "ref=refs/tags/v1.4.0"])
+                );
+            }
+            if status == "in_progress" {
+                assert_eq!(repo.stub.called_with(&["run view", "41"]), !no_wait);
+            }
+        }
+    }
+}
+
+#[test]
+fn publisher_contract_is_checked_only_before_a_new_dispatch() {
+    for existing_success in [false, true] {
+        let stub = if existing_success {
+            GhStub::new().existing_run("completed", "success")
+        } else {
+            GhStub::new()
+        };
+        let repo = publishing_repo_with_input(stub, Some("ref"));
+        std::fs::write(
+            repo.path().join(".github/workflows/publish-release.yml"),
+            "on: workflow_dispatch\n",
+        )
+        .unwrap();
+        let out = repo.ship(&["release"]);
+        assert_eq!(
+            out.code,
+            if existing_success { 0 } else { 1 },
+            "{}",
+            out.diagnostics()
+        );
+        assert!(!repo.stub.called_with(&["workflow run"]));
+        if !existing_success {
+            assert!(
+                out.diagnostics().contains("release.publish_input"),
+                "{}",
+                out.diagnostics()
+            );
+            assert!(
+                out.diagnostics().contains("workflow_dispatch.inputs"),
+                "{}",
+                out.diagnostics()
+            );
+        }
+    }
 }
 
 #[test]
@@ -1634,15 +1794,7 @@ fn an_existing_tag_is_not_an_error() {
 /// exist first.
 #[test]
 fn the_publish_workflow_is_dispatched_on_the_tag() {
-    let config = "version: 1\nworkflows:\n  prepare: prepare-release\n  publish: prepare-release\n";
-    let body = format!("Notes\n\n<!-- ship:artifact\n{CHANGED_ARTIFACT}\n-->");
-    let repo = Repo::new(
-        config,
-        GhStub::new()
-            .pr_body(&body)
-            .pr_state("MERGED")
-            .merge_commit("abc1234def5678"),
-    );
+    let repo = publishing_repo(GhStub::new());
     let out = repo.ship(&["release"]);
     assert_eq!(out.code, 0, "{}", out.diagnostics());
 
