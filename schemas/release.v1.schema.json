@@ -40,7 +40,7 @@
     },
 
     "release": {
-      "description": "GitHub Release content. Every field is optional; gh-ship falls back to its configured templates.",
+      "description": "GitHub Release content. Every field is optional: name defaults to the tag, notes to empty, prerelease to false, and latest selection to GitHub's default.",
       "type": "object",
       "properties": {
         "name": {
