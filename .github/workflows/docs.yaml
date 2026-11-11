@@ -29,7 +29,7 @@ jobs:
 
       # uv is pinned by mise.lock, so the docs build uses the same version
       # as `mise run docs:build` locally.
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
         with:
           cache: true
 
